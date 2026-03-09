@@ -89,6 +89,15 @@ def recommend(_: HttpRequest, user_id: int) -> JsonResponse:
 
 
 @require_GET
+def predict_rating(_: HttpRequest, user_id: int, item_id: int) -> JsonResponse:
+    try:
+        result = service.predict_rating(user_id=user_id, item_id=item_id)
+    except FileNotFoundError as exc:
+        return _error(str(exc), status=500)
+    return JsonResponse(result)
+
+
+@require_GET
 def search(request: HttpRequest) -> JsonResponse:
     query = request.GET.get("q", "")
     if not query.strip():

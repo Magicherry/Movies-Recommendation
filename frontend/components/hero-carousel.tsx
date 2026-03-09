@@ -12,13 +12,13 @@ export default function HeroCarousel({ movies }: HeroCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
-  useEffect(() => {
-    if (isPaused) return;
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % movies.length);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [isPaused, movies.length]);
+    useEffect(() => {
+      if (isPaused) return;
+      const interval = setInterval(() => {
+        setCurrentIndex((prev) => (prev + 1) % movies.length);
+      }, 30000);
+      return () => clearInterval(interval);
+    }, [isPaused, movies.length]);
 
   if (!movies || movies.length === 0) return null;
 
@@ -29,6 +29,12 @@ export default function HeroCarousel({ movies }: HeroCarouselProps) {
     const hue1 = (id * 137) % 360;
     const hue2 = (id * 97) % 360;
     return `linear-gradient(135deg, hsl(${hue1}, 40%, 25%), hsl(${hue2}, 60%, 10%))`;
+  };
+
+  const getAgeRating = (genres: string) => {
+    if (genres.includes('Children') || genres.includes('Animation')) return 'PG';
+    if (genres.includes('Horror') || genres.includes('Crime') || genres.includes('Thriller')) return '18+';
+    return '13+';
   };
 
   return (
@@ -45,6 +51,27 @@ export default function HeroCarousel({ movies }: HeroCarouselProps) {
         }}
       />
       <div className="hero-banner-gradient" />
+
+      {/* Navigation Arrows */}
+      <button 
+        className="hero-arrow hero-arrow-left"
+        onClick={() => setCurrentIndex((prev) => (prev === 0 ? movies.length - 1 : prev - 1))}
+        aria-label="Previous Slide"
+      >
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+      
+      <button 
+        className="hero-arrow hero-arrow-right"
+        onClick={() => setCurrentIndex((prev) => (prev + 1) % movies.length)}
+        aria-label="Next Slide"
+      >
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="9 18 15 12 9 6"></polyline>
+        </svg>
+      </button>
 
       {/* Pause/Play Button */}
       <button 
@@ -64,10 +91,10 @@ export default function HeroCarousel({ movies }: HeroCarouselProps) {
       </button>
 
       <div className="hero-content" style={{ animation: "fadeIn 0.5s ease" }} key={featured.item_id}>
-        <h1 className="hero-title">{featured.title}</h1>
+        <h1 className="hero-title">{featured.title.replace(/\s*\(\d{4}\)$/, '')}</h1>
         <div className="hero-meta">
-          <span>2024</span>
-          <span>18+</span>
+          <span>{featured.title.match(/\((\d{4})\)$/)?.[1] || "Movie"}</span>
+          <span>{getAgeRating(featured.genres)}</span>
           <span>{featured.genres.split('|')[0] || "Drama"}</span>
         </div>
         <p className="hero-desc">

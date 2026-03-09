@@ -2,6 +2,8 @@ import { getMovies } from "../../lib/api";
 import MovieCardGrid from "../../components/movie-card-grid";
 import Link from "next/link";
 
+import CustomSelect from "../../components/custom-select";
+
 export default async function MoviesPage({
   searchParams,
 }: {
@@ -67,29 +69,29 @@ export default async function MoviesPage({
         
         <div className="filter-group-secondary">
           <div className="select-wrapper">
-            <select name="genre" defaultValue={genre || ""} className="filter-select">
-              <option value="">All Genres</option>
-              {allGenres.map(g => (
-                <option key={g} value={g}>{g}</option>
-              ))}
-            </select>
-            <svg className="select-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
+            <CustomSelect 
+              name="genre" 
+              defaultValue={genre || ""} 
+              options={[
+                { value: "", label: "All Genres" },
+                ...allGenres.map(g => ({ value: g, label: g }))
+              ]} 
+            />
           </div>
 
           <div className="select-wrapper">
-            <select key={currentSort} name="sort" defaultValue={currentSort} className="filter-select">
-              <option value="item_id_asc">Default (Oldest ID)</option>
-              <option value="item_id_desc">Newest ID</option>
-              <option value="title_asc">Title A-Z</option>
-              <option value="title_desc">Title Z-A</option>
-              <option value="year_desc">Year New-Old</option>
-              <option value="year_asc">Year Old-New</option>
-            </select>
-            <svg className="select-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
+            <CustomSelect 
+              name="sort" 
+              defaultValue={currentSort} 
+              options={[
+                { value: "item_id_asc", label: "Default (Oldest ID)" },
+                { value: "item_id_desc", label: "Newest ID" },
+                { value: "title_asc", label: "Title A-Z" },
+                { value: "title_desc", label: "Title Z-A" },
+                { value: "year_desc", label: "Year New-Old" },
+                { value: "year_asc", label: "Year Old-New" }
+              ]}
+            />
           </div>
 
           <div className="year-wrapper">
@@ -115,10 +117,57 @@ export default async function MoviesPage({
         </div>
       </form>
 
-      <div style={{ marginTop: "40px" }}>
-        <p style={{ color: "var(--text-subtle)", marginBottom: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "40px", marginBottom: "20px" }}>
+        <p style={{ color: "var(--text-subtle)", margin: 0 }}>
           Found {data.total} movies
         </p>
+        
+        {totalPages > 1 && (
+          <div className="pagination pagination-top">
+            <Link
+              href={`/movies?page=${page > 1 ? page - 1 : 1}${q ? `&q=${q}` : ''}${genre ? `&genre=${genre}` : ''}${year ? `&year=${year}` : ''}&sort=${currentSort}`}
+              className={`btn-secondary ${page <= 1 ? "disabled" : ""}`}
+              style={{ pointerEvents: page <= 1 ? "none" : "auto" }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+              Prev
+            </Link>
+
+            <form action="/movies" method="GET" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              {q && <input type="hidden" name="q" value={q} />}
+              {genre && <input type="hidden" name="genre" value={genre} />}
+              {year && <input type="hidden" name="year" value={year} />}
+              <input type="hidden" name="sort" value={currentSort} />
+              
+              <span className="page-indicator">Page</span>
+              <input 
+                type="number" 
+                name="page" 
+                defaultValue={page} 
+                min={1}
+                max={totalPages}
+              />
+              <span className="page-indicator">of {totalPages}</span>
+              <button type="submit" style={{ display: "none" }}>Go</button>
+            </form>
+
+            <Link
+              href={`/movies?page=${page < totalPages ? page + 1 : totalPages}${q ? `&q=${q}` : ''}${genre ? `&genre=${genre}` : ''}${year ? `&year=${year}` : ''}&sort=${currentSort}`}
+              className={`btn-secondary ${page >= totalPages ? "disabled" : ""}`}
+              style={{ pointerEvents: page >= totalPages ? "none" : "auto" }}
+            >
+              Next
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </Link>
+          </div>
+        )}
+      </div>
+
+      <div>
         <MovieCardGrid items={data.items} />
       </div>
 
@@ -129,17 +178,39 @@ export default async function MoviesPage({
             className={`btn-secondary ${page <= 1 ? "disabled" : ""}`}
             style={{ pointerEvents: page <= 1 ? "none" : "auto" }}
           >
-            Previous
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+            Prev
           </Link>
-          <span className="page-indicator">
-            Page {page} of {totalPages}
-          </span>
+
+          <form action="/movies" method="GET" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {q && <input type="hidden" name="q" value={q} />}
+            {genre && <input type="hidden" name="genre" value={genre} />}
+            {year && <input type="hidden" name="year" value={year} />}
+            <input type="hidden" name="sort" value={currentSort} />
+            
+            <span className="page-indicator">Page</span>
+            <input 
+              type="number" 
+              name="page" 
+              defaultValue={page} 
+              min={1}
+              max={totalPages}
+            />
+            <span className="page-indicator">of {totalPages}</span>
+            <button type="submit" style={{ display: "none" }}>Go</button>
+          </form>
+
           <Link
             href={`/movies?page=${page < totalPages ? page + 1 : totalPages}${q ? `&q=${q}` : ''}${genre ? `&genre=${genre}` : ''}${year ? `&year=${year}` : ''}&sort=${currentSort}`}
             className={`btn-secondary ${page >= totalPages ? "disabled" : ""}`}
             style={{ pointerEvents: page >= totalPages ? "none" : "auto" }}
           >
             Next
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
           </Link>
         </div>
       )}

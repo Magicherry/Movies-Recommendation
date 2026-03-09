@@ -159,6 +159,14 @@ class RecommenderService:
         frame = self.movies[self.movies["title"].str.lower().str.contains(q, na=False)].head(limit)
         return frame.to_dict(orient="records")
 
+    def predict_rating(self, user_id: int, item_id: int) -> Dict[str, Any]:
+        self._ensure_loaded()
+        try:
+            score = self.model.predict(user_id=user_id, item_id=item_id)
+            return {"user_id": user_id, "item_id": item_id, "predicted_rating": score}
+        except RuntimeError:
+            return {"user_id": user_id, "item_id": item_id, "predicted_rating": None}
+
     def recommend_for_user(self, user_id: int, n: int = 10) -> List[Dict[str, Any]]:
         self._ensure_loaded()
         recs = self.model.recommend_top_n(user_id=user_id, n=n, exclude_seen=True)
