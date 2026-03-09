@@ -36,8 +36,9 @@ export default async function MovieDetailPage({ params }: MovieDetailPageProps) 
         
         <div className="hero-content">
           <h1 className="hero-title">{data.movie.title.replace(/\s*\(\d{4}\)$/, '')}</h1>
-          <div className="hero-meta">
+          <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontWeight: 'bold', color: 'white' }}>{data.movie.title.match(/\((\d{4})\)$/)?.[1] || "Movie"}</span>
+            <span>•</span>
             <span>{data.movie.genres.replace(/\|/g, " • ")}</span>
           </div>
           <p className="hero-desc">

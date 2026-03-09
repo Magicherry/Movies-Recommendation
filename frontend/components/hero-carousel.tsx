@@ -92,9 +92,11 @@ export default function HeroCarousel({ movies }: HeroCarouselProps) {
 
       <div className="hero-content" style={{ animation: "fadeIn 0.5s ease" }} key={featured.item_id}>
         <h1 className="hero-title">{featured.title.replace(/\s*\(\d{4}\)$/, '')}</h1>
-        <div className="hero-meta">
-          <span>{featured.title.match(/\((\d{4})\)$/)?.[1] || "Movie"}</span>
+        <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontWeight: 'bold', color: 'white' }}>{featured.title.match(/\((\d{4})\)$/)?.[1] || "Movie"}</span>
+          <span>•</span>
           <span>{getAgeRating(featured.genres)}</span>
+          <span>•</span>
           <span>{featured.genres.split('|')[0] || "Drama"}</span>
         </div>
         <p className="hero-desc">
