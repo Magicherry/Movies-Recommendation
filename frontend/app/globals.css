@@ -110,9 +110,15 @@ body {
   background: rgba(255, 255, 255, 0.05);
   padding: 6px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-soft);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  transition: all 0.3s ease;
+}
+
+.nav-links:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .nav-link {
