@@ -34,9 +34,12 @@ export default function AppNavbar() {
   const handleUserChange = (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = parseInt(inputId, 10);
-    if (!isNaN(parsed) && parsed > 0) {
+    if (!isNaN(parsed) && parsed > 0 && parsed <= 610) {
       setUserId(parsed);
       setIsMenuOpen(false);
+    } else {
+      // Revert to current valid userId if input is invalid
+      setInputId(userId.toString());
     }
   };
 
@@ -86,6 +89,7 @@ export default function AppNavbar() {
                   onChange={e => setInputId(e.target.value)}
                   className="user-id-input"
                   min="1"
+                  max="610"
                 />
                 <button type="submit" style={{ display: 'none' }}>Set</button>
               </form>

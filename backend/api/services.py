@@ -169,6 +169,8 @@ class RecommenderService:
 
     def recommend_for_user(self, user_id: int, n: int = 10) -> List[Dict[str, Any]]:
         self._ensure_loaded()
+        if user_id not in self.users:
+            raise ValueError(f"User ID {user_id} not found.")
         recs = self.model.recommend_top_n(user_id=user_id, n=n, exclude_seen=True)
         enriched = []
         for rec in recs:
@@ -208,6 +210,8 @@ class RecommenderService:
 
     def get_user_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         self._ensure_loaded()
+        if user_id not in self.users:
+            raise ValueError(f"User ID {user_id} not found.")
         history = self.user_history.get(user_id, [])
         return history[:limit]
 

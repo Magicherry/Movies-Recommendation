@@ -62,7 +62,10 @@ export async function getUsers(limit = 50, offset = 0): Promise<{ items: { user_
 
 export async function getUserHistory(userId: number): Promise<{ item_id: number; title: string; genres: string; rating: number }[]> {
   const res = await fetch(`${API_BASE}/user/${userId}/history`, { cache: "no-store" });
-  if (!res.ok) throw new Error("Failed to fetch user history.");
+  if (!res.ok) {
+    const errData = await res.json().catch(() => null);
+    throw new Error(errData?.error || "Failed to fetch user history.");
+  }
   const data = await res.json();
   const history = data.history ?? [];
   return history.map((h: any) => ({ ...h, title: formatTitle(h.title) }));
@@ -70,7 +73,10 @@ export async function getUserHistory(userId: number): Promise<{ item_id: number;
 
 export async function getRecommendations(userId: number): Promise<Recommendation[]> {
   const res = await fetch(`${API_BASE}/recommend/${userId}`, { cache: "no-store" });
-  if (!res.ok) throw new Error("Failed to fetch recommendations.");
+  if (!res.ok) {
+    const errData = await res.json().catch(() => null);
+    throw new Error(errData?.error || "Failed to fetch recommendations.");
+  }
   const data = await res.json();
   const recs = data.recommendations ?? [];
   return recs.map((r: Recommendation) => ({ ...r, title: formatTitle(r.title) }));

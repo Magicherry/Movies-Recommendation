@@ -75,6 +75,8 @@ def users(request: HttpRequest) -> JsonResponse:
 def user_history(_: HttpRequest, user_id: int) -> JsonResponse:
     try:
         history = service.get_user_history(user_id=user_id, limit=20)
+    except ValueError as exc:
+        return _error(str(exc), status=404)
     except FileNotFoundError as exc:
         return _error(str(exc), status=500)
     return JsonResponse({"user_id": user_id, "history": history})
@@ -83,6 +85,8 @@ def user_history(_: HttpRequest, user_id: int) -> JsonResponse:
 def recommend(_: HttpRequest, user_id: int) -> JsonResponse:
     try:
         recommendations = service.recommend_for_user(user_id=user_id, n=10)
+    except ValueError as exc:
+        return _error(str(exc), status=404)
     except FileNotFoundError as exc:
         return _error(str(exc), status=500)
     return JsonResponse({"user_id": user_id, "recommendations": recommendations})

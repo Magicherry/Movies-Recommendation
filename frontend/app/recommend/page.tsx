@@ -13,8 +13,9 @@ export default function RecommendPage() {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const parsed = Number(userId);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setError("Please enter a valid positive user ID.");
+    if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 610) {
+      setError("Please enter a valid User ID between 1 and 610.");
+      setItems([]);
       return;
     }
 
@@ -45,6 +46,7 @@ export default function RecommendPage() {
             onChange={(e) => setUserId(e.target.value)}
             placeholder="Enter User ID (e.g. 1)"
             min="1"
+            max="610"
           />
           <button type="submit" className="btn-search" disabled={loading}>
             {loading ? "Loading..." : "Explore"}
