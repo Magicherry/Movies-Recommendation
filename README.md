@@ -25,13 +25,13 @@ This project implements **Option 1 (Recommender System)** from the CS550 project
 ![Library](preview/Library.png)
 
 ### Movie Detail
-![Movies Detail](preview/Movies%20Detail.png)
+![Movies Detail](preview/MoviesDetail.png)
 
 ### Community (Browse Users)
 ![Community](preview/Community.png)
 
 ### User Profile
-![User Profile](preview/User%20Profile.png)
+![User Profile](preview/UserProfile.png)
 
 ## Project Structure
 
