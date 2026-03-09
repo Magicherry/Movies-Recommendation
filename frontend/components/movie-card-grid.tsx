@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import NextLink from "next/link";
+import { useRouter } from "next/navigation";
 
 export type MovieCardItem = {
   item_id: number;
@@ -36,6 +37,14 @@ export default function MovieCardGrid({
   rowMode = false
 }: MovieCardGridProps) {
   const rowRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+
+  const handleCollectionClick = () => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('collectionData', JSON.stringify({ title, items, scoreLabel }));
+      router.push('/collection');
+    }
+  };
 
   const scroll = (direction: 'left' | 'right') => {
     if (rowRef.current) {
@@ -54,7 +63,18 @@ export default function MovieCardGrid({
       <div className="card-row-section">
         {title && (
           <div className="row-header-container">
-            <h2 className="row-header">{title}</h2>
+            <div 
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', opacity: 0.9, transition: 'opacity 0.2s' }}
+              onClick={handleCollectionClick}
+              title={`View all in ${title}`}
+              onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+              onMouseLeave={(e) => e.currentTarget.style.opacity = '0.9'}
+            >
+              <h2 className="row-header">{title}</h2>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-subtle)', transform: 'translateY(1px)' }}>
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </div>
             <div className="row-controls">
               <button 
                 className="row-scroll-btn" 

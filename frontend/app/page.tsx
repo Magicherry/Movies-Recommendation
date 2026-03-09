@@ -6,26 +6,43 @@ import MovieCardGrid from "../components/movie-card-grid";
 import HeroCarousel from "../components/hero-carousel";
 import { useUser } from "../context/user-context";
 
+// Global cache to maintain state across navigations, enabling Next.js scroll restoration
+let globalFeatured: Movie[] = [];
+let globalRecs: Recommendation[] = [];
+let globalHistory: Movie[] = [];
+let globalTrending: Movie[] = [];
+let globalUserId: number | null = null;
+
 export default function HomePage() {
   const { userId } = useUser();
-  const [loading, setLoading] = useState(true);
   
-  const [featuredMovies, setFeaturedMovies] = useState<Movie[]>([]);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
-  const [history, setHistory] = useState<Movie[]>([]);
-  const [trending, setTrending] = useState<Movie[]>([]);
+  // Use cached data if available for the current user
+  const hasCache = globalUserId === userId && globalTrending.length > 0;
+  const [loading, setLoading] = useState(!hasCache);
+  
+  const [featuredMovies, setFeaturedMovies] = useState<Movie[]>(hasCache ? globalFeatured : []);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>(hasCache ? globalRecs : []);
+  const [history, setHistory] = useState<Movie[]>(hasCache ? globalHistory : []);
+  const [trending, setTrending] = useState<Movie[]>(hasCache ? globalTrending : []);
 
   useEffect(() => {
     async function loadData() {
+      if (globalUserId === userId && globalTrending.length > 0) {
+        // Data is already loaded and cached for this user
+        setLoading(false);
+        return;
+      }
+      
       setLoading(true);
       try {
         // Fetch recommendations for the current user
         const recs = await getRecommendations(userId).catch(() => []);
         setRecommendations(recs);
+        globalRecs = recs;
 
         // Fetch watch history
         const hist = await getUserHistory(userId).catch(() => []);
-        setHistory(hist.map(h => ({
+        const formattedHist = hist.map(h => ({
           item_id: h.item_id,
           title: h.title,
           genres: h.genres,
@@ -35,7 +52,9 @@ export default function HomePage() {
           backdrop_url: h.backdrop_url,
           // @ts-ignore
           overview: h.overview
-        })));
+        }));
+        setHistory(formattedHist);
+        globalHistory = formattedHist;
 
         // Fetch some default movies for carousel and trending
         const moviesData = await getMovies(20, 0);
@@ -44,11 +63,15 @@ export default function HomePage() {
         // If user has recommendations, use top ones for carousel, else fallback to trending
         if (recs.length > 0) {
           setFeaturedMovies(recs.slice(0, 5));
+          globalFeatured = recs.slice(0, 5);
         } else {
           setFeaturedMovies(movies.slice(0, 5));
+          globalFeatured = movies.slice(0, 5);
         }
         
         setTrending(movies.slice(0, 15));
+        globalTrending = movies.slice(0, 15);
+        globalUserId = userId;
       } catch (err) {
         console.error(err);
       } finally {
