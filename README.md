@@ -4,16 +4,18 @@ A full-stack application implementing a custom Recommender System with a modern 
 
 ## Features
 
-- **Robust Recommendation Engine**: Custom Matrix Factorization model trained with Stochastic Gradient Descent (SGD).
-- **Data Processing**: Automated per-user random 80/20 data split for training and testing.
-- **Evaluation Metrics**:
-  - Rating prediction: **MAE**, **RMSE**
-  - Top-K recommendations: **Precision@10**, **Recall@10**, **F-measure@10**, **NDCG@10**
-- **Modern Web Interface**: Built with Next.js and Django, featuring:
-  - Browse library with multi-genre filtering and sorting
-  - Detailed movie pages with metadata and similar movie suggestions
-  - Personalized user profiles showcasing rating history and top recommendations
-  - Dynamic TMDB image enrichment for movie posters and backdrops
+- **Robust Recommendation Engine**
+  - Custom Matrix Factorization model trained with Stochastic Gradient Descent (SGD).
+- **Automated Data Processing**
+  - Per-user random 80/20 data split for reliable training and testing.
+- **Comprehensive Evaluation Metrics**
+  - **Rating Prediction**: `MAE`, `RMSE`
+  - **Top-K Recommendations**: `Precision@10`, `Recall@10`, `F-measure@10`, `NDCG@10`
+- **Modern Web Interface (Next.js + Django)**
+  - Browse library with multi-genre filtering and sorting.
+  - Detailed movie pages with metadata and similar movie suggestions.
+  - Personalized user profiles showcasing rating history and top recommendations.
+  - Dynamic TMDB API integration for rich image enrichment (posters and backdrops).
 
 ## UX Preview
 
@@ -39,7 +41,7 @@ scripts/          # Training, evaluation, and data enrichment scripts
 
 ### 1. Python Environment Setup
 
-Create and activate a virtual environment, then install dependencies:
+Requires **Python 3.11** (or a compatible 3.x version). Create and activate a virtual environment, then install dependencies:
 
 ```bash
 # macOS / Linux
