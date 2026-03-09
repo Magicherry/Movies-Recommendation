@@ -15,7 +15,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
 
   return (
     <section className="content-padding" style={{ paddingTop: "60px" }}>
-      <div className="hero-panel" style={{ marginBottom: "30px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+      <div className="results-header" style={{ marginTop: 0, marginBottom: "30px" }}>
         <div>
           <h1 className="row-header" style={{ fontSize: "2.5rem", paddingLeft: "0", marginBottom: "16px" }}>Browse Users</h1>
           <p className="helper-text" style={{ color: "var(--text-subtle)", margin: 0 }}>
@@ -42,7 +42,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
               </button>
             )}
             
-            <form action="/users" method="GET" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <form action="/users" method="GET" style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}>
               <span className="page-indicator">Page</span>
               <input 
                 type="number" 
@@ -110,7 +110,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
             </button>
           )}
           
-          <form action="/users" method="GET" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <form action="/users" method="GET" style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}>
             <span className="page-indicator">Page</span>
             <input 
               type="number" 

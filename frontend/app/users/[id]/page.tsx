@@ -84,30 +84,12 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
   return (
     <div className="page-transition" style={{ position: "relative" }}>
       <BackButton top="30px" />
-      <div className="content-padding" style={{ paddingTop: "110px", paddingBottom: "80px" }}>
-        <div style={{ 
-          display: "grid", 
-          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", 
-          gap: "32px",
-          background: "linear-gradient(145deg, rgba(30, 30, 35, 0.6) 0%, rgba(15, 15, 20, 0.8) 100%)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: "32px",
-          padding: "40px",
-          boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
-          backdropFilter: "blur(12px)"
-        }}>
+      <div className="content-padding" style={{ paddingTop: "90px", paddingBottom: "80px" }}>
+        <div className="user-profile-glass-card">
           
           {/* Section 1: User Identity (Full Width) */}
-          <div style={{ display: "flex", alignItems: "center", gap: "24px", gridColumn: "1 / -1", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "32px", marginBottom: "8px" }}>
-            <div style={{ 
-              width: "100px", 
-              height: "100px", 
-              borderRadius: "50%", 
-              background: "rgba(255,255,255,0.05)",
-              boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-              border: "3px solid rgba(255,255,255,0.1)",
-              flexShrink: 0
-            }}>
+          <div className="user-profile-header">
+            <div className="user-profile-avatar">
               <img 
                 src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${userId}`} 
                 alt={`User ${userId}`}
@@ -115,8 +97,8 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
               />
             </div>
             <div>
-              <h1 style={{ margin: "0 0 8px 0", fontSize: "2.5rem", fontWeight: 800 }}>User {userId}'s Profile</h1>
-              <p style={{ color: "var(--text-subtle)", margin: 0, fontSize: "1.05rem" }}>
+              <h1 style={{ margin: "0 0 8px 0", fontSize: "clamp(1.8rem, 5vw, 2.5rem)", fontWeight: 800 }}>User {userId}'s Profile</h1>
+              <p style={{ color: "var(--text-subtle)", margin: 0, fontSize: "clamp(0.9rem, 3vw, 1.05rem)" }}>
                 Explore this user's top-rated history and customized recommendations.
               </p>
             </div>

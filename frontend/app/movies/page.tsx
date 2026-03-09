@@ -121,7 +121,7 @@ export default async function MoviesPage({
         </div>
       </form>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "40px", marginBottom: "20px" }}>
+      <div className="results-header">
         <p style={{ color: "var(--text-subtle)", margin: 0 }}>
           Found {data.total} movies
         </p>
@@ -139,7 +139,7 @@ export default async function MoviesPage({
               Prev
             </Link>
 
-            <form action="/movies" method="GET" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <form action="/movies" method="GET" style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}>
               {q && <input type="hidden" name="q" value={q} />}
               {genre && <input type="hidden" name="genre" value={genre} />}
               {year && <input type="hidden" name="year" value={year} />}
@@ -188,7 +188,7 @@ export default async function MoviesPage({
             Prev
           </Link>
 
-          <form action="/movies" method="GET" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <form action="/movies" method="GET" style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}>
             {q && <input type="hidden" name="q" value={q} />}
             {genre && <input type="hidden" name="genre" value={genre} />}
             {year && <input type="hidden" name="year" value={year} />}
