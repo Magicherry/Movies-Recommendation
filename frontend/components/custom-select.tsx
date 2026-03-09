@@ -21,6 +21,10 @@ export default function CustomSelect({ name, options, defaultValue }: CustomSele
   const selectedOption = options.find(o => o.value === selectedValue) || options[0];
 
   useEffect(() => {
+    setSelectedValue(defaultValue);
+  }, [defaultValue]);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
