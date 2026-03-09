@@ -71,6 +71,8 @@ python -m scripts.train_and_evaluate --dataset-dir frontend/ml-latest-small/ml-l
 
 To display high-quality posters and backdrops, run the TMDB enrichment script. This will generate `movies_enriched.csv`.
 
+> **Note**: Before running the script, you must obtain a free API key from [TMDB](https://www.themoviedb.org/documentation/api) and manually add it to `scripts/scrape_tmdb.py` (update the `API_KEY` variable).
+
 ```bash
 python -m scripts.scrape_tmdb
 ```
@@ -112,3 +114,11 @@ NEXT_PUBLIC_API_BASE_URL="http://localhost:8001/api" npm run dev -- -p 3001
 - The data loader supports both `csv` and `dat` MovieLens formats.
 - The recommender algorithm is built from scratch and does not rely on black-box recommendation libraries.
 - The UI features a responsive design, glass-morphism effects, and dynamic filtering components.
+
+## Acknowledgements
+
+Special thanks to the open-source projects and communities that made this possible:
+- **[MovieLens](https://grouplens.org/datasets/movielens/)** for the core datasets used in model training and evaluation.
+- **[TMDB API](https://www.themoviedb.org/documentation/api)** for providing rich movie metadata and high-quality image assets.
+- **[Next.js](https://nextjs.org/)** & **[Django](https://www.djangoproject.com/)** for powering the frontend and backend architectures respectively.
+- **[pandas](https://pandas.pydata.org/)** & **[NumPy](https://numpy.org/)** for efficient data manipulation and computation.
