@@ -1456,3 +1456,10 @@ body {
 .scroll-to-top:active {
   transform: scale(0.9) translateY(0);
 }
+
+.hover-underline-dashed {
+  border-bottom-color: rgba(255,255,255,0.3);
+}
+.hover-underline-dashed:hover {
+  border-bottom-color: var(--text-main) !important;
+}

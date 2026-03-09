@@ -20,8 +20,8 @@ export default async function MovieDetailPage({ params }: MovieDetailPageProps) 
   const data = await getMovieDetail(itemId);
 
   return (
-    <>
-      <BackButton />
+    <div className="page-transition">
+      <BackButton top="110px" />
       <div className="hero-banner">
         <div
           className="hero-banner-bg"
@@ -56,6 +56,6 @@ export default async function MovieDetailPage({ params }: MovieDetailPageProps) 
           rowMode={true}
         />
       </section>
-    </>
+    </div>
   );
 }
