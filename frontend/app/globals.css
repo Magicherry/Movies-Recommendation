@@ -1017,7 +1017,7 @@ body {
 }
 .search-btn:hover {
   background: var(--brand-hover);
-  transform: translateY(-2px);
+  transform: scale(1.05);
   box-shadow: 0 4px 12px rgba(229, 9, 20, 0.4);
 }
 .search-btn:active {
@@ -1150,7 +1150,7 @@ body {
 }
 
 .year-wrapper {
-  max-width: 120px;
+  min-width: 160px;
 }
 
 .year-input {
@@ -1181,25 +1181,25 @@ body {
   justify-content: center;
   height: 48px; /* Added fixed height */
   gap: 6px;
-  color: var(--text-subtle);
+  color: #000;
   font-size: 0.95rem;
-  font-weight: 500;
+  font-weight: 600;
   text-decoration: none;
   padding: 0 16px; /* Adjusted padding for fixed height */
   border-radius: 99px;
-  background: rgba(255,255,255,0.03);
+  background: #fff;
   border: 1px solid var(--border-soft);
   transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
 }
 .btn-clear-filter:hover {
-  background: rgba(255,255,255,0.1);
-  color: var(--text-main);
-  border-color: rgba(255,255,255,0.2);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  background: #f4f4f5;
+  color: #000;
+  border-color: #fff;
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
 }
 .btn-clear-filter:active {
-  transform: scale(0.95);
+  transform: scale(0.98);
 }
 
 /* Mobile Nav Adjustments */

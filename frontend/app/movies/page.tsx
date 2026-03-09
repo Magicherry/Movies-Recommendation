@@ -98,12 +98,14 @@ export default async function MoviesPage({
 
           <div className="year-wrapper">
             <input 
-              type="text" 
+              type="number" 
               name="year" 
               defaultValue={year} 
               placeholder="Year (e.g. 1995)" 
               className="search-input year-input"
-              maxLength={4}
+              min="1800"
+              max="2100"
+              title="Please enter a valid 4-digit year"
             />
           </div>
           
