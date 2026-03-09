@@ -107,7 +107,9 @@ class RecommenderService:
             frame = frame[frame["title"].str.lower().str.contains(query.strip().lower(), na=False)]
         
         if genre:
-            frame = frame[frame["genres"].str.contains(genre.strip(), case=False, na=False)]
+            for g in genre.strip().split("|"):
+                if g.strip():
+                    frame = frame[frame["genres"].str.contains(g.strip(), case=False, na=False, regex=False)]
             
         if year:
             frame = frame[frame["title"].str.contains(f"({year.strip()})", regex=False, na=False)]
