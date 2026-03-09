@@ -3,6 +3,7 @@ import MovieCardGrid from "../../components/movie-card-grid";
 import Link from "next/link";
 
 import CustomSelect from "../../components/custom-select";
+import CustomMultiSelect from "../../components/custom-multi-select";
 
 export default async function MoviesPage({
   searchParams,
@@ -71,13 +72,14 @@ export default async function MoviesPage({
         
         <div className="filter-group-secondary">
           <div className="select-wrapper">
-            <CustomSelect 
+            <CustomMultiSelect 
               name="genre" 
               defaultValue={genre || ""} 
               options={[
                 { value: "", label: "All Genres" },
                 ...allGenres.map(g => ({ value: g, label: g }))
               ]} 
+              placeholder="All Genres"
             />
           </div>
 
@@ -129,7 +131,7 @@ export default async function MoviesPage({
         {totalPages > 1 && (
           <div className="pagination pagination-top">
             <Link
-              href={`/movies?page=${page > 1 ? page - 1 : 1}${q ? `&q=${q}` : ''}${genre ? `&genre=${genre}` : ''}${year ? `&year=${year}` : ''}&sort=${currentSort}`}
+              href={`/movies?page=${page > 1 ? page - 1 : 1}${q ? `&q=${q}` : ''}${genre ? `&genre=${encodeURIComponent(genre)}` : ''}${year ? `&year=${year}` : ''}&sort=${currentSort}`}
               className={`btn-secondary ${page <= 1 ? "disabled" : ""}`}
               style={{ pointerEvents: page <= 1 ? "none" : "auto" }}
             >
@@ -158,7 +160,7 @@ export default async function MoviesPage({
             </form>
 
             <Link
-              href={`/movies?page=${page < totalPages ? page + 1 : totalPages}${q ? `&q=${q}` : ''}${genre ? `&genre=${genre}` : ''}${year ? `&year=${year}` : ''}&sort=${currentSort}`}
+              href={`/movies?page=${page < totalPages ? page + 1 : totalPages}${q ? `&q=${q}` : ''}${genre ? `&genre=${encodeURIComponent(genre)}` : ''}${year ? `&year=${year}` : ''}&sort=${currentSort}`}
               className={`btn-secondary ${page >= totalPages ? "disabled" : ""}`}
               style={{ pointerEvents: page >= totalPages ? "none" : "auto" }}
             >
@@ -178,7 +180,7 @@ export default async function MoviesPage({
       {totalPages > 1 && (
         <div className="pagination">
           <Link
-            href={`/movies?page=${page > 1 ? page - 1 : 1}${q ? `&q=${q}` : ''}${genre ? `&genre=${genre}` : ''}${year ? `&year=${year}` : ''}&sort=${currentSort}`}
+            href={`/movies?page=${page > 1 ? page - 1 : 1}${q ? `&q=${q}` : ''}${genre ? `&genre=${encodeURIComponent(genre)}` : ''}${year ? `&year=${year}` : ''}&sort=${currentSort}`}
             className={`btn-secondary ${page <= 1 ? "disabled" : ""}`}
             style={{ pointerEvents: page <= 1 ? "none" : "auto" }}
           >
@@ -207,7 +209,7 @@ export default async function MoviesPage({
           </form>
 
           <Link
-            href={`/movies?page=${page < totalPages ? page + 1 : totalPages}${q ? `&q=${q}` : ''}${genre ? `&genre=${genre}` : ''}${year ? `&year=${year}` : ''}&sort=${currentSort}`}
+            href={`/movies?page=${page < totalPages ? page + 1 : totalPages}${q ? `&q=${q}` : ''}${genre ? `&genre=${encodeURIComponent(genre)}` : ''}${year ? `&year=${year}` : ''}&sort=${currentSort}`}
             className={`btn-secondary ${page >= totalPages ? "disabled" : ""}`}
             style={{ pointerEvents: page >= totalPages ? "none" : "auto" }}
           >

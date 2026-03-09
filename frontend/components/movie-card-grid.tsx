@@ -29,6 +29,15 @@ function getGradient(id: number) {
   return `linear-gradient(135deg, hsl(${hue1}, 60%, 15%), hsl(${hue2}, 60%, 5%))`;
 }
 
+function getMovieYear(title: string): string {
+  return title.match(/\((\d{4})\)$/)?.[1] ?? "";
+}
+
+function getTopGenre(genres: string): string {
+  if (!genres || genres === "(no genres listed)") return "";
+  return genres.split("|")[0]?.trim() ?? "";
+}
+
 export default function MovieCardGrid({
   title,
   items,
@@ -140,9 +149,12 @@ export default function MovieCardGrid({
               </div>
               <div className="poster-footer">
                 <h3 className="poster-title">{movie.title.replace(/\s*\(\d{4}\)$/, '')}</h3>
-                {movie.title.match(/\((\d{4})\)$/) && (
-                  <span className="poster-year">{movie.title.match(/\((\d{4})\)$/)?.[1]}</span>
-                )}
+                {(() => {
+                  const year = getMovieYear(movie.title);
+                  const topGenre = getTopGenre(movie.genres);
+                  const metaText = year && topGenre ? `${year} · ${topGenre}` : year || topGenre;
+                  return metaText ? <span className="poster-year">{metaText}</span> : null;
+                })()}
               </div>
             </NextLink>
           ))}
@@ -195,9 +207,12 @@ export default function MovieCardGrid({
           </div>
           <div className="poster-footer">
             <h3 className="poster-title">{movie.title.replace(/\s*\(\d{4}\)$/, '')}</h3>
-            {movie.title.match(/\((\d{4})\)$/) && (
-              <span className="poster-year">{movie.title.match(/\((\d{4})\)$/)?.[1]}</span>
-            )}
+            {(() => {
+              const year = getMovieYear(movie.title);
+              const topGenre = getTopGenre(movie.genres);
+              const metaText = year && topGenre ? `${year} · ${topGenre}` : year || topGenre;
+              return metaText ? <span className="poster-year">{metaText}</span> : null;
+            })()}
           </div>
         </NextLink>
       ))}

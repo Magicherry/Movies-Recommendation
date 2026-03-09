@@ -127,13 +127,13 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   {preferredGenres.map(g => (
                     <span key={g} style={{ 
-                      background: "rgba(229, 9, 20, 0.1)", 
-                      color: "#ff4d4d", 
+                      background: "#323235", 
+                      color: "#ffffff", 
                       padding: "6px 12px", 
                       borderRadius: "8px", 
                       fontSize: "0.85rem", 
                       fontWeight: 600,
-                      border: "1px solid rgba(229, 9, 20, 0.2)"
+                      border: "none"
                     }}>
                       {g}
                     </span>

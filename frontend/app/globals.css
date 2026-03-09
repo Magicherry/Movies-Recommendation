@@ -269,15 +269,17 @@ body {
   justify-content: center;
   cursor: pointer;
   z-index: 20;
-  transition: background 0.2s, transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
-  backdrop-filter: blur(4px);
+  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .hero-carousel-toggle:hover {
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.6);
+  border-color: rgba(255, 255, 255, 0.4);
   transform: scale(1.1);
 }
 .hero-carousel-toggle:active {
-  transform: scale(0.9);
+  transform: scale(0.95);
 }
 
 .hero-arrow {
@@ -415,41 +417,40 @@ body {
   z-index: 60;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 20px 10px 16px;
-  background: rgba(20, 20, 25, 0.5);
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: rgba(40, 40, 45, 0.6);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 50%;
   color: var(--text-main);
-  font-size: 1rem;
-  font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   text-decoration: none;
 }
 
 .btn-back:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(60, 60, 65, 0.8);
+  border-color: rgba(255, 255, 255, 0.15);
   color: #fff;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
 }
 
 .btn-back:active {
-  transform: translateY(0) scale(0.96);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  transform: scale(0.95);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .btn-back svg {
-  transition: transform 0.3s ease;
+  transition: transform 0.2s ease;
 }
 
 .btn-back:hover svg {
-  transform: translateX(-3px);
+  transform: translateX(-2px);
 }
 
 /* Grids & Cards */
@@ -568,11 +569,11 @@ body {
   max-width: none;
 }
 .poster-card:hover {
-  transform: scale(1.05) translateY(-5px);
+  transform: scale(1.05);
   z-index: 10;
 }
 .poster-card:active {
-  transform: scale(1.02) translateY(-2px);
+  transform: scale(1.02);
 }
 
 .poster-bg {
@@ -586,11 +587,12 @@ body {
   overflow: hidden;
   box-shadow: 0 4px 6px rgba(0,0,0,0.3);
   border: 1px solid var(--border-soft); /* Added subtle border like user cards */
-  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+  transition: box-shadow 0.3s ease, border-color 0.3s ease, border-width 0.3s ease;
 }
 .poster-card:hover .poster-bg {
-  box-shadow: 0 20px 40px rgba(0,0,0,0.6); /* Matched user-card hover shadow */
-  border-color: rgba(255,255,255,0.2); /* Matched user-card hover border */
+  box-shadow: none;
+  border-color: #ffffff;
+  border-width: 2px;
 }
 
 .poster-img {
@@ -779,14 +781,14 @@ body {
 }
 
 .user-card:hover {
-  transform: translateY(-8px);
+  transform: scale(1.05);
   box-shadow: 0 20px 40px rgba(0,0,0,0.6);
   border-color: rgba(255,255,255,0.2);
   background: linear-gradient(180deg, var(--bg-surface-hover) 0%, var(--bg-surface) 100%);
 }
 
 .user-card:active {
-  transform: translateY(-4px);
+  transform: scale(1.02);
   box-shadow: 0 10px 20px rgba(0,0,0,0.4);
 }
 
@@ -1097,6 +1099,16 @@ body {
   text-overflow: ellipsis;
 }
 
+.multi-select-chips {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+  -webkit-overflow-scrolling: touch; /* smooth scrolling on iOS */
+}
+
+.multi-select-chips::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
+
 .custom-select-icon {
   position: absolute;
   right: 16px;
@@ -1113,11 +1125,13 @@ body {
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
-  width: 100%;
+  min-width: 200px;
+  max-width: 300px;
   background: rgba(24, 24, 27, 0.95);
   backdrop-filter: blur(16px);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 20px;
+  padding: 8px 0;
   overflow: hidden;
   z-index: 50;
   box-shadow: 0 10px 25px rgba(0,0,0,0.5);
@@ -1141,7 +1155,9 @@ body {
 }
 
 .custom-select-option {
-  padding: 12px 16px;
+  margin: 4px 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
   color: var(--text-subtle);
   font-size: 0.95rem;
   cursor: pointer;
@@ -1153,7 +1169,7 @@ body {
   color: var(--text-main);
 }
 
-.custom-select-option.selected {
+.custom-select-option.selected-single {
   background: var(--brand);
   color: white;
   font-weight: 600;
@@ -1673,8 +1689,8 @@ body {
 
   /* Buttons & General */
   .btn-back {
-    padding: 8px 16px 8px 12px;
-    font-size: 0.9rem;
+    width: 36px;
+    height: 36px;
   }
   
   .content-padding {

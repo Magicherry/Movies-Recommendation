@@ -51,14 +51,14 @@ export default function CustomSelect({ name, options, defaultValue }: CustomSele
       {isOpen && (
         <div className="custom-select-dropdown">
           {options.map((option) => (
-            <div
-              key={option.value}
-              className={`custom-select-option ${option.value === selectedValue ? 'selected' : ''}`}
-              onClick={() => {
-                setSelectedValue(option.value);
-                setIsOpen(false);
-              }}
-            >
+              <div
+                key={option.value}
+                className={`custom-select-option ${option.value === selectedValue ? 'selected-single' : ''}`}
+                onClick={() => {
+                  setSelectedValue(option.value);
+                  setIsOpen(false);
+                }}
+              >
               {option.label}
             </div>
           ))}
