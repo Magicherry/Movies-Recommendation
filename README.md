@@ -16,6 +16,23 @@ This project implements **Option 1 (Recommender System)** from the CS550 project
   - Movie detail page (metadata + similar movies)
   - Recommendation page (input user ID and get top-10 recommendations)
 
+## UX Preview
+
+### Home Page
+![Home](preview/Home.png)
+
+### Library (Browse Movies)
+![Library](preview/Library.png)
+
+### Movie Detail
+![Movies Detail](preview/Movies%20Detail.png)
+
+### Community (Browse Users)
+![Community](preview/Community.png)
+
+### User Profile
+![User Profile](preview/User%20Profile.png)
+
 ## Project Structure
 
 ```text
