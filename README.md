@@ -71,7 +71,10 @@ python -m scripts.train_and_evaluate --dataset-dir frontend/ml-latest-small/ml-l
 
 To display high-quality posters and backdrops, run the TMDB enrichment script. This will generate `movies_enriched.csv`.
 
-> **Note**: Before running the script, you must obtain a free API key from [TMDB](https://www.themoviedb.org/documentation/api) and manually add it to `scripts/scrape_tmdb.py` (update the `API_KEY` variable).
+> **Note**: Before running the script, you must obtain a free API key from [TMDB](https://www.themoviedb.org/documentation/api). Then, create a `.env` file in the project root and add your key:
+> ```bash
+> TMDB_API_KEY=your_real_api_key_here
+> ```
 
 ```bash
 python -m scripts.scrape_tmdb

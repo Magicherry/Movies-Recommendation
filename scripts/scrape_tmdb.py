@@ -4,10 +4,23 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import os
+import sys
 from pathlib import Path
+from dotenv import load_dotenv
 
-API_KEY = "b1febb1073ae2d729ed55831afee85fc"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+# Load environment variables from .env file
+load_dotenv(PROJECT_ROOT / ".env")
+
+API_KEY = os.environ.get("TMDB_API_KEY")
+
+if not API_KEY or API_KEY == "your_real_api_key_here":
+    print("Error: TMDB_API_KEY not found in environment or .env file.")
+    print("Please create a .env file in the project root with your TMDB API key:")
+    print("TMDB_API_KEY=your_real_api_key_here")
+    sys.exit(1)
+
 MOVIES_PATH = PROJECT_ROOT / "models" / "artifacts" / "movies.csv"
 ENRICHED_PATH = PROJECT_ROOT / "models" / "artifacts" / "movies_enriched.csv"
 
