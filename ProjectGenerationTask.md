@@ -120,7 +120,9 @@ The web interface must follow a modern, dark-themed, cinematic design language (
   - **Interactions:** Link states transition opacity (`0.7` to `1.0`), and active states use the brand color with bold weight. User avatars should be circular, scale up on hover, and feature a brand-colored outer glow.
 - **Component Specifics**
   - **Tags & Chips:** Dark gray (`#323235`) background with `#ffffff` text and no borders.
-  - **Buttons & Controls:** Floating UI controls (back buttons, carousel toggles) must be circular, using strong blurs (`blur(12px)`), dark semi-transparent backgrounds, and subtle hover feedback (slight white border, icon shifting).
+  - **Buttons & Controls:** Floating UI controls (like back buttons or carousel toggles) must be circular, using strong blurs (`backdrop-filter: blur(12px)`), dark semi-transparent backgrounds (`rgba(40, 40, 45, 0.6)`), and an extremely subtle border (`rgba(255, 255, 255, 0.05)`).
+    - *Hover State:* Slightly scale up (`scale(1.05)`), increase background opacity (`rgba(60, 60, 65, 0.8)`), highlight border (`rgba(255, 255, 255, 0.15)`), and add a subtle icon translation/shift.
+    - *Active State:* Scale down below original size (`scale(0.95)`) for tactile "pressed" feedback.
   - **Form Elements / Selects:** Dropdown menus maintain fixed bounds (e.g., `min-width: 200px`) to prevent stretching, use vertical padding for breathing room, and indicate selection with brand-colored backgrounds and white checkmarks.
   - **Card Content Layout:** Clean metadata combining, such as displaying `Year · Top Genre` compactly below the movie title.
 
