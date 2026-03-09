@@ -13,8 +13,9 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
   const userId = Number(params.id);
   
   // Use Promise.all to fetch concurrently for performance
+  // We fetch ALL history to calculate accurate stats, even if we only display the top few later.
   const [history, recommendations] = await Promise.all([
-    getUserHistory(userId),
+    getUserHistory(userId, true),
     getRecommendations(userId)
   ]);
 

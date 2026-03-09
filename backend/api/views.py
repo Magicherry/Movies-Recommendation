@@ -72,9 +72,11 @@ def users(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"items": data["items"], "total": data["total"], "limit": limit, "offset": offset})
 
 @require_GET
-def user_history(_: HttpRequest, user_id: int) -> JsonResponse:
+def user_history(request: HttpRequest, user_id: int) -> JsonResponse:
     try:
-        history = service.get_user_history(user_id=user_id, limit=20)
+        # Default limit is 20, but if 'all=1' is passed, we fetch everything
+        limit = 0 if request.GET.get('all') == '1' else 20
+        history = service.get_user_history(user_id=user_id, limit=limit)
     except ValueError as exc:
         return _error(str(exc), status=404)
     except FileNotFoundError as exc:

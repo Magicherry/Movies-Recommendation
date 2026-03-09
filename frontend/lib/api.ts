@@ -60,8 +60,9 @@ export async function getUsers(limit = 50, offset = 0): Promise<{ items: { user_
   return await res.json();
 }
 
-export async function getUserHistory(userId: number): Promise<{ item_id: number; title: string; genres: string; rating: number }[]> {
-  const res = await fetch(`${API_BASE}/user/${userId}/history`, { cache: "no-store" });
+export async function getUserHistory(userId: number, fetchAll: boolean = false): Promise<{ item_id: number; title: string; genres: string; rating: number }[]> {
+  const url = fetchAll ? `${API_BASE}/user/${userId}/history?all=1` : `${API_BASE}/user/${userId}/history`;
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     const errData = await res.json().catch(() => null);
     throw new Error(errData?.error || "Failed to fetch user history.");

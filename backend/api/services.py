@@ -213,6 +213,9 @@ class RecommenderService:
         if user_id not in self.users:
             raise ValueError(f"User ID {user_id} not found.")
         history = self.user_history.get(user_id, [])
+        # We can return all history here if limit=0, or let the API caller decide.
+        if limit == 0:
+            return history
         return history[:limit]
 
     def list_users(self, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
