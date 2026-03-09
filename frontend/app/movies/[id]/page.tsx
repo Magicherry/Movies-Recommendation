@@ -28,7 +28,7 @@ export default async function MovieDetailPage({ params }: MovieDetailPageProps) 
           style={{ 
             backgroundImage: data.movie.backdrop_url ? `url('${data.movie.backdrop_url}')` : getGradient(itemId),
             backgroundSize: 'cover',
-            backgroundPosition: 'center',
+            backgroundPosition: 'top',
             backgroundRepeat: 'no-repeat'
           }}
         />

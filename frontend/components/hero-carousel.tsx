@@ -45,7 +45,7 @@ export default function HeroCarousel({ movies }: HeroCarouselProps) {
         style={{
           backgroundImage: featured.backdrop_url ? `url('${featured.backdrop_url}')` : getGradient(featured.item_id),
           backgroundSize: 'cover',
-          backgroundPosition: 'center',
+          backgroundPosition: 'top',
           backgroundRepeat: 'no-repeat',
           transition: "background-image 0.8s ease"
         }}
