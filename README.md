@@ -19,13 +19,17 @@ A full-stack application implementing a custom Recommender System with a modern 
 
 ## UX Preview
 
-| Home Page | Library |
+| Home Page | Top Picks |
 | :---: | :---: |
-| ![Home](preview/Home.png) | ![Library](preview/Library.png) |
+| ![Home](preview/Home.png) | ![Top Picks](preview/TopPicks.png) |
 
-| Movie Detail | Community | User Profile |
+| Collection | Library | Movie Detail |
 | :---: | :---: | :---: |
-| ![Movies Detail](preview/MoviesDetail.png) | ![Community](preview/Community.png) | ![User Profile](preview/UserProfile.png) |
+| ![Collection](preview/Collection.png) | ![Library](preview/Library.png) | ![Movies Detail](preview/MoviesDetail.png) |
+
+| Community | User Profile |
+| :---: | :---: |
+| ![Community](preview/Community.png) | ![User Profile](preview/UserProfile.png) |
 
 ## Project Structure
 

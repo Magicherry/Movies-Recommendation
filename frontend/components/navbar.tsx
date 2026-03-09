@@ -61,7 +61,7 @@ export default function AppNavbar() {
           <NextLink href="/" className="brand-link" onClick={() => setIsMenuOpen(false)}>
             STREAMX
           </NextLink>
-          <span className="option-badge">CS550</span>
+          <span className="option-badge">Demo</span>
         </div>
 
         <button 
