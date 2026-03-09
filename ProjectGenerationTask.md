@@ -114,10 +114,13 @@ The web interface must follow a modern, dark-themed, cinematic design language (
 - **Hover Effects & Interactions**
   - Use smooth, in-place scaling (`transform: scale(1.05)`), **avoiding** vertical shifting (`translateY`).
   - Highlight movie cards with distinct white borders (`border-color: #ffffff; border-width: 2px;`) and dynamic box shadows.
+- **Navigation Bar**
+  - **Layout:** Three-column layout. Brand/Logo on the far left, a floating pill-shaped navigation links container (`border-radius: 999px`) in the absolute center (`left: 50%; transform: translateX(-50%)`), and user avatar/actions on the far right.
+  - **Container & Effects:** The central link container uses glassmorphism (`backdrop-filter: blur(12px)`, `rgba(255, 255, 255, 0.05)`). A subtle dark gradient vignette mask (e.g., `background: linear-gradient(180deg, rgba(9,9,11,0.95) 0%, rgba(9,9,11,0.6) 40%, transparent 100%); pointer-events: none;`) must be placed behind the entire nav bar at the top of the screen to ensure link readability over varied background images.
+  - **Interactions:** Link states transition opacity (`0.7` to `1.0`), and active states use the brand color with bold weight. User avatars should be circular, scale up on hover, and feature a brand-colored outer glow.
 - **Component Specifics**
   - **Tags & Chips:** Dark gray (`#323235`) background with `#ffffff` text and no borders.
   - **Buttons & Controls:** Floating UI controls (back buttons, carousel toggles) must be circular, using strong blurs (`blur(12px)`), dark semi-transparent backgrounds, and subtle hover feedback (slight white border, icon shifting).
-  - **Navigation Bar:** Floating, pill-shaped container (`border-radius: 999px`) with glassmorphism (`rgba(255, 255, 255, 0.05)`). Link states transition opacity (`0.7` to `1.0`), active states use the brand color and bold weight. Avatars scale up on hover with a brand-colored outer glow.
   - **Form Elements / Selects:** Dropdown menus maintain fixed bounds (e.g., `min-width: 200px`) to prevent stretching, use vertical padding for breathing room, and indicate selection with brand-colored backgrounds and white checkmarks.
   - **Card Content Layout:** Clean metadata combining, such as displaying `Year · Top Genre` compactly below the movie title.
 
