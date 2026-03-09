@@ -1,126 +1,114 @@
-# CS550 Option 1 Recommender System
+# Movies Recommender System
 
-This project implements **Option 1 (Recommender System)** from the CS550 project specification as a full-stack application.
+A full-stack application implementing a custom Recommender System with a modern web interface.
 
-## Implemented Option 1 Requirements
+## Features
 
-- Data preprocessing with **per-user random 80/20 split** into training and testing sets.
-- Rating prediction on the test set with **MAE** and **RMSE**.
-- Top-10 recommendation for each user (excluding training-set items), evaluated with:
-  - **Precision@10**
-  - **Recall@10**
-  - **F-measure@10**
-  - **NDCG@10**
-- Web demo with:
-  - Home page (movie list)
-  - Movie detail page (metadata + similar movies)
-  - Recommendation page (input user ID and get top-10 recommendations)
+- **Robust Recommendation Engine**: Custom Matrix Factorization model trained with Stochastic Gradient Descent (SGD).
+- **Data Processing**: Automated per-user random 80/20 data split for training and testing.
+- **Evaluation Metrics**:
+  - Rating prediction: **MAE**, **RMSE**
+  - Top-K recommendations: **Precision@10**, **Recall@10**, **F-measure@10**, **NDCG@10**
+- **Modern Web Interface**: Built with Next.js and Django, featuring:
+  - Browse library with multi-genre filtering and sorting
+  - Detailed movie pages with metadata and similar movie suggestions
+  - Personalized user profiles showcasing rating history and top recommendations
+  - Dynamic TMDB image enrichment for movie posters and backdrops
 
 ## UX Preview
 
-### Home Page
-![Home](preview/Home.png)
+| Home Page | Library |
+| :---: | :---: |
+| ![Home](preview/Home.png) | ![Library](preview/Library.png) |
 
-### Library (Browse Movies)
-![Library](preview/Library.png)
-
-### Movie Detail
-![Movies Detail](preview/MoviesDetail.png)
-
-### Community (Browse Users)
-![Community](preview/Community.png)
-
-### User Profile
-![User Profile](preview/UserProfile.png)
+| Movie Detail | Community | User Profile |
+| :---: | :---: | :---: |
+| ![Movies Detail](preview/MoviesDetail.png) | ![Community](preview/Community.png) | ![User Profile](preview/UserProfile.png) |
 
 ## Project Structure
 
 ```text
-dataset/
-reference/
-backend/
-frontend/
-models/
-scripts/
-README.md
-requirements.txt
+dataset/          # Raw datasets (MovieLens format supported)
+backend/          # Django REST API
+frontend/         # Next.js web application
+models/           # ML model architecture and generated artifacts
+scripts/          # Training, evaluation, and data enrichment scripts
 ```
 
-## 1) Python Environment
+## Getting Started
+
+### 1. Python Environment Setup
+
+Create and activate a virtual environment, then install dependencies:
 
 ```bash
+# macOS / Linux
+python -m venv .venv
+source .venv/bin/activate
+
+# Windows
 python -m venv .venv
 .venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-## 2) Train and Evaluate
+### 2. Train the Model
 
-Run from the repository root:
-
-```bash
-python -m scripts.train_and_evaluate --dataset-dir dataset/ml-latest-small --top-k 10
-```
-
-Optional Matrix Factorization hyperparameters:
+Train the recommender model using the provided dataset. Artifacts (model, split data, metrics) will be saved to `models/artifacts/`.
 
 ```bash
-python -m scripts.train_and_evaluate --dataset-dir dataset/ml-latest-small --top-k 10 --n-factors 48 --epochs 30 --lr 0.01 --reg 0.05 --lr-decay 0.98
+python -m scripts.train_and_evaluate --dataset-dir frontend/ml-latest-small/ml-latest-small --top-k 10
 ```
 
-Artifacts are saved to `models/artifacts/`:
+*(Optional)* Tune Matrix Factorization hyperparameters:
+```bash
+python -m scripts.train_and_evaluate --dataset-dir frontend/ml-latest-small/ml-latest-small --n-factors 48 --epochs 30 --lr 0.01 --reg 0.05
+```
 
-- `model.pkl`
-- `movies.csv`
-- `train_ratings.csv`
-- `test_ratings.csv`
-- `metrics.json`
+### 3. Fetch Movie Images (Optional but Recommended)
 
-## 3) Start Backend (Django API)
+To display high-quality posters and backdrops, run the TMDB enrichment script. This will generate `movies_enriched.csv`.
+
+```bash
+python -m scripts.scrape_tmdb
+```
+
+### 4. Start the Backend API
+
+Start the Django development server:
 
 ```bash
 cd backend
 python manage.py runserver 8001
 ```
 
-Available endpoints:
-
+**Key Endpoints:**
 - `GET /api/health`
-- `GET /api/movies?limit=50&offset=0&q=&genre=&year=&sort_by=item_id&sort_order=asc`
+- `GET /api/movies` (Supports pagination, search, and genre filtering)
 - `GET /api/movie/{id}`
 - `GET /api/recommend/{user_id}`
-- `GET /api/users?limit=50&offset=0`
-- `GET /api/user/{user_id}/history`
-- `GET /api/search?q=toy`
 
-## 4) Start Frontend (Next.js + HeroUI)
+### 5. Start the Frontend Application
 
-Run in a separate terminal:
+In a new terminal, start the Next.js application:
 
 ```bash
 cd frontend
 npm install
-npx next dev -p 3001
+npm run dev -- -p 3001
 ```
 
-Optional environment variable:
-
-- `NEXT_PUBLIC_API_BASE_URL` (default in code: `http://localhost:8000/api`, recommended for this project: `http://localhost:8001/api`)
-
-Set it before starting frontend if needed:
-
-```powershell
-$env:NEXT_PUBLIC_API_BASE_URL="http://localhost:8001/api"
-npx next dev -p 3001
+*(Optional)* If you need to specify a custom backend URL:
+```bash
+NEXT_PUBLIC_API_BASE_URL="http://localhost:8001/api" npm run dev -- -p 3001
 ```
 
-Visit:
+**Access the application at:** `http://localhost:3001`
 
-- Frontend: `http://localhost:3001`
-- Backend API: `http://localhost:8001/api/health`
+## Technical Notes
 
-## Notes
-
-- The data loader supports both MovieLens CSV and DAT formats.
-- The recommender algorithm is a custom Matrix Factorization model trained with SGD.
-- The model code is custom and does not directly use packaged recommendation algorithms as a black box.
+- The data loader supports both `csv` and `dat` MovieLens formats.
+- The recommender algorithm is built from scratch and does not rely on black-box recommendation libraries.
+- The UI features a responsive design, glass-morphism effects, and dynamic filtering components.
