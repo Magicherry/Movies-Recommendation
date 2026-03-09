@@ -38,14 +38,32 @@ body {
   position: sticky;
   top: 0;
   z-index: 50;
-  background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
-  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
+
+.top-nav::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  bottom: -23px; /* Extend further for a much softer fade */
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.3) 60%, transparent 100%);
+  backdrop-filter: blur(0px);
+  -webkit-backdrop-filter: blur(0px);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 45%, rgba(0,0,0,0.8) 65%, rgba(0,0,0,0.3) 85%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, black 45%, rgba(0,0,0,0.8) 65%, rgba(0,0,0,0.3) 85%, transparent 100%);
+  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.top-nav.scrolled::before {
+  background: linear-gradient(to bottom, rgba(9, 9, 11, 0.85) 0%, rgba(9, 9, 11, 0.4) 65%, transparent 100%);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
 .top-nav.scrolled {
-  background: rgba(9, 9, 11, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  /* removed border */
 }
 
 .simple-nav {
@@ -85,10 +103,16 @@ body {
 
 .nav-links {
   display: flex;
-  gap: 40px;
+  gap: 8px;
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .nav-link {
@@ -97,36 +121,41 @@ body {
   color: var(--text-main);
   text-decoration: none;
   font-size: 0.95rem;
-  opacity: 0.8;
-  transition: opacity 0.2s;
-  padding-bottom: 8px;
-}
-
-.nav-link::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 4px;
-  background-color: var(--brand);
-  transition: width 0.3s cubic-bezier(0.25, 1, 0.5, 1);
-  border-radius: 4px;
+  opacity: 0.7;
+  transition: all 0.2s;
+  padding: 8px 16px;
+  border-radius: 999px;
 }
 
 .nav-link:hover {
   opacity: 1;
-}
-
-.nav-link:hover::after,
-.nav-link.active::after {
-  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .nav-link.active {
   opacity: 1;
-  font-weight: 700;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--brand);
+}
+
+.nav-icon-link {
+  position: relative;
+  color: var(--text-main);
+  text-decoration: none;
+  opacity: 0.7;
+  transition: all 0.2s;
+  padding: 8px 16px; /* Match horizontal padding of other nav links */
+  border-radius: 999px; /* Pill shape like other links instead of circle */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -4px; /* Pull it slightly closer to the community button to reduce the gap */
+}
+
+.nav-icon-link:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .nav-right {
@@ -329,7 +358,7 @@ body {
   color: #000;
   font-weight: 700;
   padding: 12px 28px;
-  border-radius: 6px;
+  border-radius: 99px;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -353,7 +382,7 @@ body {
   color: white;
   font-weight: 700;
   padding: 12px 28px;
-  border-radius: 6px;
+  border-radius: 99px;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -517,7 +546,7 @@ body {
   max-width: 220px;
   scroll-snap-align: start;
   position: relative;
-  border-radius: 8px;
+  border-radius: 16px;
   overflow: hidden;
   background: transparent;
   transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
@@ -546,13 +575,15 @@ body {
   align-items: flex-end;
   padding: 16px;
   position: relative;
-  border-radius: 8px;
+  border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-  transition: box-shadow 0.3s ease;
+  border: 1px solid var(--border-soft); /* Added subtle border like user cards */
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
 }
 .poster-card:hover .poster-bg {
-  box-shadow: 0 14px 28px rgba(0,0,0,0.5);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.6); /* Matched user-card hover shadow */
+  border-color: rgba(255,255,255,0.2); /* Matched user-card hover border */
 }
 
 .poster-img {
@@ -947,11 +978,12 @@ body {
 
 .custom-search-input {
   width: 100%;
-  padding: 14px 20px 14px 48px;
+  height: 48px; /* Added fixed height */
+  padding: 0 20px 0 48px; /* Adjusted padding for fixed height */
   font-size: 1.1rem;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 99px;
   color: var(--text-main);
   transition: all 0.3s ease;
 }
@@ -964,14 +996,18 @@ body {
 }
 
 .search-btn {
+  height: 48px; /* Added fixed height */
   padding: 0 32px;
-  border-radius: 12px;
+  border-radius: 99px;
   font-weight: 600;
   letter-spacing: 0.02em;
   background: var(--brand);
   color: white;
   border: none;
   transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .search-btn:hover {
   background: var(--brand-hover);
@@ -1011,11 +1047,12 @@ body {
 
 .custom-select-trigger {
   width: 100%;
+  height: 48px; /* Added fixed height */
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-soft);
   color: var(--text-main);
-  padding: 12px 40px 12px 16px;
-  border-radius: 12px;
+  padding: 0 40px 0 16px; /* Adjusted padding for fixed height */
+  border-radius: 99px;
   font-size: 0.95rem;
   cursor: pointer;
   display: flex;
@@ -1111,14 +1148,19 @@ body {
 }
 
 .year-input {
-  width: 100%;
-  padding: 12px 16px;
+  width: 160px; /* Increased from 100px */
+  height: 48px; /* Fixed height to match custom-select-trigger and custom-search-input */
+  padding: 0 16px;
   font-size: 0.95rem;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 99px;
   color: var(--text-main);
   transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 .year-input:focus {
   background: rgba(255, 255, 255, 0.1);
@@ -1130,13 +1172,15 @@ body {
 .btn-clear-filter {
   display: flex;
   align-items: center;
+  justify-content: center;
+  height: 48px; /* Added fixed height */
   gap: 6px;
   color: var(--text-subtle);
   font-size: 0.95rem;
   font-weight: 500;
   text-decoration: none;
-  padding: 10px 16px;
-  border-radius: 12px;
+  padding: 0 16px; /* Adjusted padding for fixed height */
+  border-radius: 99px;
   background: rgba(255,255,255,0.03);
   border: 1px solid var(--border-soft);
   transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
@@ -1286,14 +1330,26 @@ body {
     transform: none;
     flex-direction: column;
     align-items: center;
-    gap: 32px;
+    gap: 16px;
     width: 100%;
     margin-top: 20px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .nav-link {
     font-size: 1.5rem;
     font-weight: 600;
+    padding: 12px 24px;
+  }
+
+  .nav-icon-link {
+    font-size: 1.5rem;
+    padding: 12px;
+    margin-left: 0;
   }
 
   .nav-right {

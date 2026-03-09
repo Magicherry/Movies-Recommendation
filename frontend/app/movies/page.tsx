@@ -55,11 +55,13 @@ export default async function MoviesPage({
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
             <input 
+              id="movie-search-input"
               type="text" 
               name="q" 
               defaultValue={q} 
               placeholder="Search movies by title..." 
               className="search-input custom-search-input"
+              autoFocus={searchParams.focus === "search"}
             />
           </div>
           <button type="submit" className="btn-primary search-btn">
