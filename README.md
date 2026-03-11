@@ -1,6 +1,17 @@
-# Movies Recommender System
+<h2 align="center">
+  StreamX - Movies Recommender System <br/>
+</h2>
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-14.2-0f172a?logo=nextdotjs&logoColor=white">
+  <img src="https://img.shields.io/badge/React-18.x-0f172a?logo=react&logoColor=61DAFB">
+  <img src="https://img.shields.io/badge/Django-5.0-0f172a?logo=django&logoColor=092E20">
+  <img src="https://img.shields.io/badge/Python-3.11-0f172a?logo=python&logoColor=3776AB">
+  <img src="https://img.shields.io/badge/NumPy-Data%20Processing-0f172a?logo=numpy&logoColor=013243">
+</p>
 
-A full-stack application implementing a custom Recommender System with a modern web interface.
+<p align="center">
+  A full-stack application implementing a custom Recommender System with a modern web interface.
+</p>
 
 ## Features
 
