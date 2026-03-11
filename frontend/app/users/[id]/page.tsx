@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getUserHistory, getRecommendations } from "../../../lib/api";
 import MovieCardGrid from "../../../components/movie-card-grid";
 import BackButton from "../../../components/back-button";
+import UserProfileActions from "../../../components/user-profile-actions";
 
 type UserDetailPageProps = {
   params: {
@@ -96,12 +97,13 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
                 style={{ width: "100%", height: "100%", borderRadius: "50%" }}
               />
             </div>
-            <div>
+            <div style={{ flex: 1 }}>
               <h1 style={{ margin: "0 0 8px 0", fontSize: "clamp(1.8rem, 5vw, 2.5rem)", fontWeight: 800 }}>User {userId}'s Profile</h1>
               <p style={{ color: "var(--text-subtle)", margin: 0, fontSize: "clamp(0.9rem, 3vw, 1.05rem)" }}>
                 Explore this user's top-rated history and customized recommendations.
               </p>
             </div>
+            <UserProfileActions profileUserId={userId} />
           </div>
 
           {/* Section 2: Movie Stats & Genres */}
