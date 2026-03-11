@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import NextLink from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useUser } from "../context/user-context";
 
 export default function AppNavbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { userId, setUserId } = useUser();
   const [inputId, setInputId] = useState(userId.toString());
 
@@ -36,10 +37,21 @@ export default function AppNavbar() {
   }, [isMenuOpen]);
 
   const isActive = (path: string) => {
-    if (path === "/") {
-      return pathname === "/";
+    // If we are on a collection page, use the 'from' query param to determine active state
+    let effectivePathname = pathname;
+    if (pathname.startsWith("/collection")) {
+      const from = searchParams.get("from");
+      if (from) {
+        effectivePathname = from;
+      } else {
+        effectivePathname = "/"; // Default to home if no 'from' param
+      }
     }
-    return pathname.startsWith(path);
+
+    if (path === "/") {
+      return effectivePathname === "/";
+    }
+    return effectivePathname.startsWith(path);
   };
 
   const handleUserChange = (e: React.FormEvent) => {
@@ -59,7 +71,7 @@ export default function AppNavbar() {
       <div className="simple-nav">
         <div className="brand-wrap">
           <NextLink href="/" className="brand-link" onClick={() => setIsMenuOpen(false)}>
-            STREAMX
+            <span style={{ color: 'var(--brand)' }}>STREAM</span>X
           </NextLink>
           <span className="option-badge">Demo</span>
         </div>

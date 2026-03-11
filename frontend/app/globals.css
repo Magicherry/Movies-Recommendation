@@ -7,8 +7,8 @@
   --text-main: #f8fafc;
   --text-subtle: #a1a1aa;
   --border-soft: rgba(255, 255, 255, 0.1);
-  --brand: #e50914;
-  --brand-hover: #b91c1c;
+  --brand: #6ae100;
+  --brand-hover: #55b400;
 }
 
 * {
@@ -82,12 +82,22 @@ body {
 }
 
 .brand-link {
-  color: var(--brand);
+  color: var(--text-main);
   font-weight: 800;
   text-decoration: none;
   font-size: 1.5rem;
   letter-spacing: -0.02em;
   text-transform: uppercase;
+  transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+  display: inline-block;
+}
+
+.brand-link:hover {
+  transform: scale(1.05);
+}
+
+.brand-link:active {
+  transform: scale(0.95);
 }
 
 .option-badge {
@@ -128,14 +138,20 @@ body {
   text-decoration: none;
   font-size: 0.95rem;
   opacity: 0.7;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
   padding: 8px 16px;
   border-radius: 999px;
+  display: inline-block;
 }
 
 .nav-link:hover {
   opacity: 1;
   background: rgba(255, 255, 255, 0.05);
+  transform: scale(1.05);
+}
+
+.nav-link:active {
+  transform: scale(0.95);
 }
 
 .nav-link.active {
@@ -150,7 +166,7 @@ body {
   color: var(--text-main);
   text-decoration: none;
   opacity: 0.7;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
   padding: 8px 16px; /* Match horizontal padding of other nav links */
   border-radius: 999px; /* Pill shape like other links instead of circle */
   display: flex;
@@ -162,6 +178,11 @@ body {
 .nav-icon-link:hover {
   opacity: 1;
   background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.05);
+}
+
+.nav-icon-link:active {
+  transform: scale(0.95);
 }
 
 .nav-right {
@@ -735,7 +756,7 @@ body {
 .btn-search:hover {
   background: var(--brand-hover);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(229, 9, 20, 0.4);
+  box-shadow: 0 4px 12px rgba(106, 225, 0, 0.4);
 }
 .btn-search:active {
   transform: scale(0.98);
@@ -928,7 +949,7 @@ body {
 .pagination input[type="number"]:focus {
   background: rgba(255, 255, 255, 0.1);
   border-color: var(--brand);
-  box-shadow: 0 0 0 2px rgba(229, 9, 20, 0.2);
+  box-shadow: 0 0 0 2px rgba(106, 225, 0, 0.2);
 }
 
 /* Hide arrows for pagination number input */
@@ -1030,7 +1051,7 @@ body {
 .search-btn:hover {
   background: var(--brand-hover);
   transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(229, 9, 20, 0.4);
+  box-shadow: 0 4px 12px rgba(106, 225, 0, 0.4);
 }
 .search-btn:active {
   transform: scale(0.95);
@@ -1722,7 +1743,7 @@ body {
   width: 50px;
   height: 50px;
   border-radius: 25px;
-  background: rgba(229, 9, 20, 0.9);
+  background: rgba(106, 225, 0, 0.9);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.2);
   display: flex;
@@ -1734,7 +1755,7 @@ body {
   visibility: hidden;
   transform: translateY(20px);
   transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
-  box-shadow: 0 4px 16px rgba(229, 9, 20, 0.4);
+  box-shadow: 0 4px 16px rgba(106, 225, 0, 0.4);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -1748,7 +1769,7 @@ body {
 .scroll-to-top:hover {
   background: var(--brand-hover);
   transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(229, 9, 20, 0.6);
+  box-shadow: 0 8px 24px rgba(106, 225, 0, 0.6);
 }
 
 .scroll-to-top:active {

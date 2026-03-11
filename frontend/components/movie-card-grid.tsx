@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import NextLink from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 export type MovieCardItem = {
   item_id: number;
@@ -47,11 +47,18 @@ export default function MovieCardGrid({
 }: MovieCardGridProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleCollectionClick = () => {
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('collectionData', JSON.stringify({ title, items, scoreLabel }));
-      router.push('/collection');
+      
+      // Determine base path for the 'from' query parameter to keep correct navbar highlight
+      let fromPath = '/';
+      if (pathname.startsWith('/movies')) fromPath = '/movies';
+      else if (pathname.startsWith('/users')) fromPath = '/users';
+      
+      router.push(`/collection?from=${fromPath}`);
     }
   };
 
