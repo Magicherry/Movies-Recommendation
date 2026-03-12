@@ -7,6 +7,7 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
   const { userId } = useUser();
   const [prediction, setPrediction] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeEngine, setActiveEngine] = useState<string>("the active model");
 
   useEffect(() => {
     async function fetchPrediction() {
@@ -20,13 +21,42 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
             setPrediction(data.predicted_rating);
           }
         }
+        
+        // Also fetch current model config to show what model is used
+        const modelRes = await fetch(`${API_BASE}/model-config`);
+        if (modelRes.ok) {
+          const modelData = await modelRes.json();
+          if (modelData.active_model === 'option1') {
+            setActiveEngine('Matrix Factorization');
+          } else if (modelData.active_model === 'option2') {
+            setActiveEngine('Deep Neural CF');
+          } else {
+            setActiveEngine(modelData.active_model);
+          }
+        }
       } catch (err) {
         console.error("Failed to fetch prediction", err);
       } finally {
         setLoading(false);
       }
     }
+    
     fetchPrediction();
+    
+    // Listen for engine change events to refetch prediction
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'streamx-force-refresh') {
+        fetchPrediction();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('streamx-engine-changed', fetchPrediction);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('streamx-engine-changed', fetchPrediction);
+    };
   }, [userId, itemId]);
 
   if (loading) {
@@ -80,7 +110,7 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
       </div>
       
       <div style={{ color: "var(--text-subtle)", fontSize: "0.85rem", maxWidth: "200px" }}>
-        Based on User {userId}'s history using Matrix Factorization
+        Based on User {userId}'s history using {activeEngine}
       </div>
     </div>
   );

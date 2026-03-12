@@ -12,10 +12,56 @@ export default function AppNavbar() {
   const searchParams = useSearchParams();
   const { userId, setUserId } = useUser();
   const [inputId, setInputId] = useState(userId.toString());
+  const [activeEngine, setActiveEngine] = useState<string>("Demo");
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
 
   useEffect(() => {
     setInputId(userId.toString());
   }, [userId]);
+
+  useEffect(() => {
+    const fetchModel = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/model-config`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.active_model === 'option1') {
+            setActiveEngine('MF');
+          } else if (data.active_model === 'option2') {
+            setActiveEngine('NCF');
+          } else {
+            setActiveEngine(data.active_model);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch model config", err);
+      }
+    };
+
+    fetchModel();
+    
+    // Listen for the custom local storage event we added for force refresh (works across tabs)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'streamx-force-refresh') {
+        fetchModel();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Listen for the custom event dispatched in the same tab
+    window.addEventListener('streamx-engine-changed', fetchModel);
+    
+    // Also poll occasionally just in case
+    const interval = setInterval(fetchModel, 30000);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('streamx-engine-changed', fetchModel);
+      clearInterval(interval);
+    };
+  }, [API_BASE]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -73,7 +119,7 @@ export default function AppNavbar() {
           <NextLink href="/" className="brand-link" onClick={() => setIsMenuOpen(false)}>
             <span style={{ color: 'var(--brand)' }}>STREAM</span>X
           </NextLink>
-          <span className="option-badge">Demo</span>
+          <span className="option-badge" title="Current Recommendation Engine">{activeEngine}</span>
         </div>
 
         <button 

@@ -68,6 +68,10 @@ export default function AlgorithmSettings() {
       if (res.ok) {
         // Optimistically update the UI
         setModelConfig(prev => prev ? { ...prev, active_model: modelName } : null);
+        // Force home page to refresh recommendations
+        localStorage.setItem("streamx-force-refresh", Date.now().toString());
+        // Dispatch a custom event so the navbar in the same tab updates immediately
+        window.dispatchEvent(new Event('streamx-engine-changed'));
         // Fetch full config to get new metrics
         await fetchModelConfig();
       } else {

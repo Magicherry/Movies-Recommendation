@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AppearanceSettings from "./components/AppearanceSettings";
 import AlgorithmSettings from "./components/AlgorithmSettings";
 import DashboardStats from "./components/DashboardStats";
@@ -11,6 +11,11 @@ import BackButton from "@/components/back-button";
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("ui");
   const [isDetailView, setIsDetailView] = useState(false);
+
+  // When mounting, ensure we start at the top
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const handleTabClick = (tab: string) => {
     setActiveTab(tab);

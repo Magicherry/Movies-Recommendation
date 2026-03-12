@@ -12,6 +12,7 @@ let globalRecs: Recommendation[] = [];
 let globalHistory: Movie[] = [];
 let globalTrending: Movie[] = [];
 let globalUserId: number | null = null;
+let globalLastRefresh: string | null = null;
 
 export default function HomePage() {
   const { userId } = useUser();
@@ -30,9 +31,10 @@ export default function HomePage() {
       // Read recCount from localStorage, default to 10
       const savedRecCount = localStorage.getItem("streamx-rec-count");
       const recCount = savedRecCount ? parseInt(savedRecCount, 10) : 10;
+      const forceRefresh = localStorage.getItem("streamx-force-refresh");
 
-      if (globalUserId === userId && globalTrending.length > 0 && globalRecs.length === recCount) {
-        // Data is already loaded and cached for this user with the correct count
+      if (globalUserId === userId && globalTrending.length > 0 && globalRecs.length === recCount && globalLastRefresh === forceRefresh) {
+        // Data is already loaded and cached for this user with the correct count and model
         setRecommendations(globalRecs);
         setLoading(false);
         return;
@@ -77,6 +79,7 @@ export default function HomePage() {
         setTrending(movies.slice(0, 15));
         globalTrending = movies.slice(0, 15);
         globalUserId = userId;
+        globalLastRefresh = forceRefresh;
       } catch (err) {
         console.error(err);
       } finally {

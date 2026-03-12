@@ -2,6 +2,7 @@ import { getMovieDetail } from "../../../lib/api";
 import MovieCardGrid from "../../../components/movie-card-grid";
 import BackButton from "../../../components/back-button";
 import PredictionDisplay from "../../../components/prediction-display";
+import RefreshOnEngineChange from "../../../components/refresh-on-engine-change";
 
 type MovieDetailPageProps = {
   params: {
@@ -21,6 +22,7 @@ export default async function MovieDetailPage({ params }: MovieDetailPageProps) 
 
   return (
     <div className="page-transition">
+      <RefreshOnEngineChange />
       <BackButton top="110px" />
       <div className="hero-banner">
         <div
