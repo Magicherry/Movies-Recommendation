@@ -150,7 +150,7 @@ export default function DashboardStats() {
         padding: '16px 20px', 
         borderRadius: '12px', 
         border: '1px solid rgba(255,255,255,0.05)',
-        boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.2)'
+        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)'
       }}>
         <h5 style={{ 
           margin: '0 0 12px 0', 
@@ -199,7 +199,8 @@ export default function DashboardStats() {
         padding: '20px', 
         background: 'var(--bg-elevated)', 
         borderRadius: '12px',
-        border: '1px solid rgba(255,255,255,0.05)'
+        border: '1px solid rgba(255,255,255,0.05)',
+        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)'
       }}>
         <h3 style={{ marginTop: 0, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

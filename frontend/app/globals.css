@@ -1830,6 +1830,7 @@ body {
   border: 1px solid var(--border-soft);
   border-radius: 16px;
   padding: 32px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .settings-card.full-width {
@@ -1985,7 +1986,8 @@ body {
   border: 1px solid var(--border-soft);
   border-radius: 12px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .model-option:hover {
@@ -1995,6 +1997,7 @@ body {
 .model-option.active {
   border-color: var(--brand);
   background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 12px rgba(106, 225, 0, 0.15);
 }
 
 .model-radio {
@@ -2073,6 +2076,13 @@ body {
   flex-direction: column;
   align-items: center;
   text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-box:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
 }
 
 .stat-value {
@@ -2100,6 +2110,7 @@ body {
   border-radius: 12px;
   padding: 24px 24px 24px 0;
   border: 1px solid var(--border-soft);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .loading-state {
@@ -2116,6 +2127,7 @@ body {
   border: 1px solid var(--border-soft);
   border-radius: 12px;
   padding: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .model-metrics h4 {
@@ -2179,6 +2191,7 @@ body {
   border: 1px solid var(--border-soft);
   border-radius: 16px;
   padding: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .settings-nav-item {
@@ -2191,11 +2204,15 @@ body {
   font-size: 1.05rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
   display: flex;
   align-items: center;
   gap: 12px;
   position: relative;
+}
+
+.settings-nav-item:active {
+  transform: scale(0.98);
 }
 
 .settings-nav-item::before {
@@ -2220,6 +2237,7 @@ body {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-main);
   font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .settings-nav-item.active::before {
