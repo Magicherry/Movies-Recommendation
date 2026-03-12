@@ -3,6 +3,7 @@ import { getUserHistory, getRecommendations } from "../../../lib/api";
 import MovieCardGrid from "../../../components/movie-card-grid";
 import BackButton from "../../../components/back-button";
 import UserProfileActions from "../../../components/user-profile-actions";
+import ClientRecommendations from "./client-recommendations";
 
 type UserDetailPageProps = {
   params: {
@@ -17,7 +18,7 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
   // We fetch ALL history to calculate accurate stats, even if we only display the top few later.
   const [history, recommendations] = await Promise.all([
     getUserHistory(userId, true),
-    getRecommendations(userId)
+    getRecommendations(userId, 50)
   ]);
 
   // Calculate preferred genres based on history
@@ -233,15 +234,9 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
         </div>
       </div>
 
-      <section className="content-padding">
-        <MovieCardGrid
-          title={`Recommended for User ${userId}`}
-          items={recommendations}
-          scoreLabel="Match Score"
-          emptyMessage="No recommendations generated for this user."
-          rowMode={true}
-        />
-      </section>
+        <section className="content-padding">
+          <ClientRecommendations initialRecommendations={recommendations} userId={userId} />
+        </section>
 
       {history.length > 0 && (
         <section className="content-padding" style={{ marginTop: "-20px" }}>

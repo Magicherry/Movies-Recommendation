@@ -101,6 +101,9 @@ export default function AppNavbar() {
             <NextLink href="/users" className={`nav-link ${isActive("/users") ? "active" : ""}`} onClick={() => setIsMenuOpen(false)}>
               Community
             </NextLink>
+            <NextLink href="/settings" className={`nav-link ${isActive("/settings") ? "active" : ""}`} onClick={() => setIsMenuOpen(false)}>
+              Settings
+            </NextLink>
             <NextLink 
               href="/movies?focus=search" 
               className="nav-icon-link" 

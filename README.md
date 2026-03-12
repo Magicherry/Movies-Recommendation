@@ -79,10 +79,28 @@ Train the recommender model using the provided dataset. Artifacts (model, split 
 python -m scripts.train_and_evaluate --dataset-dir frontend/ml-latest-small/ml-latest-small --top-k 10
 ```
 
+Top-K relevance threshold can be configured (default: `rating >= 4.0`):
+```bash
+python -m scripts.train_and_evaluate --top-k 10 --min-relevant-rating 4.0
+```
+
 *(Optional)* Tune Matrix Factorization hyperparameters:
 ```bash
 python -m scripts.train_and_evaluate --dataset-dir frontend/ml-latest-small/ml-latest-small --n-factors 48 --epochs 30 --lr 0.01 --reg 0.05
 ```
+
+Train the improved Option 2 hybrid deep model (title + genre features):
+```bash
+python -m scripts.train_and_evaluate --model-type option2 --dataset-dir dataset/ml-latest-small --n-factors 64 --epochs 30 --option2-lr 0.001 --batch-size 256
+```
+
+Useful Option 2 controls:
+- `--option2-dropout-rate`
+- `--option2-l2-reg`
+- `--option2-validation-split`
+- `--option2-early-stopping-patience`
+- `--option2-lr-plateau-patience`
+- `--option2-rating-weight-power`
 
 ### 3. Fetch Movie Images (Optional but Recommended)
 

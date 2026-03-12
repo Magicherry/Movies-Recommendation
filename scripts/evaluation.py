@@ -30,11 +30,16 @@ def evaluate_top_n(
     train_ratings: pd.DataFrame,
     test_ratings: pd.DataFrame,
     k: int = 10,
+    min_relevant_rating: float = 4.0,
 ) -> Dict[str, float]:
-    if test_ratings.empty:
+    if test_ratings.empty or k <= 0:
         return {"precision": 0.0, "recall": 0.0, "f_measure": 0.0, "ndcg": 0.0}
 
-    test_items_by_user = test_ratings.groupby("user_id")["item_id"].apply(set).to_dict()
+    positive_test = test_ratings[test_ratings["rating"] >= float(min_relevant_rating)]
+    if positive_test.empty:
+        return {"precision": 0.0, "recall": 0.0, "f_measure": 0.0, "ndcg": 0.0}
+
+    test_items_by_user = positive_test.groupby("user_id")["item_id"].apply(set).to_dict()
     train_users = set(train_ratings["user_id"].astype(int).unique().tolist())
 
     precisions = []

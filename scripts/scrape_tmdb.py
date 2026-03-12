@@ -95,6 +95,18 @@ def fetch_tmdb_info(row):
     }
 
 def main():
+    # Validate API key first
+    test_url = "https://api.themoviedb.org/3/configuration"
+    try:
+        test_resp = requests.get(test_url, params={"api_key": API_KEY}, timeout=5)
+        test_data = test_resp.json()
+        if test_resp.status_code != 200 or test_data.get("success") is False:
+            print(f"Error: Invalid TMDB API Key. {test_data.get('status_message', '')}")
+            sys.exit(1)
+    except Exception as e:
+        print(f"Error: Failed to validate TMDB API Key. {str(e)}")
+        sys.exit(1)
+
     print(f"Loading movies from {MOVIES_PATH}", flush=True)
     movies_df = pd.read_csv(MOVIES_PATH)
     

@@ -51,6 +51,7 @@ class Option1MatrixFactorizationSGD:
         self.item_factors: np.ndarray | None = None
         self.normalized_item_factors: np.ndarray | None = None
         self.item_popularity_score: np.ndarray | None = None
+        self.training_history: Dict[str, List[float]] = {}
 
     def fit(self, train_ratings: pd.DataFrame) -> "Option1MatrixFactorizationSGD":
         users = sorted(train_ratings["user_id"].astype(int).unique().tolist())
@@ -64,6 +65,7 @@ class Option1MatrixFactorizationSGD:
 
         self.user_bias = np.zeros(n_users, dtype=np.float32)
         self.item_bias = np.zeros(n_items, dtype=np.float32)
+        self.training_history = {"train_mae": [], "train_rmse": [], "learning_rate": []}
 
         rng = np.random.default_rng(self.seed)
         self.user_factors = rng.normal(0.0, 0.1, size=(n_users, self.n_factors)).astype(np.float32)
@@ -114,6 +116,16 @@ class Option1MatrixFactorizationSGD:
                 self.user_factors[u] += current_lr * (err * qi - self.reg * pu)
                 self.item_factors[i] += current_lr * (err * pu - self.reg * qi)
 
+            preds = (
+                self.global_mean
+                + self.user_bias[user_ids]
+                + self.item_bias[item_ids]
+                + np.sum(self.user_factors[user_ids] * self.item_factors[item_ids], axis=1)
+            )
+            errors = preds - values
+            self.training_history["train_mae"].append(float(np.mean(np.abs(errors))))
+            self.training_history["train_rmse"].append(float(np.sqrt(np.mean(np.square(errors)))))
+            self.training_history["learning_rate"].append(float(current_lr))
             current_lr *= self.lr_decay
 
         item_norms = np.linalg.norm(self.item_factors, axis=1, keepdims=True)

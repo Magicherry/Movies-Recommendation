@@ -1,0 +1,22 @@
+{
+  "dataset_dir": "dataset\\ml-latest-small",
+  "train_size": 80672,
+  "test_size": 20164,
+  "users_train": 610,
+  "items_train": 8986,
+  "model": "option1",
+  "top_k": 10,
+  "min_relevant_rating": 4.0,
+  "n_factors": 48,
+  "epochs": 30,
+  "lr": 0.01,
+  "reg": 0.05,
+  "lr_decay": 0.98,
+  "mae": 0.6580660828125414,
+  "rmse": 0.8616501334881229,
+  "precision": 0.03609271523178807,
+  "recall": 0.02588819126967262,
+  "f_measure": 0.02376045967644416,
+  "ndcg": 0.04203415477828402,
+  "best_epoch": 30
+}

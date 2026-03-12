@@ -1,0 +1,436 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, PieChart, Pie, Cell } from "recharts";
+
+interface DbStats {
+  total_movies: number;
+  total_users: number;
+  total_ratings: number;
+  average_rating: number;
+  top_genres: { name: string; count: number }[];
+  rating_distribution: { rating: string; count: number }[];
+  movies_by_year: { year: string; count: number }[];
+  top_rated_movies: { title: string; count: number }[];
+}
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1', '#a4de6c', '#d0ed57'];
+
+export default function DashboardStats() {
+  const [stats, setStats] = useState<DbStats | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [scrapeState, setScrapeState] = useState<{
+    status: string;
+    processed: number;
+    total: number;
+    message: string;
+  } | null>(null);
+  const [testResult, setTestResult] = useState<{valid: boolean, message: string} | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+  
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
+
+  useEffect(() => {
+    fetchStats();
+    fetchScrapeStatus();
+    fetchApiKey();
+  }, []);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (scrapeState?.status === "running") {
+      interval = setInterval(fetchScrapeStatus, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [scrapeState?.status]);
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/stats`);
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch stats", err);
+    }
+  };
+
+  const fetchScrapeStatus = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/scrape/status`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status !== "idle" || scrapeState) {
+          setScrapeState(data);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch scrape status", err);
+    }
+  };
+
+  const fetchApiKey = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/scrape/key`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.api_key) {
+          setApiKey(data.api_key);
+          // Set to password mode initially when loaded from .env
+          setShowApiKey(false);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch api key", err);
+    }
+  };
+
+  const startScrape = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/scrape/start`, { 
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ api_key: apiKey })
+      });
+      if (res.ok) {
+        fetchScrapeStatus();
+      }
+    } catch (err) {
+      console.error("Failed to start scrape", err);
+    }
+  };
+
+  const testApiKey = async () => {
+    if (!apiKey) {
+      setTestResult({ valid: false, message: "Please enter an API Key first" });
+      return;
+    }
+    
+    setIsTesting(true);
+    setTestResult(null);
+    
+    try {
+      const res = await fetch(`${API_BASE}/scrape/test-key`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ api_key: apiKey })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setTestResult(data);
+      } else {
+        setTestResult({ valid: false, message: "Failed to connect to server" });
+      }
+    } catch (err) {
+      console.error("Failed to test api key", err);
+      setTestResult({ valid: false, message: "Network error occurred" });
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  return (
+    <section className="settings-card full-width">
+      <h2>Database</h2>
+      
+      <div className="metrics-info" style={{ 
+        marginBottom: '24px', 
+        fontSize: '0.9rem', 
+        color: 'var(--text-subtle)', 
+        background: 'rgba(255,255,255,0.02)', 
+        padding: '16px 20px', 
+        borderRadius: '12px', 
+        border: '1px solid rgba(255,255,255,0.05)',
+        boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.2)'
+      }}>
+        <h5 style={{ 
+          margin: '0 0 12px 0', 
+          fontWeight: 600, 
+          color: 'var(--text-main)',
+          fontSize: '1rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+          </svg>
+          Dataset Overview
+        </h5>
+        <p style={{ marginBottom: '12px', lineHeight: '1.5' }}>
+          This application is powered by the <a href="https://grouplens.org/datasets/movielens/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand)', textDecoration: 'none' }}>MovieLens dataset</a>, collected by the GroupLens Research Project at the University of Minnesota. It is widely recognized as the benchmark dataset for evaluating recommender systems.
+        </p>
+        <ul style={{ 
+          margin: 0, 
+          paddingLeft: '0', 
+          listStyle: 'none',
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '8px' 
+        }}>
+          <li style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
+            <div><strong>Source:</strong> MovieLens Latest Small Dataset</div>
+          </li>
+          <li style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
+            <div><strong>Content:</strong> 100,000 ratings and 3,600 tag applications applied to 9,000 movies by 600 users.</div>
+          </li>
+          <li style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
+            <div><strong>Enrichment:</strong> Movie posters and backdrops are dynamically fetched via the TMDB API.</div>
+          </li>
+        </ul>
+      </div>
+
+      <div className="scrape-section" style={{ 
+        marginBottom: '24px', 
+        padding: '20px', 
+        background: 'var(--bg-elevated)', 
+        borderRadius: '12px',
+        border: '1px solid rgba(255,255,255,0.05)'
+      }}>
+        <h3 style={{ marginTop: 0, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          TMDB Data Scraping
+        </h3>
+        <p style={{ color: 'var(--text-subtle)', marginBottom: '16px', fontSize: '0.9rem' }}>
+          Enrich the movie database by fetching high-quality posters, backdrops, and overviews from the TMDB API.
+        </p>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label htmlFor="tmdb-api-key" style={{ fontSize: '0.9rem', color: 'var(--text-main)', fontWeight: 500 }}>
+              TMDB API Key (Optional if set in .env)
+            </label>
+            <div className="tmdb-scrape-controls">
+              <div className="tmdb-api-input-wrap" style={{ position: 'relative' }}>
+                <input
+                  id="tmdb-api-key"
+                  type={showApiKey ? "text" : "password"}
+                  placeholder="Enter your TMDB API Key"
+                  value={apiKey}
+                  onChange={(e) => {
+                    setApiKey(e.target.value);
+                    setTestResult(null); // Clear test result on change
+                  }}
+                  onFocus={() => setShowApiKey(true)}
+                  onBlur={() => setShowApiKey(false)}
+                  disabled={scrapeState?.status === 'running'}
+                  style={{
+                    padding: '10px 12px',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '8px',
+                    color: 'var(--text-main)',
+                    fontSize: '0.9rem',
+                    width: '100%',
+                    height: '42px',
+                    outline: 'none',
+                    transition: 'border-color 0.2s',
+                    fontFamily: showApiKey ? 'inherit' : 'monospace',
+                    letterSpacing: showApiKey ? 'normal' : '2px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              <button 
+                onClick={testApiKey}
+                disabled={scrapeState?.status === 'running' || isTesting || !apiKey}
+                className="settings-action-btn settings-action-btn-secondary"
+              >
+                {isTesting ? 'Testing...' : 'Test Key'}
+              </button>
+              <button 
+                onClick={startScrape}
+                disabled={scrapeState?.status === 'running'}
+                className="settings-action-btn settings-action-btn-primary"
+              >
+                {scrapeState?.status === 'running' ? 'Scraping in Progress...' : 'Start Scraping'}
+              </button>
+              {testResult && (
+                <div
+                  className="tmdb-test-result-inline"
+                  style={{
+                    fontSize: '0.85rem',
+                    color: testResult.valid ? '#10b981' : '#ef4444',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {testResult.valid ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  )}
+                  {testResult.message}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {scrapeState && scrapeState.status !== 'idle' && (
+            <div style={{ background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem' }}>
+                <span style={{ color: 'var(--text-main)' }}>
+                  {scrapeState.status === 'completed' ? 'Scraping Completed' : 
+                   scrapeState.status === 'error' ? 'Error occurred' : 'Progress'}
+                </span>
+                <span style={{ color: 'var(--brand)', fontWeight: 600 }}>
+                  {scrapeState.status === 'completed' ? '100%' : 
+                   scrapeState.total > 0 ? `${Math.round((scrapeState.processed / scrapeState.total) * 100)}%` : '0%'}
+                </span>
+              </div>
+              
+              <div style={{ 
+                width: '100%', 
+                height: '8px', 
+                background: 'rgba(255,255,255,0.1)', 
+                borderRadius: '4px',
+                overflow: 'hidden'
+              }}>
+                <div style={{ 
+                  height: '100%', 
+                  width: scrapeState.status === 'completed' ? '100%' : `${scrapeState.total > 0 ? (scrapeState.processed / scrapeState.total) * 100 : 0}%`,
+                  background: scrapeState.status === 'error' ? '#ef4444' : 'var(--brand)',
+                  transition: 'width 0.3s ease'
+                }} />
+              </div>
+              
+              <div style={{ 
+                marginTop: '8px', 
+                fontSize: '0.8rem', 
+                color: scrapeState.status === 'error' ? '#ef4444' : 'var(--text-subtle)',
+                display: 'flex',
+                justifyContent: 'space-between'
+              }}>
+                <span style={{ wordBreak: 'break-word', paddingRight: '16px' }}>{scrapeState.message}</span>
+                {scrapeState.total > 0 && (
+                  <span style={{ whiteSpace: 'nowrap' }}>{scrapeState.processed} / {scrapeState.total} movies</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {stats ? (
+        <div className="stats-container">
+          <div className="stats-overview">
+            <div className="stat-box">
+              <span className="stat-value">{stats.total_movies.toLocaleString()}</span>
+              <span className="stat-label">Total Movies</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-value">{stats.total_users.toLocaleString()}</span>
+              <span className="stat-label">Active Users</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-value">{stats.total_ratings.toLocaleString()}</span>
+              <span className="stat-label">User Ratings</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-value">{stats.average_rating.toFixed(2)}</span>
+              <span className="stat-label">Avg Rating</span>
+            </div>
+          </div>
+
+          <div className="chart-grid" style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginTop: '24px' }}>
+            <div className="chart-section" style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '12px' }}>
+              <h3>Top Genres Distribution</h3>
+              <div className="chart-wrapper">
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={stats.top_genres} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                    <XAxis dataKey="name" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                    <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                      itemStyle={{ color: 'var(--brand)' }}
+                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                    />
+                    <Bar dataKey="count" fill="var(--brand)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="chart-section" style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '12px' }}>
+              <h3>Rating Distribution</h3>
+              <div className="chart-wrapper">
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={stats.rating_distribution} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                    <XAxis dataKey="rating" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                    <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                      itemStyle={{ color: '#8884d8' }}
+                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                    />
+                    <Bar dataKey="count" fill="#8884d8" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="chart-section" style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '12px' }}>
+              <h3>Movies Added by Year (Last 20 Years)</h3>
+              <div className="chart-wrapper">
+                <ResponsiveContainer width="100%" height={400}>
+                  <LineChart data={stats.movies_by_year} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                    <XAxis dataKey="year" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                    <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                      itemStyle={{ color: '#82ca9d' }}
+                    />
+                    <Line type="monotone" dataKey="count" stroke="#82ca9d" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="chart-section" style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '12px' }}>
+              <h3>Most Rated Movies</h3>
+              <div className="chart-wrapper">
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={stats.top_rated_movies} layout="vertical" margin={{ top: 20, right: 30, left: 150, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" horizontal={false} />
+                    <XAxis type="number" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                    <YAxis dataKey="title" type="category" stroke="#a1a1aa" tick={{ fill: '#a1a1aa', fontSize: 13 }} width={250} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                      itemStyle={{ color: '#ffc658' }}
+                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                    />
+                    <Bar dataKey="count" fill="#ffc658" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="loading-state">Loading database statistics...</div>
+      )}
+    </section>
+  );
+}

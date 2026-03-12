@@ -21,14 +21,19 @@ export default function HomePage() {
   const [loading, setLoading] = useState(!hasCache);
   
   const [featuredMovies, setFeaturedMovies] = useState<Movie[]>(hasCache ? globalFeatured : []);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>(hasCache ? globalRecs : []);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [history, setHistory] = useState<Movie[]>(hasCache ? globalHistory : []);
   const [trending, setTrending] = useState<Movie[]>(hasCache ? globalTrending : []);
 
   useEffect(() => {
     async function loadData() {
-      if (globalUserId === userId && globalTrending.length > 0) {
-        // Data is already loaded and cached for this user
+      // Read recCount from localStorage, default to 10
+      const savedRecCount = localStorage.getItem("streamx-rec-count");
+      const recCount = savedRecCount ? parseInt(savedRecCount, 10) : 10;
+
+      if (globalUserId === userId && globalTrending.length > 0 && globalRecs.length === recCount) {
+        // Data is already loaded and cached for this user with the correct count
+        setRecommendations(globalRecs);
         setLoading(false);
         return;
       }
@@ -36,7 +41,7 @@ export default function HomePage() {
       setLoading(true);
       try {
         // Fetch recommendations for the current user
-        const recs = await getRecommendations(userId).catch(() => []);
+        const recs = await getRecommendations(userId, recCount).catch(() => []);
         setRecommendations(recs);
         globalRecs = recs;
 

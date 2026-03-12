@@ -13,6 +13,12 @@ export type Recommendation = Movie & {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
 
+function logApiCall(endpoint: string, params?: any) {
+  if (typeof window !== 'undefined' && localStorage.getItem("streamx-dev-mode") === "true") {
+    console.log(`[StreamX API] Fetching ${endpoint}`, params || '');
+  }
+}
+
 function formatTitle(title: string): string {
   if (!title) return title;
   // Moves ", The", ", A", or ", An" from the end (before the year) to the front
@@ -38,6 +44,7 @@ export async function getMovies(
   params.append("sort_by", sortBy);
   params.append("sort_order", sortOrder);
 
+  logApiCall('/movies', params.toString());
   const res = await fetch(`${API_BASE}/movies?${params.toString()}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch movies.");
   const data = await res.json();
@@ -46,6 +53,7 @@ export async function getMovies(
 }
 
 export async function getMovieDetail(itemId: number): Promise<{ movie: Movie; similar: Recommendation[] }> {
+  logApiCall(`/movie/${itemId}`);
   const res = await fetch(`${API_BASE}/movie/${itemId}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch movie detail.");
   const data = await res.json();
@@ -55,6 +63,7 @@ export async function getMovieDetail(itemId: number): Promise<{ movie: Movie; si
 }
 
 export async function getUsers(limit = 50, offset = 0): Promise<{ items: { user_id: number; history_count: number }[]; total: number }> {
+  logApiCall('/users', { limit, offset });
   const res = await fetch(`${API_BASE}/users?limit=${limit}&offset=${offset}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch users.");
   return await res.json();
@@ -62,6 +71,7 @@ export async function getUsers(limit = 50, offset = 0): Promise<{ items: { user_
 
 export async function getUserHistory(userId: number, fetchAll: boolean = false): Promise<{ item_id: number; title: string; genres: string; rating: number }[]> {
   const url = fetchAll ? `${API_BASE}/user/${userId}/history?all=1` : `${API_BASE}/user/${userId}/history`;
+  logApiCall(`/user/${userId}/history`, { fetchAll });
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     const errData = await res.json().catch(() => null);
@@ -72,8 +82,9 @@ export async function getUserHistory(userId: number, fetchAll: boolean = false):
   return history.map((h: any) => ({ ...h, title: formatTitle(h.title) }));
 }
 
-export async function getRecommendations(userId: number): Promise<Recommendation[]> {
-  const res = await fetch(`${API_BASE}/recommend/${userId}`, { cache: "no-store" });
+export async function getRecommendations(userId: number, n: number = 10): Promise<Recommendation[]> {
+  logApiCall(`/recommend/${userId}`, { n });
+  const res = await fetch(`${API_BASE}/recommend/${userId}?n=${n}`, { cache: "no-store" });
   if (!res.ok) {
     const errData = await res.json().catch(() => null);
     throw new Error(errData?.error || "Failed to fetch recommendations.");
@@ -84,6 +95,7 @@ export async function getRecommendations(userId: number): Promise<Recommendation
 }
 
 export async function searchMovies(query: string): Promise<Movie[]> {
+  logApiCall('/search', { q: query });
   const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to search movies.");
   const data = await res.json();

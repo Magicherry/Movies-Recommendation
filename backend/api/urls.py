@@ -12,4 +12,10 @@ urlpatterns = [
     path("recommend/<int:user_id>", views.recommend, name="recommend"),
     path("predict/<int:user_id>/<int:item_id>", views.predict_rating, name="predict-rating"),
     path("search", views.search, name="search"),
+    path("stats", views.db_stats, name="db-stats"),
+    path("model-config", views.model_config, name="model-config"),
+    path("scrape/start", views.scrape_start, name="scrape-start"),
+    path("scrape/status", views.scrape_status, name="scrape-status"),
+    path("scrape/key", views.scrape_key, name="scrape-key"),
+    path("scrape/test-key", views.scrape_test_key, name="scrape-test-key"),
 ]
