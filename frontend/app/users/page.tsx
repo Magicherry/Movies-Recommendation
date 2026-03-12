@@ -81,7 +81,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
               <img 
                 src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${user.user_id}`} 
                 alt={`User ${user.user_id}`}
-                style={{ width: '100%', height: '100%', borderRadius: '50%' }}
+                className="img-round"
               />
             </div>
             <div className="user-info">

@@ -152,23 +152,19 @@ export default function AppearanceSettings() {
                 top: 'calc(100% + 12px)',
                 left: '50%',
                 transform: 'translateX(-50%)',
-                background: 'var(--bg-elevated, #18181b)',
-                border: '1px solid var(--border-soft)',
-                borderRadius: '16px',
-                padding: '20px',
-                zIndex: 50,
-                boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '16px',
                 minWidth: '220px'
-              }}>
+              }}
+              className="dropdown-panel"
+              >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>Custom Color</span>
-                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: tempColor, border: '1px solid rgba(255,255,255,0.2)' }}></div>
+                  <div className="color-swatch" style={{ backgroundColor: tempColor }} />
                 </div>
                 
-                <div style={{ position: 'relative', height: '150px', width: '100%', borderRadius: '12px', overflow: 'hidden' }}>
+                <div style={{ position: 'relative', height: '150px', width: '100%', borderRadius: 'var(--radius-panel)', overflow: 'hidden' }}>
                   <input 
                     type="color" 
                     value={tempColor} 
@@ -189,39 +185,25 @@ export default function AppearanceSettings() {
                     position: 'absolute', 
                     inset: 0, 
                     pointerEvents: 'none', 
-                    border: '1px solid rgba(255,255,255,0.1)', 
-                    borderRadius: '12px',
-                    boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.2)'
-                  }}></div>
+                    border: '1px solid var(--border-soft)', 
+                    borderRadius: 'var(--radius-panel)',
+                    boxShadow: 'var(--shadow-inset)'
+                  }} />
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button 
-                    onClick={cancelCustomColor}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid var(--border-soft)',
-                      borderRadius: '8px',
-                      color: 'var(--text-main)',
-                      cursor: 'pointer',
-                      fontSize: '0.9rem',
-                      transition: 'background 0.2s'
-                    }}
-                    onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                    onMouseOut={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                  >
+                  <button type="button" onClick={cancelCustomColor} className="btn-ghost" style={{ flex: 1 }}>
                     Cancel
                   </button>
                   <button 
+                    type="button"
                     onClick={applyCustomColor}
                     style={{
                       flex: 1,
                       padding: '8px',
                       background: 'var(--text-main)',
                       border: 'none',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-sm)',
                       color: '#000',
                       fontWeight: 600,
                       cursor: 'pointer',

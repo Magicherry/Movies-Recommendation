@@ -142,16 +142,7 @@ export default function DashboardStats() {
     <section className="settings-card full-width">
       <h2>Database</h2>
       
-      <div className="metrics-info" style={{ 
-        marginBottom: '24px', 
-        fontSize: '0.9rem', 
-        color: 'var(--text-subtle)', 
-        background: 'rgba(255,255,255,0.02)', 
-        padding: '16px 20px', 
-        borderRadius: '12px', 
-        border: '1px solid rgba(255,255,255,0.05)',
-        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)'
-      }}>
+      <div className="metrics-info settings-panel">
         <h5 style={{ 
           margin: '0 0 12px 0', 
           fontWeight: 600, 
@@ -194,14 +185,7 @@ export default function DashboardStats() {
         </ul>
       </div>
 
-      <div className="scrape-section" style={{ 
-        marginBottom: '24px', 
-        padding: '20px', 
-        background: 'var(--bg-elevated)', 
-        borderRadius: '12px',
-        border: '1px solid rgba(255,255,255,0.05)',
-        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)'
-      }}>
+      <div className="scrape-section settings-panel-strong">
         <h3 style={{ marginTop: 0, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -235,9 +219,9 @@ export default function DashboardStats() {
                   disabled={scrapeState?.status === 'running'}
                   style={{
                     padding: '10px 12px',
-                    background: 'rgba(0,0,0,0.2)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '8px',
+                    background: 'var(--bg-overlay)',
+                    border: '1px solid var(--border-soft)',
+                    borderRadius: 'var(--radius-sm)',
                     color: 'var(--text-main)',
                     fontSize: '0.9rem',
                     width: '100%',
@@ -287,7 +271,7 @@ export default function DashboardStats() {
           </div>
 
           {scrapeState && scrapeState.status !== 'idle' && (
-            <div style={{ background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: '8px' }}>
+            <div className="overlay-box">
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem' }}>
                 <span style={{ color: 'var(--text-main)' }}>
                   {scrapeState.status === 'completed' ? 'Scraping Completed' : 
@@ -299,19 +283,15 @@ export default function DashboardStats() {
                 </span>
               </div>
               
-              <div style={{ 
-                width: '100%', 
-                height: '8px', 
-                background: 'rgba(255,255,255,0.1)', 
-                borderRadius: '4px',
-                overflow: 'hidden'
-              }}>
-                <div style={{ 
-                  height: '100%', 
-                  width: scrapeState.status === 'completed' ? '100%' : `${scrapeState.total > 0 ? (scrapeState.processed / scrapeState.total) * 100 : 0}%`,
-                  background: scrapeState.status === 'error' ? '#ef4444' : 'var(--brand)',
-                  transition: 'width 0.3s ease'
-                }} />
+              <div className="progress-track" style={{ width: '100%' }}>
+                <div 
+                  className="progress-fill" 
+                  style={{ 
+                    width: scrapeState.status === 'completed' ? '100%' : `${scrapeState.total > 0 ? (scrapeState.processed / scrapeState.total) * 100 : 0}%`,
+                    background: scrapeState.status === 'error' ? '#ef4444' : 'var(--brand)',
+                    transition: 'width 0.3s ease'
+                  }} 
+                />
               </div>
               
               <div style={{ 
@@ -353,18 +333,18 @@ export default function DashboardStats() {
           </div>
 
           <div className="chart-grid" style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginTop: '24px' }}>
-            <div className="chart-section" style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '12px' }}>
+            <div className="chart-section">
               <h3>Top Genres Distribution</h3>
               <div className="chart-wrapper">
                 <ResponsiveContainer width="100%" height={400}>
                   <BarChart data={stats.top_genres} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
                     <XAxis dataKey="name" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                     <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                     <Tooltip 
-                      contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                      contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
                       itemStyle={{ color: 'var(--brand)' }}
-                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                      cursor={{ fill: 'var(--chart-cursor-fill)' }}
                     />
                     <Bar dataKey="count" fill="var(--brand)" radius={[4, 4, 0, 0]} />
                   </BarChart>
@@ -372,18 +352,18 @@ export default function DashboardStats() {
               </div>
             </div>
 
-            <div className="chart-section" style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '12px' }}>
+            <div className="chart-section">
               <h3>Rating Distribution</h3>
               <div className="chart-wrapper">
                 <ResponsiveContainer width="100%" height={400}>
                   <BarChart data={stats.rating_distribution} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
                     <XAxis dataKey="rating" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                     <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                     <Tooltip 
-                      contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                      contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
                       itemStyle={{ color: '#8884d8' }}
-                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                      cursor={{ fill: 'var(--chart-cursor-fill)' }}
                     />
                     <Bar dataKey="count" fill="#8884d8" radius={[4, 4, 0, 0]} />
                   </BarChart>
@@ -391,16 +371,16 @@ export default function DashboardStats() {
               </div>
             </div>
 
-            <div className="chart-section" style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '12px' }}>
+            <div className="chart-section">
               <h3>Movies Added by Year (Last 20 Years)</h3>
               <div className="chart-wrapper">
                 <ResponsiveContainer width="100%" height={400}>
                   <LineChart data={stats.movies_by_year} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
                     <XAxis dataKey="year" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                     <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                     <Tooltip 
-                      contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                      contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
                       itemStyle={{ color: '#82ca9d' }}
                     />
                     <Line type="monotone" dataKey="count" stroke="#82ca9d" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
@@ -409,18 +389,18 @@ export default function DashboardStats() {
               </div>
             </div>
 
-            <div className="chart-section" style={{ background: 'var(--bg-elevated)', padding: '20px', borderRadius: '12px' }}>
+            <div className="chart-section">
               <h3>Most Rated Movies</h3>
               <div className="chart-wrapper">
                 <ResponsiveContainer width="100%" height={400}>
                   <BarChart data={stats.top_rated_movies} layout="vertical" margin={{ top: 20, right: 30, left: 150, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" horizontal={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" horizontal={false} />
                     <XAxis type="number" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                     <YAxis dataKey="title" type="category" stroke="#a1a1aa" tick={{ fill: '#a1a1aa', fontSize: 13 }} width={250} />
                     <Tooltip 
-                      contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                      contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
                       itemStyle={{ color: '#ffc658' }}
-                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                      cursor={{ fill: 'var(--chart-cursor-fill)' }}
                     />
                     <Bar dataKey="count" fill="#ffc658" radius={[0, 4, 4, 0]} />
                   </BarChart>

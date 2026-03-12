@@ -90,7 +90,7 @@ export default function CustomMultiSelect({ name, options, defaultValue, placeho
                   background: "#323235", 
                   color: "#ffffff",
                   padding: "4px 10px", 
-                  borderRadius: "8px", 
+                  borderRadius: "var(--radius-sm)", 
                   fontSize: "0.85rem", 
                   whiteSpace: "nowrap",
                   fontWeight: 600,

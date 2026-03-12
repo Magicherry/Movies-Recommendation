@@ -62,7 +62,7 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
   if (loading) {
     return (
       <div className="hero-actions" style={{ gap: "16px", marginTop: "8px" }}>
-        <div className="stat-pill" style={{ padding: "8px 24px", background: "rgba(255,255,255,0.05)" }}>
+        <div className="stat-pill" style={{ padding: "8px 24px", background: "var(--bg-hover-soft)" }}>
           <span style={{ fontSize: "0.9rem", color: "var(--text-subtle)" }}>Analyzing match...</span>
         </div>
       </div>
@@ -98,7 +98,7 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
             Match Score
           </span>
         </div>
-        <div style={{ width: "1px", height: "30px", background: "rgba(255,255,255,0.2)" }} />
+        <div style={{ width: "1px", height: "30px", background: "var(--border-strong)" }} />
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <span style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--text-main)", lineHeight: 1 }}>
             {prediction.toFixed(1)} <span style={{ fontSize: "0.9rem", color: "var(--text-subtle)" }}>/ 5</span>

@@ -95,7 +95,7 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
               <img 
                 src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${userId}`} 
                 alt={`User ${userId}`}
-                style={{ width: "100%", height: "100%", borderRadius: "50%" }}
+                className="img-round"
               />
             </div>
             <div style={{ flex: 1 }}>
@@ -111,11 +111,11 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             <h3 style={{ margin: 0, fontSize: "1.1rem", color: "var(--text-main)", fontWeight: 700 }}>Viewing Stats</h3>
             <div style={{ display: "flex", gap: "16px" }}>
-              <div style={{ flex: 1, background: "rgba(0,0,0,0.3)", borderRadius: "16px", padding: "20px", border: "1px solid rgba(255,255,255,0.03)" }}>
+              <div className="user-profile-stat-card" style={{ flex: 1 }}>
                 <div style={{ fontSize: "2rem", fontWeight: 800, color: "var(--text-main)", lineHeight: 1 }}>{history.length}</div>
                 <div style={{ fontSize: "0.8rem", color: "var(--text-subtle)", marginTop: "8px", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Movies Rated</div>
               </div>
-              <div style={{ flex: 1, background: "rgba(0,0,0,0.3)", borderRadius: "16px", padding: "20px", border: "1px solid rgba(255,255,255,0.03)" }}>
+              <div className="user-profile-stat-card" style={{ flex: 1 }}>
                 <div style={{ fontSize: "2rem", fontWeight: 800, color: "#4ade80", lineHeight: 1 }}>{avgRating}</div>
                 <div style={{ fontSize: "0.8rem", color: "var(--text-subtle)", marginTop: "8px", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Avg Score</div>
               </div>
@@ -129,15 +129,7 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
                 </span>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   {preferredGenres.map(g => (
-                    <span key={g} style={{ 
-                      background: "#323235", 
-                      color: "#ffffff", 
-                      padding: "6px 12px", 
-                      borderRadius: "8px", 
-                      fontSize: "0.85rem", 
-                      fontWeight: 600,
-                      border: "none"
-                    }}>
+                    <span key={g} className="user-profile-genre-tag">
                       {g}
                     </span>
                   ))}
@@ -151,7 +143,7 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
             <h3 style={{ margin: 0, fontSize: "1.1rem", color: "var(--text-main)", fontWeight: 700 }}>Cinematic Tastes</h3>
             
             {favoriteEra !== "N/A" && (
-              <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: "16px", padding: "20px", border: "1px solid rgba(255,255,255,0.03)" }}>
+              <div className="user-profile-stat-card">
                 <span style={{ display: "block", fontSize: "0.8rem", color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600, marginBottom: "8px" }}>
                   Favorite Era
                 </span>
@@ -162,7 +154,7 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
             )}
 
             {topMovie && (
-              <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: "16px", padding: "20px", border: "1px solid rgba(255,255,255,0.03)", flex: 1 }}>
+              <div className="user-profile-stat-card" style={{ flex: 1 }}>
                 <span style={{ display: "block", fontSize: "0.8rem", color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600, marginBottom: "8px" }}>
                   Highest Rated Masterpiece
                 </span>
@@ -192,16 +184,7 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
           {/* Section 4: Rating Distribution */}
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             <h3 style={{ margin: 0, fontSize: "1.1rem", color: "var(--text-main)", fontWeight: 700 }}>Rating Distribution</h3>
-            <div style={{ 
-              flex: 1,
-              background: "rgba(0,0,0,0.3)", 
-              borderRadius: "16px", 
-              padding: "20px",
-              border: "1px solid rgba(255,255,255,0.03)",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center"
-            }}>
+            <div className="user-profile-stat-card" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                 {["5", "4", "3", "2", "1"].map((star) => {
                   const count = ratingDist[star];
@@ -212,14 +195,11 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--text-subtle)" stroke="var(--text-subtle)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: "translateY(-1px)" }}>
                         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
                       </svg>
-                      <div style={{ flex: 1, height: "8px", background: "rgba(255,255,255,0.08)", borderRadius: "4px", overflow: "hidden" }}>
-                        <div style={{ 
-                          height: "100%", 
-                          width: `${percentage}%`, 
-                          background: count > 0 ? "var(--brand)" : "transparent",
-                          borderRadius: "4px",
-                          transition: "width 1s cubic-bezier(0.25, 1, 0.5, 1)"
-                        }} />
+                      <div className="progress-track">
+                        <div 
+                          className="progress-fill" 
+                          style={{ width: `${percentage}%`, background: count > 0 ? "var(--brand)" : "transparent" }} 
+                        />
                       </div>
                       <span style={{ width: "30px", textAlign: "right", color: "var(--text-main)", fontWeight: 600, fontSize: "0.85rem" }}>
                         {count}

@@ -1,5 +1,5 @@
 import { getMovieDetail } from "../../../lib/api";
-import MovieCardGrid from "../../../components/movie-card-grid";
+import CollectionLimitGrid from "../../../components/collection-limit-grid";
 import BackButton from "../../../components/back-button";
 import PredictionDisplay from "../../../components/prediction-display";
 import RefreshOnEngineChange from "../../../components/refresh-on-engine-change";
@@ -51,7 +51,8 @@ export default async function MovieDetailPage({ params }: MovieDetailPageProps) 
       </div>
 
       <section className="content-padding">
-        <MovieCardGrid
+        <CollectionLimitGrid
+          settingKey="more-like-this"
           title="More Like This"
           items={data.similar}
           scoreLabel="Similarity"

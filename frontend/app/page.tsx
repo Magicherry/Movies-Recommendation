@@ -13,6 +13,8 @@ let globalHistory: Movie[] = [];
 let globalTrending: Movie[] = [];
 let globalUserId: number | null = null;
 let globalLastRefresh: string | null = null;
+let globalWatchAgainCount: number = 15;
+let globalTrendingCount: number = 15;
 
 export default function HomePage() {
   const { userId } = useUser();
@@ -28,12 +30,16 @@ export default function HomePage() {
 
   useEffect(() => {
     async function loadData() {
-      // Read recCount from localStorage, default to 10
+      // Read recCount and collection counts from localStorage
       const savedRecCount = localStorage.getItem("streamx-rec-count");
       const recCount = savedRecCount ? parseInt(savedRecCount, 10) : 10;
+      const savedWatchAgain = localStorage.getItem("streamx-watch-again-count");
+      const watchAgainCount = Math.min(100, Math.max(5, savedWatchAgain ? parseInt(savedWatchAgain, 10) : 15));
+      const savedTrending = localStorage.getItem("streamx-trending-count");
+      const trendingCount = Math.min(100, Math.max(5, savedTrending ? parseInt(savedTrending, 10) : 15));
       const forceRefresh = localStorage.getItem("streamx-force-refresh");
 
-      if (globalUserId === userId && globalTrending.length > 0 && globalRecs.length === recCount && globalLastRefresh === forceRefresh) {
+      if (globalUserId === userId && globalTrending.length > 0 && globalRecs.length === recCount && globalLastRefresh === forceRefresh && globalWatchAgainCount === watchAgainCount && globalTrendingCount === trendingCount) {
         // Data is already loaded and cached for this user with the correct count and model
         setRecommendations(globalRecs);
         setLoading(false);
@@ -60,13 +66,13 @@ export default function HomePage() {
           // @ts-ignore
           overview: h.overview
         }));
-        setHistory(formattedHist);
-        globalHistory = formattedHist;
+        setHistory(formattedHist.slice(0, watchAgainCount));
+        globalHistory = formattedHist.slice(0, watchAgainCount);
 
         // Fetch some default movies for carousel and trending
-        const moviesData = await getMovies(20, 0);
+        const moviesData = await getMovies(Math.max(20, trendingCount), 0);
         const movies = moviesData.items;
-        
+
         // If user has recommendations, use top ones for carousel, else fallback to trending
         if (recs.length > 0) {
           setFeaturedMovies(recs.slice(0, 5));
@@ -75,11 +81,13 @@ export default function HomePage() {
           setFeaturedMovies(movies.slice(0, 5));
           globalFeatured = movies.slice(0, 5);
         }
-        
-        setTrending(movies.slice(0, 15));
-        globalTrending = movies.slice(0, 15);
+
+        setTrending(movies.slice(0, trendingCount));
+        globalTrending = movies.slice(0, trendingCount);
         globalUserId = userId;
         globalLastRefresh = forceRefresh;
+        globalWatchAgainCount = watchAgainCount;
+        globalTrendingCount = trendingCount;
       } catch (err) {
         console.error(err);
       } finally {

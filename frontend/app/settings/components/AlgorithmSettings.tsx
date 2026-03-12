@@ -24,10 +24,17 @@ export default function AlgorithmSettings() {
   const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
   const [isChangingModel, setIsChangingModel] = useState(false);
   const [recCount, setRecCount] = useState(10);
+  const [watchAgainCount, setWatchAgainCount] = useState(15);
+  const [trendingCount, setTrendingCount] = useState(15);
+  const [moreLikeThisCount, setMoreLikeThisCount] = useState(15);
+  const [countsExpanded, setCountsExpanded] = useState(false);
 
   const MIN_REC = 5;
   const MAX_REC = 100;
   const STEP_REC = 5;
+  const MIN_COL = 5;
+  const MAX_COL = 100;
+  const STEP_COL = 5;
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
 
   useEffect(() => {
@@ -37,6 +44,21 @@ export default function AlgorithmSettings() {
     if (savedRecCount) {
       const val = parseInt(savedRecCount, 10);
       if (!isNaN(val)) setRecCount(Math.min(MAX_REC, Math.max(MIN_REC, val)));
+    }
+    const savedWatchAgain = localStorage.getItem("streamx-watch-again-count");
+    if (savedWatchAgain) {
+      const val = parseInt(savedWatchAgain, 10);
+      if (!isNaN(val)) setWatchAgainCount(Math.min(MAX_COL, Math.max(MIN_COL, val)));
+    }
+    const savedTrending = localStorage.getItem("streamx-trending-count");
+    if (savedTrending) {
+      const val = parseInt(savedTrending, 10);
+      if (!isNaN(val)) setTrendingCount(Math.min(MAX_COL, Math.max(MIN_COL, val)));
+    }
+    const savedMoreLikeThis = localStorage.getItem("streamx-more-like-this-count");
+    if (savedMoreLikeThis) {
+      const val = parseInt(savedMoreLikeThis, 10);
+      if (!isNaN(val)) setMoreLikeThisCount(Math.min(MAX_COL, Math.max(MIN_COL, val)));
     }
   }, []);
 
@@ -110,6 +132,72 @@ export default function AlgorithmSettings() {
     }
   };
 
+  const makeCollectionHandlers = (
+    setter: React.Dispatch<React.SetStateAction<number>>,
+    key: string
+  ) => ({
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = parseInt(e.target.value, 10);
+      setter(val);
+      localStorage.setItem(key, val.toString());
+    },
+    onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      const raw = e.target.value;
+      if (raw === "") return;
+      const val = parseInt(raw, 10);
+      if (!isNaN(val)) {
+        const clamped = Math.min(MAX_COL, Math.max(MIN_COL, val));
+        setter(clamped);
+        localStorage.setItem(key, clamped.toString());
+      }
+    },
+    onBlur: (e: React.FocusEvent<HTMLInputElement>, current: number) => {
+      const val = parseInt(e.target.value, 10);
+      if (isNaN(val) || val < MIN_COL || val > MAX_COL) {
+        const fallback = Math.min(MAX_COL, Math.max(MIN_COL, current));
+        setter(fallback);
+        localStorage.setItem(key, fallback.toString());
+      }
+    },
+  });
+
+  const watchAgainHandlers = makeCollectionHandlers(setWatchAgainCount, "streamx-watch-again-count");
+  const trendingHandlers = makeCollectionHandlers(setTrendingCount, "streamx-trending-count");
+  const moreLikeThisHandlers = makeCollectionHandlers(setMoreLikeThisCount, "streamx-more-like-this-count");
+
+  // Unified value when collapsed: use recCount as display; when changed, sync all four (5–100)
+  const unifiedCount = recCount;
+  const setAllCounts = (val: number) => {
+    const clamped = Math.min(100, Math.max(5, val));
+    setRecCount(clamped);
+    setWatchAgainCount(clamped);
+    setTrendingCount(clamped);
+    setMoreLikeThisCount(clamped);
+    localStorage.setItem("streamx-rec-count", clamped.toString());
+    localStorage.setItem("streamx-watch-again-count", clamped.toString());
+    localStorage.setItem("streamx-trending-count", clamped.toString());
+    localStorage.setItem("streamx-more-like-this-count", clamped.toString());
+  };
+  const handleUnifiedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value, 10);
+    setAllCounts(val);
+  };
+  const handleUnifiedInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    if (raw === "") return;
+    const val = parseInt(raw, 10);
+    if (!isNaN(val)) setAllCounts(val);
+  };
+  const handleUnifiedBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value, 10);
+    if (isNaN(val) || val < 5 || val > 100) setAllCounts(unifiedCount);
+  };
+
+  const allCountsEqual =
+    recCount === watchAgainCount &&
+    watchAgainCount === trendingCount &&
+    trendingCount === moreLikeThisCount;
+
   return (
     <section className="settings-card">
       <h2>Engines</h2>
@@ -146,33 +234,231 @@ export default function AlgorithmSettings() {
         {isChangingModel && <p className="status-text">Switching model...</p>}
       </div>
 
-      <div className="setting-row">
-        <div className="setting-row-info">
-          <h3>Recommendation Count</h3>
-          <p>Number of movies to show in your personalized feed.</p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <input 
-            type="range" 
-            min={MIN_REC} 
-            max={MAX_REC} 
-            step={STEP_REC} 
-            value={recCount} 
-            onChange={handleRecCountChange}
-            className="range-slider"
-            style={{ "--slider-progress": `${((recCount - MIN_REC) / (MAX_REC - MIN_REC)) * 100}%` } as React.CSSProperties}
-          />
-          <input
-            type="number"
-            min={MIN_REC}
-            max={MAX_REC}
-            value={recCount}
-            onChange={handleRecCountInputChange}
-            onBlur={handleRecCountInputBlur}
-            className="settings-number-input"
-            style={{ width: '72px' }}
-            aria-label="Recommendation count"
-          />
+      <div className="setting-group settings-collapse-card">
+        <button
+          type="button"
+          onClick={() => setCountsExpanded((e) => !e)}
+          className="settings-collapse-header"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            padding: '16px 20px',
+            background: 'var(--bg-overlay)',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--text-main)',
+            fontSize: '1rem',
+            textAlign: 'left',
+          }}
+          aria-expanded={countsExpanded}
+          aria-controls="display-counts-content"
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h3 style={{ margin: 0, fontWeight: 600 }}>Display Counts</h3>
+            {!countsExpanded && !allCountsEqual && (
+              <span
+                style={{
+                  fontSize: '0.7rem',
+                  fontWeight: 600,
+                  color: 'var(--brand)',
+                  background: 'rgba(106, 225, 0, 0.15)',
+                  padding: '3px 8px',
+                  borderRadius: 'var(--radius-xs)',
+                }}
+              >
+                Custom
+              </span>
+            )}
+          </span>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="settings-collapse-chevron"
+            style={{
+              flexShrink: 0,
+              transform: countsExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            }}
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        <div id="display-counts-content" className="settings-collapse-content">
+          {/* Collapsed: single slider. Panel height 0 when expanded, so we animate between two panels. */}
+          <div
+            className="settings-collapse-panel"
+            style={{ maxHeight: countsExpanded ? 0 : 200 }}
+            aria-hidden={countsExpanded}
+          >
+            <div className="setting-row settings-collapse-content-inner">
+              <div className="setting-row-info" style={{ flex: 1 }}>
+                <p style={{ margin: 0, color: 'var(--text-subtle)', fontSize: '0.9rem' }}>
+                  Adjust all counts together (Recommendation, Watch It Again, Trending Now, More Like This). Moving the slider sets all four to the same value.
+                </p>
+                {!allCountsEqual && (
+                  <p style={{ margin: '10px 0 0', color: 'var(--text-subtle)', fontSize: '0.85rem' }}>
+                    Current: Rec {recCount} · Watch again {watchAgainCount} · Trending {trendingCount} · More {moreLikeThisCount}. Expand to edit individually.
+                  </p>
+                )}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginTop: '12px' }}>
+                <input
+                  type="range"
+                  min={5}
+                  max={100}
+                  step={5}
+                  value={unifiedCount}
+                  onChange={handleUnifiedChange}
+                  className="range-slider"
+                  style={{ "--slider-progress": `${((unifiedCount - 5) / 95) * 100}%` } as React.CSSProperties}
+                />
+                <input
+                  type="number"
+                  min={5}
+                  max={100}
+                  value={unifiedCount}
+                  onChange={handleUnifiedInputChange}
+                  onBlur={handleUnifiedBlur}
+                  className="settings-number-input"
+                  style={{ width: '72px' }}
+                  aria-label="All display counts"
+                />
+              </div>
+            </div>
+          </div>
+          {/* Expanded: four rows. Panel height 0 when collapsed. */}
+          <div
+            className="settings-collapse-panel"
+            style={{ maxHeight: countsExpanded ? 800 : 0 }}
+            aria-hidden={!countsExpanded}
+          >
+            <div className="settings-collapse-content-inner">
+              <div className="setting-row">
+                <div className="setting-row-info">
+                  <h3>Recommendation Count</h3>
+                  <p>Number of movies to show in your personalized feed.</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <input 
+                    type="range" 
+                    min={MIN_REC} 
+                    max={MAX_REC} 
+                    step={STEP_REC} 
+                    value={recCount} 
+                    onChange={handleRecCountChange}
+                    className="range-slider"
+                    style={{ "--slider-progress": `${((recCount - MIN_REC) / (MAX_REC - MIN_REC)) * 100}%` } as React.CSSProperties}
+                  />
+                  <input
+                    type="number"
+                    min={MIN_REC}
+                    max={MAX_REC}
+                    value={recCount}
+                    onChange={handleRecCountInputChange}
+                    onBlur={handleRecCountInputBlur}
+                    className="settings-number-input"
+                    style={{ width: '72px' }}
+                    aria-label="Recommendation count"
+                  />
+                </div>
+              </div>
+              <div className="setting-row">
+                <div className="setting-row-info">
+                  <h3>Watch It Again</h3>
+                  <p>Max items to show in the Watch It Again row on the home page.</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <input 
+                    type="range" 
+                    min={MIN_COL} 
+                    max={MAX_COL} 
+                    step={STEP_COL} 
+                    value={watchAgainCount} 
+                    onChange={watchAgainHandlers.onChange}
+                    className="range-slider"
+                    style={{ "--slider-progress": `${((watchAgainCount - MIN_COL) / (MAX_COL - MIN_COL)) * 100}%` } as React.CSSProperties}
+                  />
+                  <input
+                    type="number"
+                    min={MIN_COL}
+                    max={MAX_COL}
+                    value={watchAgainCount}
+                    onChange={watchAgainHandlers.onInputChange}
+                    onBlur={(e) => watchAgainHandlers.onBlur(e, watchAgainCount)}
+                    className="settings-number-input"
+                    style={{ width: '72px' }}
+                    aria-label="Watch It Again count"
+                  />
+                </div>
+              </div>
+              <div className="setting-row">
+                <div className="setting-row-info">
+                  <h3>Trending Now</h3>
+                  <p>Max items to show in the Trending Now row on the home page.</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <input 
+                    type="range" 
+                    min={MIN_COL} 
+                    max={MAX_COL} 
+                    step={STEP_COL} 
+                    value={trendingCount} 
+                    onChange={trendingHandlers.onChange}
+                    className="range-slider"
+                    style={{ "--slider-progress": `${((trendingCount - MIN_COL) / (MAX_COL - MIN_COL)) * 100}%` } as React.CSSProperties}
+                  />
+                  <input
+                    type="number"
+                    min={MIN_COL}
+                    max={MAX_COL}
+                    value={trendingCount}
+                    onChange={trendingHandlers.onInputChange}
+                    onBlur={(e) => trendingHandlers.onBlur(e, trendingCount)}
+                    className="settings-number-input"
+                    style={{ width: '72px' }}
+                    aria-label="Trending Now count"
+                  />
+                </div>
+              </div>
+              <div className="setting-row">
+                <div className="setting-row-info">
+                  <h3>More Like This</h3>
+                  <p>Max items to show in the More Like This row on movie detail pages.</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <input 
+                    type="range" 
+                    min={MIN_COL} 
+                    max={MAX_COL} 
+                    step={STEP_COL} 
+                    value={moreLikeThisCount} 
+                    onChange={moreLikeThisHandlers.onChange}
+                    className="range-slider"
+                    style={{ "--slider-progress": `${((moreLikeThisCount - MIN_COL) / (MAX_COL - MIN_COL)) * 100}%` } as React.CSSProperties}
+                  />
+                  <input
+                    type="number"
+                    min={MIN_COL}
+                    max={MAX_COL}
+                    value={moreLikeThisCount}
+                    onChange={moreLikeThisHandlers.onInputChange}
+                    onBlur={(e) => moreLikeThisHandlers.onBlur(e, moreLikeThisCount)}
+                    className="settings-number-input"
+                    style={{ width: '72px' }}
+                    aria-label="More Like This count"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -198,16 +484,7 @@ export default function AlgorithmSettings() {
             </div>
           </div>
           
-          <div className="metrics-info" style={{ 
-            marginTop: '24px', 
-            fontSize: '0.9rem', 
-            color: 'var(--text-subtle)', 
-            background: 'rgba(0,0,0,0.2)', 
-            padding: '16px 20px', 
-            borderRadius: '10px', 
-            // border: '1px solid rgba(255,255,255,0.05)',
-            // boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)'
-          }}>
+          <div className="metrics-info settings-panel settings-panel-inset" style={{ marginTop: '24px', marginBottom: 0 }}>
             <h5 style={{ 
               margin: '0 0 12px 0', 
               fontWeight: 600, 
@@ -272,7 +549,7 @@ export default function AlgorithmSettings() {
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 400px' }}>
               <h4>Training History ({modelConfig.history.loss ? 'Loss' : 'RMSE'})</h4>
-              <div className="chart-wrapper" style={{ height: 250, padding: '10px 20px 10px 0' }}>
+              <div className="chart-wrapper chart-wrapper-fixed">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={
                     modelConfig.history.loss 
@@ -287,11 +564,11 @@ export default function AlgorithmSettings() {
                           val_loss: modelConfig.history!.train_mae?.[i] // Map MAE to 'val_loss' to show two lines
                         })) || []
                   }>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />
                     <XAxis dataKey="epoch" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                     <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} domain={['auto', 'auto']} />
                     <Tooltip 
-                      contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                      contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
                     />
                     <Legend />
                     <Line 
@@ -318,7 +595,7 @@ export default function AlgorithmSettings() {
             {modelConfig.history.mae && modelConfig.history.val_mae && (
               <div style={{ flex: '1 1 400px' }}>
                 <h4>Training History (MAE)</h4>
-                <div className="chart-wrapper" style={{ height: 250, padding: '10px 20px 10px 0' }}>
+                <div className="chart-wrapper chart-wrapper-fixed">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={
                       modelConfig.history.mae.map((m, i) => ({
@@ -327,11 +604,11 @@ export default function AlgorithmSettings() {
                         val_mae: modelConfig.history!.val_mae?.[i]
                       }))
                     }>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />
                       <XAxis dataKey="epoch" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                       <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} domain={['auto', 'auto']} />
                       <Tooltip 
-                        contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                        contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
                       />
                       <Legend />
                       <Line 
@@ -359,7 +636,7 @@ export default function AlgorithmSettings() {
             {modelConfig.history.rmse && modelConfig.history.val_rmse && (
               <div style={{ flex: '1 1 400px' }}>
                 <h4>Training History (RMSE)</h4>
-                <div className="chart-wrapper" style={{ height: 250, padding: '10px 20px 10px 0' }}>
+                <div className="chart-wrapper chart-wrapper-fixed">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={
                       modelConfig.history.rmse.map((r, i) => ({
@@ -368,11 +645,11 @@ export default function AlgorithmSettings() {
                         val_rmse: modelConfig.history!.val_rmse?.[i]
                       }))
                     }>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />
                       <XAxis dataKey="epoch" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                       <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} domain={['auto', 'auto']} />
                       <Tooltip 
-                        contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                        contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
                       />
                       <Legend />
                       <Line 
