@@ -202,11 +202,11 @@ export default function AlgorithmSettings() {
             marginTop: '24px', 
             fontSize: '0.9rem', 
             color: 'var(--text-subtle)', 
-            background: 'rgba(255,255,255,0.02)', 
+            background: 'rgba(0,0,0,0.2)', 
             padding: '16px 20px', 
-            borderRadius: '12px', 
-            border: '1px solid rgba(255,255,255,0.05)',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)'
+            borderRadius: '10px', 
+            // border: '1px solid rgba(255,255,255,0.05)',
+            // boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)'
           }}>
             <h5 style={{ 
               margin: '0 0 12px 0', 
