@@ -1770,7 +1770,7 @@ body {
   width: 50px;
   height: 50px;
   border-radius: 25px;
-  background: rgba(106, 225, 0, 0.9);
+  background: var(--brand);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.2);
   display: flex;
@@ -1782,7 +1782,7 @@ body {
   visibility: hidden;
   transform: translateY(20px);
   transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
-  box-shadow: 0 4px 16px rgba(106, 225, 0, 0.4);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--brand) 50%, transparent);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -1796,7 +1796,7 @@ body {
 .scroll-to-top:hover {
   background: var(--brand-hover);
   transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(106, 225, 0, 0.6);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--brand) 60%, transparent);
 }
 
 .scroll-to-top:active {

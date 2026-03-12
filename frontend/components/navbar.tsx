@@ -188,7 +188,7 @@ export default function AppNavbar() {
               </form>
               <div className="widget-divider"></div>
               <NextLink href={`/users/${userId}`} title="My Profile" className="nav-avatar-link" onClick={() => setIsMenuOpen(false)}>
-                <div className={`nav-avatar ${isActive(`/users/${userId}`) ? "active" : ""}`} style={{ background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+                <div className={`nav-avatar ${isActive(`/users/${userId}`) || (pathname === "/settings" && searchParams.get("tab") === "account") ? "active" : ""}`} style={{ background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
                   <img 
                     src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${userId}`} 
                     alt={`User ${userId}`}

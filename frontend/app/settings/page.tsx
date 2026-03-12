@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import AppearanceSettings from "./components/AppearanceSettings";
 import AlgorithmSettings from "./components/AlgorithmSettings";
 import DashboardStats from "./components/DashboardStats";
@@ -8,9 +9,22 @@ import AccountSettings from "./components/AccountSettings";
 import AdvancedSettings from "./components/AdvancedSettings";
 import BackButton from "@/components/back-button";
 
+const VALID_TABS = ["ui", "db", "model", "account", "advanced", "about"];
+
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState("ui");
+  const searchParams = useSearchParams();
+  const tabFromUrl = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(VALID_TABS.includes(tabFromUrl ?? "") ? tabFromUrl! : "ui");
   const [isDetailView, setIsDetailView] = useState(false);
+
+  // Sync URL tab to state when URL changes (e.g. back/forward)
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t && VALID_TABS.includes(t)) {
+      setActiveTab(t);
+      setIsDetailView(true);
+    }
+  }, [searchParams]);
 
   // When mounting, ensure we start at the top
   useEffect(() => {
@@ -20,12 +34,10 @@ export default function SettingsPage() {
   const handleTabClick = (tab: string) => {
     setActiveTab(tab);
     setIsDetailView(true);
-    
-    // Scroll to top when switching tabs
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    });
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState({}, "", url.pathname + "?" + url.searchParams.toString());
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
