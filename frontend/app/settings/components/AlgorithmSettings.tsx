@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 interface ModelConfig {
@@ -24,14 +24,17 @@ export default function AlgorithmSettings() {
   const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
   const [isChangingModel, setIsChangingModel] = useState(false);
   const [chartsMounted, setChartsMounted] = useState(false);
+  const fetchConfigSeqRef = useRef(0);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
 
   const fetchModelConfig = useCallback(async () => {
+    const seq = ++fetchConfigSeqRef.current;
     try {
       const res = await fetch(`${API_BASE}/model-config`);
       if (res.ok) {
         const data = await res.json();
+        if (seq !== fetchConfigSeqRef.current) return;
         setModelConfig(data);
       }
     } catch (err) {
@@ -51,7 +54,7 @@ export default function AlgorithmSettings() {
   }, []);
 
   const handleModelChange = useCallback(async (modelName: string) => {
-    if (modelName === modelConfig?.active_model) return;
+    if (isChangingModel || modelName === modelConfig?.active_model) return;
     
     setIsChangingModel(true);
     try {
@@ -80,7 +83,7 @@ export default function AlgorithmSettings() {
     } finally {
       setIsChangingModel(false);
     }
-  }, [modelConfig?.active_model, API_BASE, fetchModelConfig]);
+  }, [isChangingModel, modelConfig?.active_model, API_BASE, fetchModelConfig]);
 
   const lossChartData = useMemo(() => {
     const h = modelConfig?.history;

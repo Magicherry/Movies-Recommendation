@@ -14,6 +14,11 @@ class RecommenderService:
         self.artifacts_dir = self.project_root / "models" / "artifacts"
         self._loaded = False
         self._lock = Lock()
+        self._movies_loaded_path: Path | None = None
+        self._movies_write_path: Path | None = None
+        self._movies_mtime_ns: int | None = None
+        self._active_model_state_path = self.artifacts_dir / "active_model.txt"
+        self._active_model_mtime_ns: int | None = None
 
         self.models = {}
         self.active_model_name = "option1"
@@ -22,6 +27,167 @@ class RecommenderService:
         self.movie_behavior_stats: pd.DataFrame = pd.DataFrame()
         self.users: List[int] = []
         self.user_history: Dict[int, List[Dict[str, Any]]] = {}
+
+    def _load_movies_from_path(self, source_path: Path) -> None:
+        frame = pd.read_csv(source_path)
+        text_cols = ("poster_url", "backdrop_url", "overview", "tmdb_id")
+        for col in text_cols:
+            if col not in frame.columns:
+                frame[col] = ""
+            frame[col] = frame[col].astype("string").fillna("")
+        for col in frame.columns:
+            if col not in text_cols and pd.api.types.is_object_dtype(frame[col]):
+                frame[col] = frame[col].fillna("")
+
+        self.movies = frame
+        self.movie_lookup = {}
+        for row in frame.itertuples(index=False):
+            raw_tmdb_id = getattr(row, "tmdb_id", "")
+            if pd.isna(raw_tmdb_id):
+                norm_tmdb_id = ""
+            elif isinstance(raw_tmdb_id, float) and raw_tmdb_id.is_integer():
+                norm_tmdb_id = str(int(raw_tmdb_id))
+            else:
+                norm_tmdb_id = str(raw_tmdb_id).strip()
+            self.movie_lookup[int(row.item_id)] = {
+                "item_id": int(row.item_id),
+                "title": row.title,
+                "genres": row.genres,
+                "poster_url": getattr(row, "poster_url", ""),
+                "backdrop_url": getattr(row, "backdrop_url", ""),
+                "overview": getattr(row, "overview", ""),
+                "tmdb_id": norm_tmdb_id,
+            }
+
+        self._movies_loaded_path = source_path
+        try:
+            self._movies_mtime_ns = source_path.stat().st_mtime_ns
+        except OSError:
+            self._movies_mtime_ns = None
+
+        self._sync_user_history_metadata()
+
+    def _sync_user_history_metadata(self) -> None:
+        if not self.user_history:
+            return
+        for history in self.user_history.values():
+            for item in history:
+                iid = int(item.get("item_id", -1))
+                meta = self.movie_lookup.get(iid)
+                if not meta:
+                    continue
+                item["title"] = meta.get("title", item.get("title", "Unknown"))
+                item["genres"] = meta.get("genres", item.get("genres", ""))
+                item["poster_url"] = meta.get("poster_url", item.get("poster_url", ""))
+                item["backdrop_url"] = meta.get("backdrop_url", item.get("backdrop_url", ""))
+                item["overview"] = meta.get("overview", item.get("overview", ""))
+                item["tmdb_id"] = meta.get("tmdb_id", item.get("tmdb_id", ""))
+
+    def _sync_user_history_for_item(self, item_id: int) -> None:
+        if not self.user_history:
+            return
+        meta = self.movie_lookup.get(item_id)
+        if not meta:
+            return
+        for history in self.user_history.values():
+            for item in history:
+                if int(item.get("item_id", -1)) != item_id:
+                    continue
+                item["title"] = meta.get("title", item.get("title", "Unknown"))
+                item["genres"] = meta.get("genres", item.get("genres", ""))
+                item["poster_url"] = meta.get("poster_url", item.get("poster_url", ""))
+                item["backdrop_url"] = meta.get("backdrop_url", item.get("backdrop_url", ""))
+                item["overview"] = meta.get("overview", item.get("overview", ""))
+                item["tmdb_id"] = meta.get("tmdb_id", item.get("tmdb_id", ""))
+
+    def _load_active_model_from_disk(self) -> None:
+        path = self._active_model_state_path
+        if not path.exists():
+            return
+        try:
+            model_name = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return
+        if model_name in self.models:
+            self.active_model_name = model_name
+        try:
+            self._active_model_mtime_ns = path.stat().st_mtime_ns
+        except OSError:
+            self._active_model_mtime_ns = None
+
+    def _persist_active_model_to_disk(self) -> None:
+        path = self._active_model_state_path
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(self.active_model_name, encoding="utf-8")
+            self._active_model_mtime_ns = path.stat().st_mtime_ns
+        except OSError:
+            self._active_model_mtime_ns = None
+
+    def _ensure_active_model_fresh(self) -> None:
+        self._ensure_loaded()
+        path = self._active_model_state_path
+        if not path.exists():
+            return
+        try:
+            mtime_ns = path.stat().st_mtime_ns
+        except OSError:
+            return
+        if self._active_model_mtime_ns is not None and mtime_ns <= self._active_model_mtime_ns:
+            return
+
+        with self._lock:
+            if not path.exists():
+                return
+            try:
+                mtime_ns = path.stat().st_mtime_ns
+            except OSError:
+                return
+            if self._active_model_mtime_ns is not None and mtime_ns <= self._active_model_mtime_ns:
+                return
+            try:
+                model_name = path.read_text(encoding="utf-8").strip()
+            except OSError:
+                return
+            if model_name in self.models:
+                self.active_model_name = model_name
+            self._active_model_mtime_ns = mtime_ns
+
+    def _resolve_active_movies_path(self) -> Path | None:
+        if self._movies_write_path and self._movies_write_path.exists():
+            return self._movies_write_path
+        return self._movies_loaded_path
+
+    def _ensure_movie_data_fresh(self) -> None:
+        self._ensure_loaded()
+        source_path = self._resolve_active_movies_path()
+        if source_path is None or not source_path.exists():
+            return
+        try:
+            mtime_ns = source_path.stat().st_mtime_ns
+        except OSError:
+            return
+        if (
+            self._movies_loaded_path == source_path
+            and self._movies_mtime_ns is not None
+            and mtime_ns <= self._movies_mtime_ns
+        ):
+            return
+        with self._lock:
+            source_path = self._resolve_active_movies_path()
+            if source_path is None or not source_path.exists():
+                return
+            try:
+                mtime_ns = source_path.stat().st_mtime_ns
+            except OSError:
+                return
+            if (
+                self._movies_loaded_path == source_path
+                and self._movies_mtime_ns is not None
+                and mtime_ns <= self._movies_mtime_ns
+            ):
+                return
+            self._load_movies_from_path(source_path)
 
     def _ensure_loaded(self) -> None:
         if self._loaded:
@@ -77,45 +243,15 @@ class RecommenderService:
             if not self.models:
                 raise FileNotFoundError("No models found. Run training script.")
             
-            # Ensure active model is valid
+            # Resolve and persist active model so it survives reloads and cross-process requests.
+            self._load_active_model_from_disk()
             if self.active_model_name not in self.models:
                 self.active_model_name = list(self.models.keys())[0]
+            self._persist_active_model_to_disk()
             
-            if enriched_movies_path.exists():
-                self.movies = pd.read_csv(enriched_movies_path)
-            else:
-                self.movies = pd.read_csv(movies_path)
-
-            text_cols = ("poster_url", "backdrop_url", "overview", "tmdb_id")
-            for col in text_cols:
-                if col not in self.movies.columns:
-                    self.movies[col] = ""
-                # Normalize to string dtype to avoid float/object mismatch when writing updates.
-                self.movies[col] = self.movies[col].astype("string").fillna("")
-
-            # Fill only existing object columns with "" and keep numeric columns untouched.
-            for col in self.movies.columns:
-                if col not in text_cols and pd.api.types.is_object_dtype(self.movies[col]):
-                    self.movies[col] = self.movies[col].fillna("")
-
-            self.movie_lookup = {}
-            for row in self.movies.itertuples(index=False):
-                raw_tmdb_id = getattr(row, "tmdb_id", "")
-                if pd.isna(raw_tmdb_id):
-                    norm_tmdb_id = ""
-                elif isinstance(raw_tmdb_id, float) and raw_tmdb_id.is_integer():
-                    norm_tmdb_id = str(int(raw_tmdb_id))
-                else:
-                    norm_tmdb_id = str(raw_tmdb_id).strip()
-                self.movie_lookup[int(row.item_id)] = {
-                    "item_id": int(row.item_id),
-                    "title": row.title,
-                    "genres": row.genres,
-                    "poster_url": getattr(row, "poster_url", ""),
-                    "backdrop_url": getattr(row, "backdrop_url", ""),
-                    "overview": getattr(row, "overview", ""),
-                    "tmdb_id": norm_tmdb_id,
-                }
+            self._movies_write_path = enriched_movies_path
+            source_path = enriched_movies_path if enriched_movies_path.exists() else movies_path
+            self._load_movies_from_path(source_path)
             
             if train_ratings_path.exists():
                 ratings = pd.read_csv(train_ratings_path)
@@ -176,7 +312,7 @@ class RecommenderService:
         sort_by: str = "item_id",
         sort_order: str = "asc",
     ) -> Dict[str, Any]:
-        self._ensure_loaded()
+        self._ensure_movie_data_fresh()
         assert self.movies is not None
         frame = self.movies
 
@@ -255,11 +391,11 @@ class RecommenderService:
         }
 
     def get_movie(self, item_id: int) -> Dict[str, Any] | None:
-        self._ensure_loaded()
+        self._ensure_movie_data_fresh()
         return self.movie_lookup.get(item_id)
 
     def search_movies(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
-        self._ensure_loaded()
+        self._ensure_movie_data_fresh()
         assert self.movies is not None
         q = query.strip().lower()
         if not q:
@@ -277,7 +413,7 @@ class RecommenderService:
         return frame.to_dict(orient="records")
 
     def predict_rating(self, user_id: int, item_id: int) -> Dict[str, Any]:
-        self._ensure_loaded()
+        self._ensure_active_model_fresh()
         try:
             model = self.models[self.active_model_name]
             score = model.predict(user_id=user_id, item_id=item_id)
@@ -286,7 +422,8 @@ class RecommenderService:
             return {"user_id": user_id, "item_id": item_id, "predicted_rating": None}
 
     def recommend_for_user(self, user_id: int, n: int = 10) -> List[Dict[str, Any]]:
-        self._ensure_loaded()
+        self._ensure_movie_data_fresh()
+        self._ensure_active_model_fresh()
         if user_id not in self.users:
             raise ValueError(f"User ID {user_id} not found.")
         model = self.models[self.active_model_name]
@@ -309,7 +446,8 @@ class RecommenderService:
         return enriched
 
     def similar_for_item(self, item_id: int, n: int = 10) -> List[Dict[str, Any]]:
-        self._ensure_loaded()
+        self._ensure_movie_data_fresh()
+        self._ensure_active_model_fresh()
         model = self.models[self.active_model_name]
         recs = model.similar_items(item_id=item_id, n=n)
         enriched = []
@@ -331,7 +469,7 @@ class RecommenderService:
 
 
     def get_user_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        self._ensure_loaded()
+        self._ensure_movie_data_fresh()
         if user_id not in self.users:
             raise ValueError(f"User ID {user_id} not found.")
         history = self.user_history.get(user_id, [])
@@ -350,7 +488,7 @@ class RecommenderService:
         }
 
     def get_db_stats(self) -> Dict[str, Any]:
-        self._ensure_loaded()
+        self._ensure_movie_data_fresh()
         total_movies = len(self.movies) if self.movies is not None else 0
         total_users = len(self.users)
         
@@ -415,7 +553,7 @@ class RecommenderService:
         }
 
     def get_model_config(self) -> Dict[str, Any]:
-        self._ensure_loaded()
+        self._ensure_active_model_fresh()
         
         # Try to load metrics and history for the active model
         active_metrics = None
@@ -445,10 +583,12 @@ class RecommenderService:
     
     def set_active_model(self, model_name: str) -> bool:
         self._ensure_loaded()
-        if model_name in self.models:
+        if model_name not in self.models:
+            return False
+        with self._lock:
             self.active_model_name = model_name
-            return True
-        return False
+            self._persist_active_model_to_disk()
+        return True
 
     def update_movie_enriched(
         self,
@@ -459,7 +599,7 @@ class RecommenderService:
         tmdb_id: int | None = None,
     ) -> bool:
         """Update one movie's enriched fields and persist to movies_enriched.csv."""
-        self._ensure_loaded()
+        self._ensure_movie_data_fresh()
         if self.movies is None or item_id not in self.movie_lookup:
             return False
         for col in ("poster_url", "backdrop_url", "overview", "tmdb_id"):
@@ -487,8 +627,15 @@ class RecommenderService:
             idx = self.movies[self.movies["item_id"] == item_id].index
             if len(idx) > 0:
                 self.movies.at[idx[0], "tmdb_id"] = val
-        out_path = self.artifacts_dir / "movies_enriched.csv"
+        self._sync_user_history_for_item(item_id)
+        out_path = self._movies_write_path or (self.artifacts_dir / "movies_enriched.csv")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         self.movies.to_csv(out_path, index=False)
+        self._movies_loaded_path = out_path
+        try:
+            self._movies_mtime_ns = out_path.stat().st_mtime_ns
+        except OSError:
+            self._movies_mtime_ns = None
         return True
 
 service = RecommenderService()

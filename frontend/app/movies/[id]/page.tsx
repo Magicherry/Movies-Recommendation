@@ -1,4 +1,4 @@
-import { getMovieDetail } from "../../../lib/api";
+import { getMovieDetail, displayMovieTitle } from "../../../lib/api";
 import CollectionLimitGrid from "../../../components/collection-limit-grid";
 import BackButton from "../../../components/back-button";
 import PredictionDisplay from "../../../components/prediction-display";
@@ -37,7 +37,7 @@ export default async function MovieDetailPage({ params }: MovieDetailPageProps) 
         <div className="hero-banner-gradient" />
         
         <div className="hero-content">
-          <h1 className="hero-title">{data.movie.title.replace(/\s*\(\d{4}\)$/, '')}</h1>
+          <h1 className="hero-title">{displayMovieTitle(data.movie.title)}</h1>
           <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontWeight: 'bold', color: 'white' }}>{data.movie.title.match(/\((\d{4})\)$/)?.[1] || "Movie"}</span>
             <span>•</span>

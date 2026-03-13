@@ -75,6 +75,7 @@ export default function AccountSettings() {
             type="number" 
             value={inputId} 
             onChange={e => setInputId(e.target.value)}
+            onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
             min="1"
             max="610"
             className="settings-number-input"

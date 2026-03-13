@@ -29,6 +29,16 @@ function formatTitle(title: string): string {
   });
 }
 
+/** Display title: strip non-year parentheticals (e.g. original language), trailing ", The", and the year. */
+export function displayMovieTitle(title: string): string {
+  if (!title) return title;
+  let s = title.replace(/\s*\(([^)]+)\)/g, (_, c) => (/^\d{4}$/.test(c.trim()) ? ` (${c})` : "")).trim();
+  // Strip ", The" / ", A" / ", An" even when followed by " (YYYY)" at end
+  s = s.replace(/\s*,\s*(The|A|An)(\s*\(\d{4}\))?$/i, (_, __, year) => (year || "").trim()).trim();
+  s = s.replace(/\s*\(\d{4}\)$/, "").trim();
+  return s;
+}
+
 export async function getMovies(
   limit = 50,
   offset = 0,

@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import MovieCardContextMenu from "./movie-card-context-menu";
 import ScrapeMetadataModal from "./scrape-metadata-modal";
 import ChangeImageModal from "./change-image-modal";
-import { movieRefreshMetadata } from "../lib/api";
+import { movieRefreshMetadata, displayMovieTitle } from "../lib/api";
 
 export type MovieCardItem = {
   item_id: number;
@@ -68,7 +68,7 @@ const MovieCard = memo(function MovieCard({
         style={{ background: movie.poster_url ? "none" : getGradient(movie.item_id) }}
       >
         {movie.poster_url && (
-          <img src={movie.poster_url} alt={movie.title} loading="lazy" className="poster-img" />
+          <img src={movie.poster_url} alt={displayMovieTitle(movie.title)} loading="lazy" className="poster-img" />
         )}
         <div className="poster-overlay" />
         <div className="poster-info-overlay">
@@ -89,7 +89,7 @@ const MovieCard = memo(function MovieCard({
         </div>
       </div>
       <div className="poster-footer">
-        <h3 className="poster-title">{movie.title.replace(/\s*\(\d{4}\)$/, "")}</h3>
+        <h3 className="poster-title">{displayMovieTitle(movie.title)}</h3>
         {metaText ? <span className="poster-year">{metaText}</span> : null}
       </div>
       {(isRefreshing || isFading) && (
@@ -128,6 +128,12 @@ export default function MovieCardGrid({
   const [imageModalMovie, setImageModalMovie] = useState<MovieCardItem | null>(null);
   const [refreshingItemId, setRefreshingItemId] = useState<number | null>(null);
   const [fadingItemId, setFadingItemId] = useState<number | null>(null);
+  const [imageOverrides, setImageOverrides] = useState<Record<number, { poster_url: string; backdrop_url: string }>>({});
+
+  const withImageOverrides = useCallback((movie: MovieCardItem): MovieCardItem => {
+    const override = imageOverrides[movie.item_id];
+    return override ? { ...movie, ...override } : movie;
+  }, [imageOverrides]);
 
   const refreshAndPreserveScroll = useCallback(() => {
     if (typeof window === "undefined") {
@@ -160,22 +166,35 @@ export default function MovieCardGrid({
     }
   }, [refreshAndPreserveScroll]);
 
-  const handleModalSuccess = useCallback(() => {
+  const handleModalSuccess = useCallback((payload?: { itemId: number; posterUrl: string; backdropUrl: string }) => {
+    if (payload) {
+      setImageOverrides((prev) => ({
+        ...prev,
+        [payload.itemId]: {
+          poster_url: payload.posterUrl,
+          backdrop_url: payload.backdropUrl,
+        },
+      }));
+      if (imageModalMovie?.item_id === payload.itemId) {
+        setImageModalMovie((prev) => (prev ? { ...prev, poster_url: payload.posterUrl, backdrop_url: payload.backdropUrl } : prev));
+      }
+    }
     refreshAndPreserveScroll();
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("streamx-metadata-updated"));
     }
-  }, [refreshAndPreserveScroll]);
+  }, [refreshAndPreserveScroll, imageModalMovie?.item_id]);
 
   const handleCollectionClick = useCallback(() => {
     if (typeof window !== "undefined") {
-      sessionStorage.setItem("collectionData", JSON.stringify({ title, items, scoreLabel }));
+      const itemsForCollection = items.map(withImageOverrides);
+      sessionStorage.setItem("collectionData", JSON.stringify({ title, items: itemsForCollection, scoreLabel }));
       let fromPath = "/";
       if (pathname.startsWith("/movies")) fromPath = "/movies";
       else if (pathname.startsWith("/users")) fromPath = "/users";
       router.push(`/collection?from=${fromPath}`);
     }
-  }, [title, items, scoreLabel, pathname, router]);
+  }, [title, items, scoreLabel, pathname, router, withImageOverrides]);
 
   const scrollLeft = useCallback(() => {
     if (rowRef.current) {
@@ -225,26 +244,28 @@ export default function MovieCardGrid({
           </div>
         )}
         <div className="card-row" ref={rowRef}>
-          {items.map((movie) => (
+          {items.map((movie) => {
+            const mergedMovie = withImageOverrides(movie);
+            return (
             <div
               key={movie.item_id}
               className="movie-card-wrapper"
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                setContextMenu({ x: e.clientX, y: e.clientY, movie });
+                setContextMenu({ x: e.clientX, y: e.clientY, movie: mergedMovie });
               }}
               style={{ position: "relative" }}
             >
               <MovieCard
-                movie={movie}
+                movie={mergedMovie}
                 scoreLabel={scoreLabel}
                 showScore={typeof movie.score === "number"}
                 isRefreshing={refreshingItemId === movie.item_id}
                 isFading={fadingItemId === movie.item_id}
               />
             </div>
-          ))}
+          )})}
         </div>
       </div>
       {contextMenu && (
@@ -279,26 +300,28 @@ export default function MovieCardGrid({
   return (
     <>
     <div className="card-grid">
-      {items.map((movie) => (
+      {items.map((movie) => {
+        const mergedMovie = withImageOverrides(movie);
+        return (
         <div
           key={movie.item_id}
           className="movie-card-wrapper"
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            setContextMenu({ x: e.clientX, y: e.clientY, movie });
+            setContextMenu({ x: e.clientX, y: e.clientY, movie: mergedMovie });
           }}
           style={{ position: "relative" }}
         >
           <MovieCard
-            movie={movie}
+            movie={mergedMovie}
             scoreLabel={scoreLabel}
             showScore={typeof movie.score === "number"}
             isRefreshing={refreshingItemId === movie.item_id}
             isFading={fadingItemId === movie.item_id}
           />
         </div>
-      ))}
+      )})}
     </div>
       {contextMenu && (
         <MovieCardContextMenu

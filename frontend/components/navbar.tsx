@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import NextLink from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useUser } from "../context/user-context";
@@ -13,6 +13,7 @@ export default function AppNavbar() {
   const { userId, setUserId } = useUser();
   const [inputId, setInputId] = useState(userId.toString());
   const [activeEngine, setActiveEngine] = useState<string>("Demo");
+  const engineFetchSeqRef = useRef(0);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
 
@@ -21,11 +22,14 @@ export default function AppNavbar() {
   }, [userId]);
 
   useEffect(() => {
+    let disposed = false;
     const fetchModel = async () => {
+      const seq = ++engineFetchSeqRef.current;
       try {
         const res = await fetch(`${API_BASE}/model-config`);
         if (res.ok) {
           const data = await res.json();
+          if (disposed || seq !== engineFetchSeqRef.current) return;
           if (data.active_model === 'option1') {
             setActiveEngine('MF');
           } else if (data.active_model === 'option2') {
@@ -57,6 +61,7 @@ export default function AppNavbar() {
     const interval = setInterval(fetchModel, 30000);
     
     return () => {
+      disposed = true;
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('streamx-engine-changed', fetchModel);
       clearInterval(interval);
@@ -104,7 +109,7 @@ export default function AppNavbar() {
     e.preventDefault();
     const parsed = parseInt(inputId, 10);
     if (!isNaN(parsed) && parsed > 0 && parsed <= 610) {
-      setUserId(parsed);
+      if (parsed !== userId) setUserId(parsed);
       setIsMenuOpen(false);
     } else {
       // Revert to current valid userId if input is invalid
@@ -180,6 +185,7 @@ export default function AppNavbar() {
                   type="number" 
                   value={inputId} 
                   onChange={e => setInputId(e.target.value)}
+                  onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
                   className="user-id-input"
                   min="1"
                   max="610"

@@ -51,6 +51,8 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadData() {
       const hasVisibleContent =
         featuredMovies.length > 0 ||
@@ -83,6 +85,7 @@ export default function HomePage() {
         globalCarouselIntervalMs === carouselIntervalMsValue
       ) {
         // Data is already loaded and cached for this user with the correct count and model
+        if (cancelled) return;
         setRecommendations(globalRecs);
         setCarouselIntervalMs(globalCarouselIntervalMs);
         setCarouselSource(globalCarouselSource);
@@ -93,6 +96,7 @@ export default function HomePage() {
       
       // Keep existing content visible during metadata refresh to preserve scroll position.
       if (!hasVisibleContent) {
+        if (cancelled) return;
         setLoading(true);
       }
       try {
@@ -110,6 +114,7 @@ export default function HomePage() {
           getUserHistory(userId).catch(() => []),
           getMovies(trendingLimit, 0, undefined, undefined, undefined, "behavior_score", "desc"),
         ]);
+        if (cancelled) return;
 
         const recs = recommendationResult.items;
         setRecommendations(recs);
@@ -162,13 +167,18 @@ export default function HomePage() {
         globalWatchAgainCount = watchAgainCount;
         globalTrendingCount = trendingCount;
       } catch (err) {
+        if (cancelled) return;
         console.error(err);
       } finally {
+        if (cancelled) return;
         setLoading(false);
       }
     }
     
     loadData();
+    return () => {
+      cancelled = true;
+    };
   }, [userId, metadataVersion, featuredMovies.length, recommendations.length, history.length, trending.length]);
 
   if (loading) {

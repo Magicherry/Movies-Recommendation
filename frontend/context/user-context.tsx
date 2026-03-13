@@ -8,18 +8,29 @@ type UserContextType = {
 };
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
+const USER_ID_MIN = 1;
+const USER_ID_MAX = 610;
+
+function parseValidUserId(raw: string | null): number | null {
+  if (!raw) return null;
+  const parsed = parseInt(raw, 10);
+  if (!Number.isInteger(parsed) || parsed < USER_ID_MIN || parsed > USER_ID_MAX) {
+    return null;
+  }
+  return parsed;
+}
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [userId, setUserIdState] = useState<number>(1);
+  const [userId, setUserIdState] = useState<number | null>(null);
 
   useEffect(() => {
-    // Load user ID
+    // Load user ID before rendering app content to avoid race/flicker.
     const stored = localStorage.getItem("streamx_user_id");
-    if (stored) {
-      const parsed = parseInt(stored, 10);
-      if (!isNaN(parsed) && parsed > 0) {
-        setUserIdState(parsed);
-      }
+    const parsedUserId = parseValidUserId(stored);
+    const initialUserId = parsedUserId ?? USER_ID_MIN;
+    setUserIdState(initialUserId);
+    if (parsedUserId === null) {
+      localStorage.setItem("streamx_user_id", String(initialUserId));
     }
 
     // Apply global appearance settings
@@ -63,12 +74,30 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     if (savedLayout === "true") {
       document.body.classList.add("dense-layout");
     }
+
+    // Keep user ID in sync across tabs/windows.
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key !== "streamx_user_id") return;
+      const nextUserId = parseValidUserId(e.newValue);
+      if (nextUserId !== null) {
+        setUserIdState(nextUserId);
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+    };
   }, []);
 
   const setUserId = (id: number) => {
+    if (!Number.isInteger(id) || id < USER_ID_MIN || id > USER_ID_MAX) return;
     setUserIdState(id);
     localStorage.setItem("streamx_user_id", id.toString());
   };
+
+  if (userId === null) {
+    return null;
+  }
 
   return (
     <UserContext.Provider value={{ userId, setUserId }}>

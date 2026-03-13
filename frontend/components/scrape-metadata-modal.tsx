@@ -4,15 +4,16 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { MovieCardItem } from "./movie-card-grid";
 import type { TMDBSearchResult } from "../lib/api";
-import { tmdbSearch, movieApplyScrape } from "../lib/api";
+import { tmdbSearch, movieApplyScrape, displayMovieTitle } from "../lib/api";
 
-/** Parse full title into search name and year; strip non-year parentheticals e.g. (Hont faan kui). */
+/** Parse full title into search name and year; strip non-year parentheticals and trailing ", The". */
 function parseTitleAndYear(fullTitle: string): { name: string; year: string } {
   let s = fullTitle.trim();
   const yearMatch = s.match(/\s*\((\d{4})\)\s*$/);
   const year = yearMatch ? yearMatch[1] : "";
   if (yearMatch) s = s.replace(/\s*\(\d{4}\)\s*$/, "").trim();
-  const name = s.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  let name = s.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  name = name.replace(/\s*,\s*(The|A|An)$/i, "").trim();
   return { name, year };
 }
 
@@ -202,7 +203,7 @@ export default function ScrapeMetadataModal({ movie, onClose, onSuccess }: Scrap
                 </div>
                 <div className="dataset-info-row">
                   <span className="dataset-info-label">Title</span>
-                  <span className="dataset-info-value">{movie.title}</span>
+                  <span className="dataset-info-value">{displayMovieTitle(movie.title)}</span>
                 </div>
                 <div className="dataset-info-row">
                   <span className="dataset-info-label">Genres</span>
@@ -212,7 +213,7 @@ export default function ScrapeMetadataModal({ movie, onClose, onSuccess }: Scrap
 
               <div className="movie-modal-current-poster">
                 {movie.poster_url ? (
-                  <img src={movie.poster_url} alt={movie.title} />
+                  <img src={movie.poster_url} alt={displayMovieTitle(movie.title)} />
                 ) : (
                   <div className="movie-modal-poster-placeholder">No Poster</div>
                 )}
@@ -282,7 +283,7 @@ export default function ScrapeMetadataModal({ movie, onClose, onSuccess }: Scrap
                         )}
                         <div className="result-body">
                           <div className="result-header">
-                            <div className="result-title">{r.title}</div>
+                            <div className="result-title">{displayMovieTitle(r.title)}</div>
                             <div className="result-meta">{r.release_date?.slice(0, 4) || "—"}</div>
                           </div>
                           <div className="result-tmdb-id">TMDB ID: {r.tmdb_id}</div>

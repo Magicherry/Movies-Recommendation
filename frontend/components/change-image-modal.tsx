@@ -9,7 +9,7 @@ import type { TMDBImageItem } from "../lib/api";
 type ChangeImageModalProps = {
   movie: MovieCardItem;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (payload: { itemId: number; posterUrl: string; backdropUrl: string }) => void;
 };
 
 const MODAL_TRANSITION_MS = 250;
@@ -34,6 +34,8 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
   const [imagesLoading, setImagesLoading] = useState(false);
   const [posterSize, setPosterSize] = useState<{ w: number; h: number } | null>(null);
   const [backdropSize, setBackdropSize] = useState<{ w: number; h: number } | null>(null);
+  const [posterLoadError, setPosterLoadError] = useState(false);
+  const [backdropLoadError, setBackdropLoadError] = useState(false);
 
   const displayPoster = selectedPosterUrl !== null ? selectedPosterUrl : currentPoster;
   const displayBackdrop = selectedBackdropUrl !== null ? selectedBackdropUrl : currentBackdrop;
@@ -60,7 +62,7 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
     setSaving(true);
     try {
       await movieUpdateImages(movie.item_id, posterToSend, backdropToSend);
-      onSuccess();
+      onSuccess({ itemId: movie.item_id, posterUrl: posterToSend, backdropUrl: backdropToSend });
       handleClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Update failed.");
@@ -116,12 +118,24 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
 
   const onPosterLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
+    setPosterLoadError(false);
     if (img.naturalWidth && img.naturalHeight) setPosterSize({ w: img.naturalWidth, h: img.naturalHeight });
   }, []);
   const onBackdropLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
+    setBackdropLoadError(false);
     if (img.naturalWidth && img.naturalHeight) setBackdropSize({ w: img.naturalWidth, h: img.naturalHeight });
   }, []);
+
+  useEffect(() => {
+    setPosterLoadError(false);
+    if (!displayPoster.trim()) setPosterSize(null);
+  }, [displayPoster]);
+
+  useEffect(() => {
+    setBackdropLoadError(false);
+    if (!displayBackdrop.trim()) setBackdropSize(null);
+  }, [displayBackdrop]);
 
   useEffect(() => {
     const scrollY = window.scrollY;
@@ -253,8 +267,8 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
                 <div className="change-image-cards-grid">
                   <div className="change-image-card change-image-card-ref">
                     <div className="change-image-card-preview change-image-card-poster">
-                      {displayPoster ? (
-                        <img src={displayPoster} alt="Cover" onLoad={onPosterLoad} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      {displayPoster && !posterLoadError ? (
+                        <img src={displayPoster} alt="Cover" onLoad={onPosterLoad} onError={() => { setPosterLoadError(true); setPosterSize(null); }} />
                       ) : (
                         <span className="change-image-card-empty">No cover</span>
                       )}
@@ -287,8 +301,8 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
                   </div>
                   <div className="change-image-card change-image-card-ref">
                     <div className="change-image-card-preview change-image-card-backdrop">
-                      {displayBackdrop ? (
-                        <img src={displayBackdrop} alt="Backdrop" onLoad={onBackdropLoad} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      {displayBackdrop && !backdropLoadError ? (
+                        <img src={displayBackdrop} alt="Backdrop" onLoad={onBackdropLoad} onError={() => { setBackdropLoadError(true); setBackdropSize(null); }} />
                       ) : (
                         <span className="change-image-card-empty">No backdrop</span>
                       )}

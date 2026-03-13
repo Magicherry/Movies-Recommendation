@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUser } from "../context/user-context";
 
 export default function PredictionDisplay({ itemId }: { itemId: number }) {
@@ -8,17 +8,23 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
   const [prediction, setPrediction] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeEngine, setActiveEngine] = useState<string>("the active model");
+  const fetchSeqRef = useRef(0);
 
   useEffect(() => {
+    let disposed = false;
     async function fetchPrediction() {
+      const seq = ++fetchSeqRef.current;
       setLoading(true);
       try {
         const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
         const res = await fetch(`${API_BASE}/predict/${userId}/${itemId}`);
         if (res.ok) {
           const data = await res.json();
+          if (disposed || seq !== fetchSeqRef.current) return;
           if (data.predicted_rating !== null) {
             setPrediction(data.predicted_rating);
+          } else {
+            setPrediction(null);
           }
         }
         
@@ -26,6 +32,7 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
         const modelRes = await fetch(`${API_BASE}/model-config`);
         if (modelRes.ok) {
           const modelData = await modelRes.json();
+          if (disposed || seq !== fetchSeqRef.current) return;
           if (modelData.active_model === 'option1') {
             setActiveEngine('Matrix Factorization');
           } else if (modelData.active_model === 'option2') {
@@ -37,6 +44,7 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
       } catch (err) {
         console.error("Failed to fetch prediction", err);
       } finally {
+        if (disposed || seq !== fetchSeqRef.current) return;
         setLoading(false);
       }
     }
@@ -54,6 +62,7 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
     window.addEventListener('streamx-engine-changed', fetchPrediction);
     
     return () => {
+      disposed = true;
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('streamx-engine-changed', fetchPrediction);
     };

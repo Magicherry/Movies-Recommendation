@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, PieChart, Pie, Cell } from "recharts";
+import { displayMovieTitle } from "../../../lib/api";
 
 interface DbStats {
   total_movies: number;
@@ -404,7 +405,7 @@ export default function DashboardStats() {
               <h3>Most Rated Movies</h3>
               <div className="chart-wrapper">
                 <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={stats.top_rated_movies} layout="vertical" margin={{ top: 20, right: 30, left: 150, bottom: 5 }}>
+                  <BarChart data={stats.top_rated_movies.map((m) => ({ ...m, title: displayMovieTitle(m.title) }))} layout="vertical" margin={{ top: 20, right: 30, left: 150, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" horizontal={false} />
                     <XAxis type="number" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                     <YAxis dataKey="title" type="category" stroke="#a1a1aa" tick={{ fill: '#a1a1aa', fontSize: 13 }} width={250} />

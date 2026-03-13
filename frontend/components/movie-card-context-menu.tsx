@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { MovieCardItem } from "./movie-card-grid";
 
@@ -62,7 +62,7 @@ export default function MovieCardContextMenu({
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: x, top: y });
 
-  useLayoutEffect(() => {
+  const updatePosition = useCallback(() => {
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -77,28 +77,53 @@ export default function MovieCardContextMenu({
     setPosition({ left, top });
   }, [x, y]);
 
+  useLayoutEffect(() => {
+    updatePosition();
+  }, [updatePosition]);
+
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
+    const handleContextMenu = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
     const handleScroll = () => onClose();
+    const handleResize = () => updatePosition();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     document.addEventListener("click", handleClick, true);
+    document.addEventListener("contextmenu", handleContextMenu, true);
     document.addEventListener("scroll", handleScroll, true);
+    document.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("resize", handleResize);
     return () => {
       document.removeEventListener("click", handleClick, true);
+      document.removeEventListener("contextmenu", handleContextMenu, true);
       document.removeEventListener("scroll", handleScroll, true);
+      document.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("resize", handleResize);
     };
-  }, [onClose]);
+  }, [onClose, updatePosition]);
+
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
 
   const menu = (
     <div
       ref={ref}
       className="movie-context-menu"
       style={{ left: position.left, top: position.top }}
+      role="menu"
+      tabIndex={-1}
+      onContextMenu={(e) => e.preventDefault()}
     >
       <button
         type="button"
         className="movie-context-menu-item"
+        role="menuitem"
         onClick={() => {
           onScrapeMetadata();
           onClose();
@@ -110,6 +135,7 @@ export default function MovieCardContextMenu({
       <button
         type="button"
         className="movie-context-menu-item"
+        role="menuitem"
         onClick={() => {
           onRefreshMetadata();
           onClose();
@@ -121,6 +147,7 @@ export default function MovieCardContextMenu({
       <button
         type="button"
         className="movie-context-menu-item"
+        role="menuitem"
         onClick={() => {
           onChangeImage();
           onClose();
