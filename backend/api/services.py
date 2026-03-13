@@ -30,7 +30,7 @@ class RecommenderService:
 
     def _load_movies_from_path(self, source_path: Path) -> None:
         frame = pd.read_csv(source_path)
-        text_cols = ("poster_url", "backdrop_url", "overview", "tmdb_id")
+        text_cols = ("poster_url", "backdrop_url", "overview", "tmdb_id", "scraped_title")
         for col in text_cols:
             if col not in frame.columns:
                 frame[col] = ""
@@ -52,6 +52,7 @@ class RecommenderService:
             self.movie_lookup[int(row.item_id)] = {
                 "item_id": int(row.item_id),
                 "title": row.title,
+                "scraped_title": getattr(row, "scraped_title", ""),
                 "genres": row.genres,
                 "poster_url": getattr(row, "poster_url", ""),
                 "backdrop_url": getattr(row, "backdrop_url", ""),
@@ -77,6 +78,7 @@ class RecommenderService:
                 if not meta:
                     continue
                 item["title"] = meta.get("title", item.get("title", "Unknown"))
+                item["scraped_title"] = meta.get("scraped_title", item.get("scraped_title", ""))
                 item["genres"] = meta.get("genres", item.get("genres", ""))
                 item["poster_url"] = meta.get("poster_url", item.get("poster_url", ""))
                 item["backdrop_url"] = meta.get("backdrop_url", item.get("backdrop_url", ""))
@@ -94,6 +96,7 @@ class RecommenderService:
                 if int(item.get("item_id", -1)) != item_id:
                     continue
                 item["title"] = meta.get("title", item.get("title", "Unknown"))
+                item["scraped_title"] = meta.get("scraped_title", item.get("scraped_title", ""))
                 item["genres"] = meta.get("genres", item.get("genres", ""))
                 item["poster_url"] = meta.get("poster_url", item.get("poster_url", ""))
                 item["backdrop_url"] = meta.get("backdrop_url", item.get("backdrop_url", ""))
@@ -278,10 +281,23 @@ class RecommenderService:
                     if uid not in self.user_history:
                         self.user_history[uid] = []
                     
-                    meta = self.movie_lookup.get(iid, {"item_id": iid, "title": "Unknown", "genres": "", "poster_url": "", "backdrop_url": "", "overview": "", "tmdb_id": ""})
+                    meta = self.movie_lookup.get(
+                        iid,
+                        {
+                            "item_id": iid,
+                            "title": "Unknown",
+                            "scraped_title": "",
+                            "genres": "",
+                            "poster_url": "",
+                            "backdrop_url": "",
+                            "overview": "",
+                            "tmdb_id": "",
+                        },
+                    )
                     self.user_history[uid].append({
                         "item_id": iid,
                         "title": meta["title"],
+                        "scraped_title": meta.get("scraped_title", ""),
                         "genres": meta["genres"],
                         "poster_url": meta["poster_url"],
                         "backdrop_url": meta["backdrop_url"],
@@ -319,6 +335,11 @@ class RecommenderService:
         if query:
             q = query.strip().lower()
             title_lower = frame["title"].str.lower()
+            scraped_title_lower = (
+                frame["scraped_title"].str.lower()
+                if "scraped_title" in frame.columns
+                else pd.Series([""] * len(frame), index=frame.index)
+            )
             title_normalized = (
                 frame["title"]
                 .str.replace(r"\s*\([^)]*\)\s*", " ", regex=True)
@@ -326,7 +347,11 @@ class RecommenderService:
                 .str.strip()
                 .str.lower()
             )
-            mask = title_lower.str.contains(q, na=False, regex=False) | title_normalized.str.contains(q, na=False, regex=False)
+            mask = (
+                title_lower.str.contains(q, na=False, regex=False)
+                | title_normalized.str.contains(q, na=False, regex=False)
+                | scraped_title_lower.str.contains(q, na=False, regex=False)
+            )
             frame = frame[mask]
         
         if genre:
@@ -358,7 +383,17 @@ class RecommenderService:
             sortable[stat_col] = sortable[stat_col].fillna(0.0)
 
         if sort_by == "title":
-            sortable["_sort_title"] = sortable["title"].str.replace(
+            scraped_title_clean = (
+                sortable["scraped_title"].fillna("").astype("string").str.strip()
+                if "scraped_title" in sortable.columns
+                else pd.Series([""] * len(sortable), index=sortable.index, dtype="string")
+            )
+            base_sort_title = (
+                scraped_title_clean.where(scraped_title_clean != "", sortable["title"])
+                if "scraped_title" in sortable.columns
+                else sortable["title"]
+            )
+            sortable["_sort_title"] = base_sort_title.astype("string").str.replace(
                 r"\s*\(\d{4}\)\s*$", "", regex=True
             ).str.lower()
             sortable = sortable.sort_values(
@@ -401,6 +436,11 @@ class RecommenderService:
         if not q:
             return []
         title_lower = self.movies["title"].str.lower()
+        scraped_title_lower = (
+            self.movies["scraped_title"].str.lower()
+            if "scraped_title" in self.movies.columns
+            else pd.Series([""] * len(self.movies), index=self.movies.index)
+        )
         title_normalized = (
             self.movies["title"]
             .str.replace(r"\s*\([^)]*\)\s*", " ", regex=True)
@@ -408,7 +448,11 @@ class RecommenderService:
             .str.strip()
             .str.lower()
         )
-        mask = title_lower.str.contains(q, na=False, regex=False) | title_normalized.str.contains(q, na=False, regex=False)
+        mask = (
+            title_lower.str.contains(q, na=False, regex=False)
+            | title_normalized.str.contains(q, na=False, regex=False)
+            | scraped_title_lower.str.contains(q, na=False, regex=False)
+        )
         frame = self.movies[mask].head(limit)
         return frame.to_dict(orient="records")
 
@@ -430,11 +474,24 @@ class RecommenderService:
         recs = model.recommend_top_n(user_id=user_id, n=n, exclude_seen=True)
         enriched = []
         for rec in recs:
-            meta = self.movie_lookup.get(rec.item_id, {"item_id": rec.item_id, "title": "Unknown", "genres": "", "poster_url": "", "backdrop_url": "", "overview": "", "tmdb_id": ""})
+            meta = self.movie_lookup.get(
+                rec.item_id,
+                {
+                    "item_id": rec.item_id,
+                    "title": "Unknown",
+                    "scraped_title": "",
+                    "genres": "",
+                    "poster_url": "",
+                    "backdrop_url": "",
+                    "overview": "",
+                    "tmdb_id": "",
+                },
+            )
             enriched.append(
                 {
                     "item_id": int(rec.item_id),
                     "title": meta["title"],
+                    "scraped_title": meta.get("scraped_title", ""),
                     "genres": meta["genres"],
                     "poster_url": meta.get("poster_url", ""),
                     "backdrop_url": meta.get("backdrop_url", ""),
@@ -452,11 +509,24 @@ class RecommenderService:
         recs = model.similar_items(item_id=item_id, n=n)
         enriched = []
         for rec in recs:
-            meta = self.movie_lookup.get(rec.item_id, {"item_id": rec.item_id, "title": "Unknown", "genres": "", "poster_url": "", "backdrop_url": "", "overview": "", "tmdb_id": ""})
+            meta = self.movie_lookup.get(
+                rec.item_id,
+                {
+                    "item_id": rec.item_id,
+                    "title": "Unknown",
+                    "scraped_title": "",
+                    "genres": "",
+                    "poster_url": "",
+                    "backdrop_url": "",
+                    "overview": "",
+                    "tmdb_id": "",
+                },
+            )
             enriched.append(
                 {
                     "item_id": int(rec.item_id),
                     "title": meta["title"],
+                    "scraped_title": meta.get("scraped_title", ""),
                     "genres": meta["genres"],
                     "poster_url": meta.get("poster_url", ""),
                     "backdrop_url": meta.get("backdrop_url", ""),
@@ -538,8 +608,9 @@ class RecommenderService:
         # Top rated movies (most ratings)
         top_rated_movies = []
         for iid, count in sorted(movie_rating_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
-            meta = self.movie_lookup.get(iid, {"title": "Unknown"})
-            top_rated_movies.append({"title": meta["title"], "count": count})
+            meta = self.movie_lookup.get(iid, {"title": "Unknown", "scraped_title": ""})
+            display_title = meta.get("scraped_title") or meta.get("title", "Unknown")
+            top_rated_movies.append({"title": display_title, "count": count})
         
         return {
             "total_movies": total_movies,
@@ -597,12 +668,13 @@ class RecommenderService:
         backdrop_url: str | None = None,
         overview: str | None = None,
         tmdb_id: int | None = None,
+        scraped_title: str | None = None,
     ) -> bool:
         """Update one movie's enriched fields and persist to movies_enriched.csv."""
         self._ensure_movie_data_fresh()
         if self.movies is None or item_id not in self.movie_lookup:
             return False
-        for col in ("poster_url", "backdrop_url", "overview", "tmdb_id"):
+        for col in ("poster_url", "backdrop_url", "overview", "tmdb_id", "scraped_title"):
             if col not in self.movies.columns:
                 self.movies[col] = ""
         row = self.movie_lookup[item_id]
@@ -627,6 +699,11 @@ class RecommenderService:
             idx = self.movies[self.movies["item_id"] == item_id].index
             if len(idx) > 0:
                 self.movies.at[idx[0], "tmdb_id"] = val
+        if scraped_title is not None:
+            row["scraped_title"] = scraped_title
+            idx = self.movies[self.movies["item_id"] == item_id].index
+            if len(idx) > 0:
+                self.movies.at[idx[0], "scraped_title"] = scraped_title
         self._sync_user_history_for_item(item_id)
         out_path = self._movies_write_path or (self.artifacts_dir / "movies_enriched.csv")
         out_path.parent.mkdir(parents=True, exist_ok=True)

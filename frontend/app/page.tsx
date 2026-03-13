@@ -123,6 +123,7 @@ export default function HomePage() {
         const formattedHist = hist.map(h => ({
           item_id: h.item_id,
           title: h.title,
+          scraped_title: h.scraped_title,
           genres: h.genres,
           poster_url: h.poster_url,
           backdrop_url: h.backdrop_url,

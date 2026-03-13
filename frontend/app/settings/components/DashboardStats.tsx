@@ -144,23 +144,15 @@ export default function DashboardStats() {
     <section className="settings-card full-width">
       <h2>Database</h2>
       
-      <div className="metrics-info settings-panel">
-        <h5 style={{ 
-          margin: '0 0 12px 0', 
-          fontWeight: 600, 
-          color: 'var(--text-main)',
-          fontSize: '1rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
+      <div className="metrics-info settings-panel-strong">
+        <h3 className="settings-subsection-title">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
             <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
             <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
           </svg>
           Dataset Overview
-        </h5>
+        </h3>
         <p style={{ marginBottom: '12px', lineHeight: '1.5' }}>
           This application is powered by the <a href="https://grouplens.org/datasets/movielens/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand)', textDecoration: 'none' }}>MovieLens dataset</a>, collected by the GroupLens Research Project at the University of Minnesota. It is widely recognized as the benchmark dataset for evaluating recommender systems.
         </p>
@@ -188,7 +180,7 @@ export default function DashboardStats() {
       </div>
 
       <div className="scrape-section settings-panel-strong">
-        <h3 style={{ marginTop: 0, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <h3 className="settings-subsection-title">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7 10 12 15 17 10"></polyline>
@@ -206,8 +198,9 @@ export default function DashboardStats() {
               TMDB API Key (Optional if set in .env)
             </label>
             <div className="tmdb-scrape-controls">
-              <div className="tmdb-api-input-wrap" style={{ position: 'relative' }}>
+              <div className="tmdb-api-input-wrap">
                 <input
+                  className={`tmdb-scrape-input${showApiKey ? "" : " tmdb-scrape-input--masked"}`}
                   id="tmdb-api-key"
                   type={showApiKey ? "text" : "password"}
                   placeholder="Enter your TMDB API Key"
@@ -219,21 +212,6 @@ export default function DashboardStats() {
                   onFocus={() => setShowApiKey(true)}
                   onBlur={() => setShowApiKey(false)}
                   disabled={scrapeState?.status === 'running'}
-                  style={{
-                    padding: '10px 12px',
-                    background: 'var(--bg-overlay)',
-                    border: '1px solid var(--border-soft)',
-                    borderRadius: 'var(--radius-sm)',
-                    color: 'var(--text-main)',
-                    fontSize: '0.9rem',
-                    width: '100%',
-                    height: '42px',
-                    outline: 'none',
-                    transition: 'border-color 0.2s',
-                    fontFamily: showApiKey ? 'inherit' : 'monospace',
-                    letterSpacing: showApiKey ? 'normal' : '2px',
-                    boxSizing: 'border-box'
-                  }}
                 />
               </div>
               <button 
@@ -295,7 +273,7 @@ export default function DashboardStats() {
                 </span>
               </div>
               
-              <div className="progress-track" style={{ width: '100%' }}>
+              <div className="progress-track tmdb-scrape-progress-track">
                 <div 
                   className="progress-fill" 
                   style={{ 

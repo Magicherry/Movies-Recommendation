@@ -26,11 +26,20 @@ MOVIES_PATH = PROJECT_ROOT / "models" / "artifacts" / "movies.csv"
 ENRICHED_PATH = PROJECT_ROOT / "models" / "artifacts" / "movies_enriched.csv"
 
 thread_local = threading.local()
+REQUIRED_ENRICHED_COLS = ("poster_url", "backdrop_url", "overview", "tmdb_id", "scraped_title")
 
 def get_session():
     if not hasattr(thread_local, "session"):
         thread_local.session = requests.Session()
     return thread_local.session
+
+
+def ensure_enriched_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure all enriched metadata columns exist."""
+    for col in REQUIRED_ENRICHED_COLS:
+        if col not in df.columns:
+            df[col] = ""
+    return df
 
 def _normalize_title(t):
     """Move ', The' / ', A' / ', An' to front."""
@@ -86,6 +95,7 @@ def fetch_tmdb_info(row):
                     "backdrop_url": f"https://image.tmdb.org/t/p/w1280{best['backdrop_path']}" if best.get('backdrop_path') else "",
                     "overview": best.get('overview', ""),
                     "tmdb_id": str(tmdb_id) if tmdb_id is not None else "",
+                    "scraped_title": (best.get("title") or "").strip(),
                 }
         except Exception:
             pass
@@ -110,6 +120,7 @@ def fetch_tmdb_info(row):
         "backdrop_url": "",
         "overview": "",
         "tmdb_id": "",
+        "scraped_title": "",
     }
 
 
@@ -142,8 +153,7 @@ def main():
         print(f"Loading movies from {ENRICHED_PATH} (refresh mode)", flush=True)
         df = pd.read_csv(ENRICHED_PATH)
         df = df.fillna("")
-        if "tmdb_id" not in df.columns:
-            df["tmdb_id"] = ""
+        df = ensure_enriched_columns(df)
         total = len(df)
         print(f"Scraping TMDB for {total} movies...", flush=True)
         with ThreadPoolExecutor(max_workers=20) as executor:
@@ -156,6 +166,7 @@ def main():
                     df.at[i[0], "backdrop_url"] = res.get("backdrop_url", "")
                     df.at[i[0], "overview"] = res.get("overview", "")
                     df.at[i[0], "tmdb_id"] = res.get("tmdb_id", "")
+                    df.at[i[0], "scraped_title"] = res.get("scraped_title", "")
                 if (idx + 1) % 100 == 0:
                     print(f"Processed {idx + 1}/{total}", flush=True)
         df.to_csv(ENRICHED_PATH, index=False)
@@ -168,6 +179,8 @@ def main():
     existing_items = set()
     if ENRICHED_PATH.exists():
         existing_df = pd.read_csv(ENRICHED_PATH)
+        existing_df = ensure_enriched_columns(existing_df.fillna(""))
+        existing_df.to_csv(ENRICHED_PATH, index=False)
         existing_items = set(existing_df["item_id"])
 
     movies_to_fetch = movies_df[~movies_df["item_id"].isin(existing_items)]
@@ -185,8 +198,9 @@ def main():
             res = f.result()
             orig_row = movies_to_fetch[movies_to_fetch["item_id"] == res["item_id"]].iloc[0].to_dict()
             orig_row.update(res)
-            if "tmdb_id" not in orig_row:
-                orig_row["tmdb_id"] = res.get("tmdb_id", "")
+            for col in REQUIRED_ENRICHED_COLS:
+                if col not in orig_row:
+                    orig_row[col] = res.get(col, "") if col in res else ""
             pd.DataFrame([orig_row]).to_csv(ENRICHED_PATH, mode="a", header=is_first, index=False)
             is_first = False
             if (idx + 1) % 100 == 0:

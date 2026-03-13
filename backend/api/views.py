@@ -408,12 +408,13 @@ def tmdb_movie_images(request: HttpRequest, tmdb_id: int) -> JsonResponse:
 @csrf_exempt
 @require_http_methods(["POST"])
 def movie_apply_scrape(request: HttpRequest, item_id: int) -> JsonResponse:
-    """Apply selected TMDB result to one movie (poster, backdrop, overview, tmdb_id)."""
+    """Apply selected TMDB result to one movie (title, poster, backdrop, overview, tmdb_id)."""
     try:
         body = json.loads(request.body)
         poster_url = (body.get("poster_url") or "").strip()
         backdrop_url = (body.get("backdrop_url") or "").strip()
         overview = (body.get("overview") or "").strip()
+        scraped_title = (body.get("scraped_title") or "").strip()
         raw_tmdb_id = body.get("tmdb_id")
         tmdb_id = int(raw_tmdb_id) if raw_tmdb_id not in (None, "") else None
     except (json.JSONDecodeError, ValueError, TypeError):
@@ -424,10 +425,11 @@ def movie_apply_scrape(request: HttpRequest, item_id: int) -> JsonResponse:
         backdrop_url=backdrop_url or None,
         overview=overview or None,
         tmdb_id=tmdb_id,
+        scraped_title=scraped_title or None,
     )
     if not success:
         return _error("Movie not found", status=404)
-    return JsonResponse({"status": "ok", "item_id": item_id, "tmdb_id": tmdb_id})
+    return JsonResponse({"status": "ok", "item_id": item_id, "tmdb_id": tmdb_id, "scraped_title": scraped_title})
 
 
 def _normalize_title_refresh(t):
@@ -510,12 +512,14 @@ def movie_refresh_metadata(request: HttpRequest, item_id: int) -> JsonResponse:
     backdrop_url = f"https://image.tmdb.org/t/p/w1280{backdrop_path}" if backdrop_path else ""
     overview = best.get("overview", "") or ""
     tmdb_id = best.get("id")
+    scraped_title = (best.get("title") or "").strip()
     success = service.update_movie_enriched(
         item_id=item_id,
         poster_url=poster_url or None,
         backdrop_url=backdrop_url or None,
         overview=overview or None,
         tmdb_id=tmdb_id,
+        scraped_title=scraped_title or None,
     )
     if not success:
         return _error("Update failed", status=500)

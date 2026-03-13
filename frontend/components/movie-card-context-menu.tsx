@@ -4,6 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import type { MovieCardItem } from "./movie-card-grid";
 
+const TRANSITION_MS = 160;
+
 const PADDING = 8;
 
 const ICON_SIZE = 18;
@@ -61,6 +63,9 @@ export default function MovieCardContextMenu({
 }: MovieCardContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: x, top: y });
+  const [isExiting, setIsExiting] = useState(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   const updatePosition = useCallback(() => {
     const el = ref.current;
@@ -68,12 +73,28 @@ export default function MovieCardContextMenu({
     const rect = el.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+    
     let left = x;
     let top = y;
-    if (left + rect.width + PADDING > vw) left = vw - rect.width - PADDING;
-    if (top + rect.height + PADDING > vh) top = vh - rect.height - PADDING;
+
+    // If the menu would go off the right edge of the screen, flip it to the left
+    // We also check if x is very close to the right edge (e.g. within 100px)
+    // to proactively align the right edge of the menu to the x coordinate
+    if (left + rect.width + PADDING > vw || vw - x < 100) {
+      left = x - rect.width;
+      // If it still goes off the left edge after flipping, clamp it
+      if (left < PADDING) left = PADDING;
+    }
+    
+    // If the menu would go off the bottom edge of the screen, flip it upwards
+    if (top + rect.height + PADDING > vh) {
+      top = vh - rect.height - PADDING;
+    }
+    
+    // Safety check: ensure it doesn't go off the left/top edges
     if (left < PADDING) left = PADDING;
     if (top < PADDING) top = PADDING;
+    
     setPosition({ left, top });
   }, [x, y]);
 
@@ -81,17 +102,55 @@ export default function MovieCardContextMenu({
     updatePosition();
   }, [updatePosition]);
 
+  const handleClose = useCallback(() => {
+    if (isExiting) return;
+    setIsExiting(true);
+  }, [isExiting]);
+
+  const closedRef = useRef(false);
+  const handleTransitionEnd = useCallback(
+    (e: React.TransitionEvent) => {
+      if (e.target !== ref.current || e.propertyName !== "opacity") return;
+      if (isExiting && !closedRef.current) {
+        closedRef.current = true;
+        onCloseRef.current();
+      }
+    },
+    [isExiting]
+  );
+
+  useEffect(() => {
+    if (!isExiting) return;
+    const id = setTimeout(() => {
+      if (!closedRef.current) {
+        closedRef.current = true;
+        onCloseRef.current();
+      }
+    }, TRANSITION_MS + 80);
+    return () => clearTimeout(id);
+  }, [isExiting]);
+
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        if ((e.target as Element).closest?.(".movie-context-menu-trigger")) return;
+        handleClose();
+      }
     };
     const handleContextMenu = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        if ((e.target as Element).closest?.(".movie-context-menu-trigger")) return;
+        handleClose();
+      }
     };
-    const handleScroll = () => onClose();
+    const handleScroll = () => handleClose();
     const handleResize = () => updatePosition();
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleClose();
     };
     document.addEventListener("click", handleClick, true);
     document.addEventListener("contextmenu", handleContextMenu, true);
@@ -105,20 +164,17 @@ export default function MovieCardContextMenu({
       document.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("resize", handleResize);
     };
-  }, [onClose, updatePosition]);
-
-  useEffect(() => {
-    ref.current?.focus();
-  }, []);
+  }, [handleClose, updatePosition]);
 
   const menu = (
     <div
       ref={ref}
-      className="movie-context-menu"
+      className={`movie-context-menu ${isExiting ? "movie-context-menu--exiting" : ""}`}
       style={{ left: position.left, top: position.top }}
       role="menu"
       tabIndex={-1}
       onContextMenu={(e) => e.preventDefault()}
+      onTransitionEnd={handleTransitionEnd}
     >
       <button
         type="button"
@@ -126,7 +182,7 @@ export default function MovieCardContextMenu({
         role="menuitem"
         onClick={() => {
           onScrapeMetadata();
-          onClose();
+          handleClose();
         }}
       >
         <span className="movie-context-menu-item-icon"><IconScrape /></span>
@@ -138,7 +194,7 @@ export default function MovieCardContextMenu({
         role="menuitem"
         onClick={() => {
           onRefreshMetadata();
-          onClose();
+          handleClose();
         }}
       >
         <span className="movie-context-menu-item-icon"><IconRefresh /></span>
@@ -150,7 +206,7 @@ export default function MovieCardContextMenu({
         role="menuitem"
         onClick={() => {
           onChangeImage();
-          onClose();
+          handleClose();
         }}
       >
         <span className="movie-context-menu-item-icon"><IconImage /></span>

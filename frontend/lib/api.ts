@@ -1,6 +1,7 @@
 export type Movie = {
   item_id: number;
   title: string;
+  scraped_title?: string;
   genres: string;
   poster_url?: string;
   backdrop_url?: string;
@@ -39,6 +40,17 @@ export function displayMovieTitle(title: string): string {
   return s;
 }
 
+type MovieTitleLike = Pick<Movie, "title" | "scraped_title">;
+
+export function preferredMovieTitle(movie: MovieTitleLike): string {
+  const scraped = (movie.scraped_title ?? "").trim();
+  return scraped || movie.title;
+}
+
+export function displayMovieName(movie: MovieTitleLike): string {
+  return displayMovieTitle(preferredMovieTitle(movie));
+}
+
 export async function getMovies(
   limit = 50,
   offset = 0,
@@ -63,7 +75,11 @@ export async function getMovies(
     throw new Error(`Failed to fetch movies: ${msg}`);
   }
   const data = await res.json();
-  const items = (data.items ?? []).map((m: Movie) => ({ ...m, title: formatTitle(m.title) }));
+  const items = (data.items ?? []).map((m: Movie) => ({
+    ...m,
+    title: formatTitle(m.title),
+    scraped_title: m.scraped_title ? formatTitle(m.scraped_title) : "",
+  }));
   return { items, total: data.total ?? 0 };
 }
 
@@ -72,8 +88,17 @@ export async function getMovieDetail(itemId: number): Promise<{ movie: Movie; si
   const res = await fetch(`${API_BASE}/movie/${itemId}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch movie detail.");
   const data = await res.json();
-  if (data.movie) data.movie.title = formatTitle(data.movie.title);
-  if (data.similar) data.similar = data.similar.map((m: Recommendation) => ({ ...m, title: formatTitle(m.title) }));
+  if (data.movie) {
+    data.movie.title = formatTitle(data.movie.title);
+    data.movie.scraped_title = data.movie.scraped_title ? formatTitle(data.movie.scraped_title) : "";
+  }
+  if (data.similar) {
+    data.similar = data.similar.map((m: Recommendation) => ({
+      ...m,
+      title: formatTitle(m.title),
+      scraped_title: m.scraped_title ? formatTitle(m.scraped_title) : "",
+    }));
+  }
   return data;
 }
 
@@ -98,7 +123,11 @@ export async function getUserHistory(userId: number, fetchAll: boolean = false):
   }
   const data = await res.json();
   const history = data.history ?? [];
-  return history.map((h: any) => ({ ...h, title: formatTitle(h.title) }));
+  return history.map((h: any) => ({
+    ...h,
+    title: formatTitle(h.title),
+    scraped_title: h.scraped_title ? formatTitle(h.scraped_title) : "",
+  }));
 }
 
 export async function getRecommendations(userId: number, n: number = 10): Promise<Recommendation[]> {
@@ -110,7 +139,11 @@ export async function getRecommendations(userId: number, n: number = 10): Promis
   }
   const data = await res.json();
   const recs = data.recommendations ?? [];
-  return recs.map((r: Recommendation) => ({ ...r, title: formatTitle(r.title) }));
+  return recs.map((r: Recommendation) => ({
+    ...r,
+    title: formatTitle(r.title),
+    scraped_title: r.scraped_title ? formatTitle(r.scraped_title) : "",
+  }));
 }
 
 export async function searchMovies(query: string): Promise<Movie[]> {
@@ -119,7 +152,11 @@ export async function searchMovies(query: string): Promise<Movie[]> {
   if (!res.ok) throw new Error("Failed to search movies.");
   const data = await res.json();
   const items = data.items ?? [];
-  return items.map((m: Movie) => ({ ...m, title: formatTitle(m.title) }));
+  return items.map((m: Movie) => ({
+    ...m,
+    title: formatTitle(m.title),
+    scraped_title: m.scraped_title ? formatTitle(m.scraped_title) : "",
+  }));
 }
 
 export type TMDBSearchResult = {
@@ -158,14 +195,22 @@ export async function movieApplyScrape(
   posterUrl: string,
   backdropUrl: string,
   overview: string,
-  tmdbId?: number
+  tmdbId?: number,
+  scrapedTitle?: string
 ): Promise<void> {
-  const body: { poster_url: string; backdrop_url: string; overview: string; tmdb_id?: number } = {
+  const body: {
+    poster_url: string;
+    backdrop_url: string;
+    overview: string;
+    tmdb_id?: number;
+    scraped_title?: string;
+  } = {
     poster_url: posterUrl,
     backdrop_url: backdropUrl,
     overview,
   };
   if (tmdbId != null && tmdbId !== 0) body.tmdb_id = tmdbId;
+  if (scrapedTitle && scrapedTitle.trim()) body.scraped_title = scrapedTitle.trim();
   const res = await fetch(`${API_BASE}/movie/${itemId}/scrape`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

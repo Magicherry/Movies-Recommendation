@@ -457,7 +457,7 @@ export default function AppearanceSettings() {
                 : `Rec ${recCount} · Watch again ${watchAgainCount} · Trending ${trendingCount} · More ${moreLikeThisCount}. Expand to edit individually.`}
             </p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "nowrap" }}>
             <input
               type="range"
               min={MIN_COL}
@@ -476,7 +476,7 @@ export default function AppearanceSettings() {
               onChange={handleUnifiedInputChange}
               onBlur={handleUnifiedBlur}
               className="settings-number-input"
-              style={{ width: "72px" }}
+              style={{ width: "72px", flexShrink: 0 }}
               aria-label="All display counts"
             />
           </div>
@@ -492,7 +492,7 @@ export default function AppearanceSettings() {
             <h3>Recommendation Count</h3>
             <p>Number of movies in your personalized feed.</p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "nowrap" }}>
             <input
               type="range"
               min={MIN_REC}
@@ -511,7 +511,7 @@ export default function AppearanceSettings() {
               onChange={recHandlers.onInputChange}
               onBlur={(e) => recHandlers.onBlur(e, recCount)}
               className="settings-number-input"
-              style={{ width: "72px" }}
+              style={{ width: "72px", flexShrink: 0 }}
               aria-label="Recommendation count"
             />
           </div>
@@ -522,7 +522,7 @@ export default function AppearanceSettings() {
             <h3>Watch It Again</h3>
             <p>Max items in the Watch It Again row on the home page.</p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "nowrap" }}>
             <input
               type="range"
               min={MIN_COL}
@@ -541,7 +541,7 @@ export default function AppearanceSettings() {
               onChange={watchAgainHandlers.onInputChange}
               onBlur={(e) => watchAgainHandlers.onBlur(e, watchAgainCount)}
               className="settings-number-input"
-              style={{ width: "72px" }}
+              style={{ width: "72px", flexShrink: 0 }}
               aria-label="Watch It Again count"
             />
           </div>
@@ -552,7 +552,7 @@ export default function AppearanceSettings() {
             <h3>Trending Now</h3>
             <p>Max items in the Trending Now row on the home page.</p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "nowrap" }}>
             <input
               type="range"
               min={MIN_COL}
@@ -571,7 +571,7 @@ export default function AppearanceSettings() {
               onChange={trendingHandlers.onInputChange}
               onBlur={(e) => trendingHandlers.onBlur(e, trendingCount)}
               className="settings-number-input"
-              style={{ width: "72px" }}
+              style={{ width: "72px", flexShrink: 0 }}
               aria-label="Trending Now count"
             />
           </div>
@@ -582,7 +582,7 @@ export default function AppearanceSettings() {
             <h3>More Like This</h3>
             <p>Max items in the More Like This row on movie detail pages.</p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "nowrap" }}>
             <input
               type="range"
               min={MIN_COL}
@@ -601,7 +601,7 @@ export default function AppearanceSettings() {
               onChange={moreLikeThisHandlers.onInputChange}
               onBlur={(e) => moreLikeThisHandlers.onBlur(e, moreLikeThisCount)}
               className="settings-number-input"
-              style={{ width: "72px" }}
+              style={{ width: "72px", flexShrink: 0 }}
               aria-label="More Like This count"
             />
           </div>
@@ -620,7 +620,7 @@ export default function AppearanceSettings() {
             <h3>Slide Duration</h3>
             <p>Time between auto-advance transitions, in seconds.</p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "nowrap" }}>
             <input
               type="range"
               min={MIN_CAROUSEL_SECONDS}
@@ -639,7 +639,7 @@ export default function AppearanceSettings() {
               onChange={carouselIntervalHandlers.onInputChange}
               onBlur={(e) => carouselIntervalHandlers.onBlur(e, carouselIntervalSeconds)}
               className="settings-number-input"
-              style={{ width: "80px" }}
+              style={{ width: "80px", flexShrink: 0 }}
               aria-label="Carousel slide duration in seconds"
             />
           </div>
@@ -650,7 +650,7 @@ export default function AppearanceSettings() {
             <h3>Slide Count</h3>
             <p>How many movies are included in the home carousel.</p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "nowrap" }}>
             <input
               type="range"
               min={MIN_CAROUSEL_COUNT}
@@ -669,7 +669,7 @@ export default function AppearanceSettings() {
               onChange={carouselCountHandlers.onInputChange}
               onBlur={(e) => carouselCountHandlers.onBlur(e, carouselCount)}
               className="settings-number-input"
-              style={{ width: "80px" }}
+              style={{ width: "80px", flexShrink: 0 }}
               aria-label="Carousel slide count"
             />
           </div>

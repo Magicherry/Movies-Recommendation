@@ -27,8 +27,9 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
   const [isExiting, setIsExiting] = useState(false);
   const exitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [level, setLevel] = useState<1 | 2>(1);
+  const [level, setLevel] = useState<1 | 2 | 3>(1);
   const [level2Mode, setLevel2Mode] = useState<Level2Mode>("poster");
+  const [urlInput, setUrlInput] = useState("");
   const [posters, setPosters] = useState<TMDBImageItem[]>([]);
   const [backdrops, setBackdrops] = useState<TMDBImageItem[]>([]);
   const [imagesLoading, setImagesLoading] = useState(false);
@@ -100,6 +101,29 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
     setLevel2Mode("backdrop");
     setError(null);
   }, [hasStoredTmdbId, backdrops.length, imagesLoading]);
+
+  const openLevel3Poster = useCallback(() => {
+    setUrlInput(displayPoster || "");
+    setLevel(3);
+    setLevel2Mode("poster");
+    setError(null);
+  }, [displayPoster]);
+
+  const openLevel3Backdrop = useCallback(() => {
+    setUrlInput(displayBackdrop || "");
+    setLevel(3);
+    setLevel2Mode("backdrop");
+    setError(null);
+  }, [displayBackdrop]);
+
+  const handleApplyUrl = useCallback(() => {
+    if (level2Mode === "poster") {
+      setSelectedPosterUrl(urlInput.trim());
+    } else {
+      setSelectedBackdropUrl(urlInput.trim());
+    }
+    setLevel(1);
+  }, [level2Mode, urlInput]);
 
   const handlePickImage = useCallback((url: string) => {
     if (level2Mode === "poster") setSelectedPosterUrl(url);
@@ -226,7 +250,7 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
     >
       <div className={panelClass} onClick={(e) => e.stopPropagation()}>
         <div className="movie-modal-header">
-          {level === 2 && (
+          {level > 1 && (
             <button
               type="button"
               onClick={() => setLevel(1)}
@@ -239,7 +263,7 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
             </button>
           )}
           <h2 className="movie-modal-header-title">
-            {level === 1 ? "Change image" : level2Mode === "poster" ? "Choose cover" : "Choose backdrop"}
+            {level === 1 ? "Change image" : level === 2 ? (level2Mode === "poster" ? "Choose cover" : "Choose backdrop") : (level2Mode === "poster" ? "Enter cover URL" : "Enter backdrop URL")}
           </h2>
           <button
             type="button"
@@ -281,12 +305,18 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
                         onClick={openLevel2Poster}
                         disabled={imagesLoading || !hasStoredTmdbId || posters.length === 0}
                         className="change-image-card-icon-btn"
-                        title="Choose image"
-                        aria-label="Choose image"
+                        title="Search image"
+                        aria-label="Search image"
                       >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <circle cx="11" cy="11" r="8" />
                           <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                      </button>
+                      <button type="button" onClick={openLevel3Poster} className="change-image-card-icon-btn" title="Enter URL" aria-label="Enter URL">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                         </svg>
                       </button>
                       <button type="button" onClick={handleDiscardPoster} className="change-image-card-icon-btn" title="Remove cover" aria-label="Remove cover">
@@ -315,12 +345,18 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
                         onClick={openLevel2Backdrop}
                         disabled={imagesLoading || !hasStoredTmdbId || backdrops.length === 0}
                         className="change-image-card-icon-btn"
-                        title="Choose image"
-                        aria-label="Choose image"
+                        title="Search image"
+                        aria-label="Search image"
                       >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <circle cx="11" cy="11" r="8" />
                           <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                      </button>
+                      <button type="button" onClick={openLevel3Backdrop} className="change-image-card-icon-btn" title="Enter URL" aria-label="Enter URL">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                         </svg>
                       </button>
                       <button type="button" onClick={handleDiscardBackdrop} className="change-image-card-icon-btn" title="Remove backdrop" aria-label="Remove backdrop">
@@ -387,6 +423,37 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
               </div>
               {error && <p className="movie-modal-error">{error}</p>}
             </div>
+              </div>
+
+              <div className="change-image-panel change-image-panel--3">
+                <div className="change-image-body-scroll">
+                  <p className="movie-modal-intro">
+                    {level2Mode === "poster" ? "Enter a custom cover image URL." : "Enter a custom backdrop image URL."}
+                  </p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "16px" }}>
+                    <input 
+                      type="text" 
+                      value={urlInput} 
+                      onChange={(e) => setUrlInput(e.target.value)} 
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleApplyUrl();
+                        }
+                      }}
+                      placeholder="https://..." 
+                      className="movie-modal-input"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={handleApplyUrl} 
+                      className="movie-modal-btn movie-modal-btn-primary"
+                      style={{ alignSelf: "flex-end" }}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

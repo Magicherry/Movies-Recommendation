@@ -141,7 +141,7 @@ export default function AlgorithmSettings() {
       </div>
 
       {modelConfig?.metrics && (
-        <div className="model-metrics">
+        <div className="model-metrics settings-panel-strong">
           <h4>Current Model Metrics</h4>
           <div className="metrics-grid">
             <div className="metric-item">
@@ -162,7 +162,7 @@ export default function AlgorithmSettings() {
             </div>
           </div>
           
-          <div className="metrics-info settings-panel settings-panel-inset" style={{ marginTop: '24px', marginBottom: 0 }}>
+          <div className="metrics-info settings-panel-inset" style={{ marginTop: '24px', marginBottom: 0 }}>
             <h5 style={{ 
               margin: '0 0 12px 0', 
               fontWeight: 600, 
@@ -227,7 +227,7 @@ export default function AlgorithmSettings() {
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 400px' }}>
               <h4>Training History ({modelConfig.history.loss ? 'Loss' : 'RMSE'})</h4>
-              <div className="chart-wrapper chart-wrapper-fixed">
+              <div className="chart-wrapper chart-wrapper-fixed settings-chart-wrapper-strong">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={lossChartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />
@@ -261,7 +261,7 @@ export default function AlgorithmSettings() {
             {modelConfig.history.mae && modelConfig.history.val_mae && (
               <div style={{ flex: '1 1 400px' }}>
                 <h4>Training History (MAE)</h4>
-                <div className="chart-wrapper chart-wrapper-fixed">
+                <div className="chart-wrapper chart-wrapper-fixed settings-chart-wrapper-strong">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={maeChartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />
@@ -296,7 +296,7 @@ export default function AlgorithmSettings() {
             {modelConfig.history.rmse && modelConfig.history.val_rmse && (
               <div style={{ flex: '1 1 400px' }}>
                 <h4>Training History (RMSE)</h4>
-                <div className="chart-wrapper chart-wrapper-fixed">
+                <div className="chart-wrapper chart-wrapper-fixed settings-chart-wrapper-strong">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={rmseChartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />

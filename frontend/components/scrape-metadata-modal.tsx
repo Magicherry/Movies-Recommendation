@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { MovieCardItem } from "./movie-card-grid";
 import type { TMDBSearchResult } from "../lib/api";
-import { tmdbSearch, movieApplyScrape, displayMovieTitle } from "../lib/api";
+import { tmdbSearch, movieApplyScrape, displayMovieName, displayMovieTitle } from "../lib/api";
 
 /** Parse full title into search name and year; strip non-year parentheticals and trailing ", The". */
 function parseTitleAndYear(fullTitle: string): { name: string; year: string } {
@@ -82,7 +82,8 @@ export default function ScrapeMetadataModal({ movie, onClose, onSuccess }: Scrap
         selected.poster_url,
         selected.backdrop_url,
         selected.overview ?? "",
-        selected.tmdb_id
+        selected.tmdb_id,
+        selected.title
       );
       onSuccess();
       handleClose();
@@ -203,7 +204,7 @@ export default function ScrapeMetadataModal({ movie, onClose, onSuccess }: Scrap
                 </div>
                 <div className="dataset-info-row">
                   <span className="dataset-info-label">Title</span>
-                  <span className="dataset-info-value">{displayMovieTitle(movie.title)}</span>
+                  <span className="dataset-info-value">{displayMovieName(movie)}</span>
                 </div>
                 <div className="dataset-info-row">
                   <span className="dataset-info-label">Genres</span>
@@ -213,7 +214,7 @@ export default function ScrapeMetadataModal({ movie, onClose, onSuccess }: Scrap
 
               <div className="movie-modal-current-poster">
                 {movie.poster_url ? (
-                  <img src={movie.poster_url} alt={displayMovieTitle(movie.title)} />
+                  <img src={movie.poster_url} alt={displayMovieName(movie)} />
                 ) : (
                   <div className="movie-modal-poster-placeholder">No Poster</div>
                 )}

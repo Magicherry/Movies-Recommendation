@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getUserHistory, getRecommendations, displayMovieTitle } from "../../../lib/api";
+import { getUserHistory, getRecommendations, displayMovieName } from "../../../lib/api";
 import MovieCardGrid from "../../../components/movie-card-grid";
 import BackButton from "../../../components/back-button";
 import UserProfileActions from "../../../components/user-profile-actions";
@@ -172,7 +172,7 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
                       transition: "border-color 0.2s",
                       width: "fit-content"
                     }}>
-                      {displayMovieTitle(topMovie.title)}
+                      {displayMovieName(topMovie)}
                     </span>
                     <span style={{ color: "#facc15", fontWeight: 700, fontSize: "1.1rem" }}>★ {topMovie.rating}</span>
                   </div>

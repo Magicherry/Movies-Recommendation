@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Movie, displayMovieTitle } from "../lib/api";
+import { Movie, displayMovieName } from "../lib/api";
 
 export type HeroCarouselSource = "personalized" | "trending";
 
@@ -110,7 +110,7 @@ export default function HeroCarousel({ movies, source, sourceNote, autoAdvanceMs
           </span>
           {sourceNote ? <span className="hero-source-note">{sourceNote}</span> : null}
         </div>
-        <h1 className="hero-title">{displayMovieTitle(featured.title)}</h1>
+        <h1 className="hero-title">{displayMovieName(featured)}</h1>
         <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontWeight: 'bold', color: 'white' }}>{featured.title.match(/\((\d{4})\)$/)?.[1] || "Movie"}</span>
           <span>•</span>

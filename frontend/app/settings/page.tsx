@@ -7,7 +7,7 @@ import AlgorithmSettings from "./components/AlgorithmSettings";
 import DashboardStats from "./components/DashboardStats";
 import AccountSettings from "./components/AccountSettings";
 import AdvancedSettings from "./components/AdvancedSettings";
-import BackButton from "@/components/back-button";
+import BackButton from "../../components/back-button";
 
 const VALID_TABS = ["ui", "db", "model", "account", "advanced", "about"];
 

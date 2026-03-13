@@ -1,8 +1,9 @@
-import { getMovieDetail, displayMovieTitle } from "../../../lib/api";
+import { getMovieDetail, displayMovieName } from "../../../lib/api";
 import CollectionLimitGrid from "../../../components/collection-limit-grid";
 import BackButton from "../../../components/back-button";
 import PredictionDisplay from "../../../components/prediction-display";
 import RefreshOnEngineChange from "../../../components/refresh-on-engine-change";
+import MovieDetailActions from "../../../components/movie-detail-actions";
 
 type MovieDetailPageProps = {
   params: {
@@ -24,6 +25,7 @@ export default async function MovieDetailPage({ params }: MovieDetailPageProps) 
     <div className="page-transition">
       <RefreshOnEngineChange />
       <BackButton top="110px" />
+      <MovieDetailActions movie={data.movie} />
       <div className="hero-banner">
         <div
           className="hero-banner-bg"
@@ -37,8 +39,10 @@ export default async function MovieDetailPage({ params }: MovieDetailPageProps) 
         <div className="hero-banner-gradient" />
         
         <div className="hero-content">
-          <h1 className="hero-title">{displayMovieTitle(data.movie.title)}</h1>
-          <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <h1 className="hero-title" style={{ margin: 0 }}>{displayMovieName(data.movie)}</h1>
+          </div>
+          <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
             <span style={{ fontWeight: 'bold', color: 'white' }}>{data.movie.title.match(/\((\d{4})\)$/)?.[1] || "Movie"}</span>
             <span>•</span>
             <span>{data.movie.genres.replace(/\|/g, " • ")}</span>

@@ -1,12 +1,12 @@
 "use client";
 
-import { useRef, useCallback, memo, useState } from "react";
+import { useRef, useCallback, memo, useState, useEffect } from "react";
 import NextLink from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import MovieCardContextMenu from "./movie-card-context-menu";
 import ScrapeMetadataModal from "./scrape-metadata-modal";
 import ChangeImageModal from "./change-image-modal";
-import { movieRefreshMetadata, displayMovieTitle } from "../lib/api";
+import { movieRefreshMetadata, displayMovieName } from "../lib/api";
 
 export type MovieCardItem = {
   item_id: number;
@@ -17,6 +17,7 @@ export type MovieCardItem = {
   backdrop_url?: string;
   overview?: string;
   tmdb_id?: number | string;
+  scraped_title?: string;
 };
 
 type MovieCardGridProps = {
@@ -68,7 +69,7 @@ const MovieCard = memo(function MovieCard({
         style={{ background: movie.poster_url ? "none" : getGradient(movie.item_id) }}
       >
         {movie.poster_url && (
-          <img src={movie.poster_url} alt={displayMovieTitle(movie.title)} loading="lazy" className="poster-img" />
+          <img src={movie.poster_url} alt={displayMovieName(movie)} loading="lazy" className="poster-img" />
         )}
         <div className="poster-overlay" />
         <div className="poster-info-overlay">
@@ -84,12 +85,13 @@ const MovieCard = memo(function MovieCard({
           {showScore && typeof movie.score === "number" && (
             <span className="poster-score">
               {scoreLabel}: {(movie.score).toFixed(2)}
+              {scoreLabel === "Rating" ? "/5.00" : scoreLabel === "Match" || scoreLabel === "Match Score" ? "/5.00" : scoreLabel === "Similarity" ? "/1.00" : ""}
             </span>
           )}
         </div>
       </div>
       <div className="poster-footer">
-        <h3 className="poster-title">{displayMovieTitle(movie.title)}</h3>
+        <h3 className="poster-title">{displayMovieName(movie)}</h3>
         {metaText ? <span className="poster-year">{metaText}</span> : null}
       </div>
       {(isRefreshing || isFading) && (
@@ -129,6 +131,8 @@ export default function MovieCardGrid({
   const [refreshingItemId, setRefreshingItemId] = useState<number | null>(null);
   const [fadingItemId, setFadingItemId] = useState<number | null>(null);
   const [imageOverrides, setImageOverrides] = useState<Record<number, { poster_url: string; backdrop_url: string }>>({});
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
   const withImageOverrides = useCallback((movie: MovieCardItem): MovieCardItem => {
     const override = imageOverrides[movie.item_id];
@@ -207,6 +211,43 @@ export default function MovieCardGrid({
     }
   }, []);
 
+  const updateScrollState = useCallback(() => {
+    const row = rowRef.current;
+    if (!row) {
+      setCanScrollLeft(false);
+      setCanScrollRight(false);
+      return;
+    }
+    const maxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
+    const epsilon = 1;
+    setCanScrollLeft(row.scrollLeft > epsilon);
+    setCanScrollRight(row.scrollLeft < maxScrollLeft - epsilon);
+  }, []);
+
+  useEffect(() => {
+    if (!rowMode) return;
+    const row = rowRef.current;
+    if (!row) return;
+
+    const onRecalculate = () => updateScrollState();
+    row.addEventListener("scroll", onRecalculate, { passive: true });
+    window.addEventListener("resize", onRecalculate);
+
+    const resizeObserver = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(onRecalculate)
+      : null;
+    resizeObserver?.observe(row);
+
+    const rafId = window.requestAnimationFrame(onRecalculate);
+
+    return () => {
+      row.removeEventListener("scroll", onRecalculate);
+      window.removeEventListener("resize", onRecalculate);
+      resizeObserver?.disconnect();
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [rowMode, items.length, updateScrollState]);
+
   if (items.length === 0) {
     return <p style={{ color: "var(--text-subtle)", padding: "0 4vw" }}>{emptyMessage}</p>;
   }
@@ -230,12 +271,12 @@ export default function MovieCardGrid({
               </svg>
             </div>
             <div className="row-controls">
-              <button className="row-scroll-btn" onClick={scrollLeft} aria-label="Scroll left">
+              <button className="row-scroll-btn" onClick={scrollLeft} aria-label="Scroll left" disabled={!canScrollLeft}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="15 18 9 12 15 6"></polyline>
                 </svg>
               </button>
-              <button className="row-scroll-btn" onClick={scrollRight} aria-label="Scroll right">
+              <button className="row-scroll-btn" onClick={scrollRight} aria-label="Scroll right" disabled={!canScrollRight}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
@@ -243,29 +284,31 @@ export default function MovieCardGrid({
             </div>
           </div>
         )}
-        <div className="card-row" ref={rowRef}>
-          {items.map((movie) => {
-            const mergedMovie = withImageOverrides(movie);
-            return (
-            <div
-              key={movie.item_id}
-              className="movie-card-wrapper"
-              onContextMenu={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setContextMenu({ x: e.clientX, y: e.clientY, movie: mergedMovie });
-              }}
-              style={{ position: "relative" }}
-            >
-              <MovieCard
-                movie={mergedMovie}
-                scoreLabel={scoreLabel}
-                showScore={typeof movie.score === "number"}
-                isRefreshing={refreshingItemId === movie.item_id}
-                isFading={fadingItemId === movie.item_id}
-              />
-            </div>
-          )})}
+        <div className="card-row-container">
+          <div className="card-row" ref={rowRef}>
+            {items.map((movie) => {
+              const mergedMovie = withImageOverrides(movie);
+              return (
+              <div
+                key={movie.item_id}
+                className="movie-card-wrapper"
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setContextMenu({ x: e.clientX, y: e.clientY, movie: mergedMovie });
+                }}
+                style={{ position: "relative" }}
+              >
+                <MovieCard
+                  movie={mergedMovie}
+                  scoreLabel={scoreLabel}
+                  showScore={typeof movie.score === "number"}
+                  isRefreshing={refreshingItemId === movie.item_id}
+                  isFading={fadingItemId === movie.item_id}
+                />
+              </div>
+            )})}
+          </div>
         </div>
       </div>
       {contextMenu && (
