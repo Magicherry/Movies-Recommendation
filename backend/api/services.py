@@ -82,13 +82,30 @@ class RecommenderService:
             
             if enriched_movies_path.exists():
                 self.movies = pd.read_csv(enriched_movies_path)
-                # Fill NaN with empty string
-                self.movies.fillna("", inplace=True)
             else:
                 self.movies = pd.read_csv(movies_path)
-            
+
+            text_cols = ("poster_url", "backdrop_url", "overview", "tmdb_id")
+            for col in text_cols:
+                if col not in self.movies.columns:
+                    self.movies[col] = ""
+                # Normalize to string dtype to avoid float/object mismatch when writing updates.
+                self.movies[col] = self.movies[col].astype("string").fillna("")
+
+            # Fill only existing object columns with "" and keep numeric columns untouched.
+            for col in self.movies.columns:
+                if col not in text_cols and pd.api.types.is_object_dtype(self.movies[col]):
+                    self.movies[col] = self.movies[col].fillna("")
+
             self.movie_lookup = {}
             for row in self.movies.itertuples(index=False):
+                raw_tmdb_id = getattr(row, "tmdb_id", "")
+                if pd.isna(raw_tmdb_id):
+                    norm_tmdb_id = ""
+                elif isinstance(raw_tmdb_id, float) and raw_tmdb_id.is_integer():
+                    norm_tmdb_id = str(int(raw_tmdb_id))
+                else:
+                    norm_tmdb_id = str(raw_tmdb_id).strip()
                 self.movie_lookup[int(row.item_id)] = {
                     "item_id": int(row.item_id),
                     "title": row.title,
@@ -96,6 +113,7 @@ class RecommenderService:
                     "poster_url": getattr(row, "poster_url", ""),
                     "backdrop_url": getattr(row, "backdrop_url", ""),
                     "overview": getattr(row, "overview", ""),
+                    "tmdb_id": norm_tmdb_id,
                 }
             
             if train_ratings_path.exists():
@@ -108,7 +126,7 @@ class RecommenderService:
                     if uid not in self.user_history:
                         self.user_history[uid] = []
                     
-                    meta = self.movie_lookup.get(iid, {"item_id": iid, "title": "Unknown", "genres": "", "poster_url": "", "backdrop_url": "", "overview": ""})
+                    meta = self.movie_lookup.get(iid, {"item_id": iid, "title": "Unknown", "genres": "", "poster_url": "", "backdrop_url": "", "overview": "", "tmdb_id": ""})
                     self.user_history[uid].append({
                         "item_id": iid,
                         "title": meta["title"],
@@ -116,6 +134,7 @@ class RecommenderService:
                         "poster_url": meta["poster_url"],
                         "backdrop_url": meta["backdrop_url"],
                         "overview": meta["overview"],
+                        "tmdb_id": meta.get("tmdb_id", ""),
                         "rating": float(row.rating),
                     })
                 
@@ -143,7 +162,17 @@ class RecommenderService:
         frame = self.movies
 
         if query:
-            frame = frame[frame["title"].str.lower().str.contains(query.strip().lower(), na=False)]
+            q = query.strip().lower()
+            title_lower = frame["title"].str.lower()
+            title_normalized = (
+                frame["title"]
+                .str.replace(r"\s*\([^)]*\)\s*", " ", regex=True)
+                .str.replace(r"\s+", " ", regex=True)
+                .str.strip()
+                .str.lower()
+            )
+            mask = title_lower.str.contains(q, na=False, regex=False) | title_normalized.str.contains(q, na=False, regex=False)
+            frame = frame[mask]
         
         if genre:
             for g in genre.strip().split("|"):
@@ -197,7 +226,16 @@ class RecommenderService:
         q = query.strip().lower()
         if not q:
             return []
-        frame = self.movies[self.movies["title"].str.lower().str.contains(q, na=False)].head(limit)
+        title_lower = self.movies["title"].str.lower()
+        title_normalized = (
+            self.movies["title"]
+            .str.replace(r"\s*\([^)]*\)\s*", " ", regex=True)
+            .str.replace(r"\s+", " ", regex=True)
+            .str.strip()
+            .str.lower()
+        )
+        mask = title_lower.str.contains(q, na=False, regex=False) | title_normalized.str.contains(q, na=False, regex=False)
+        frame = self.movies[mask].head(limit)
         return frame.to_dict(orient="records")
 
     def predict_rating(self, user_id: int, item_id: int) -> Dict[str, Any]:
@@ -217,7 +255,7 @@ class RecommenderService:
         recs = model.recommend_top_n(user_id=user_id, n=n, exclude_seen=True)
         enriched = []
         for rec in recs:
-            meta = self.movie_lookup.get(rec.item_id, {"item_id": rec.item_id, "title": "Unknown", "genres": "", "poster_url": "", "backdrop_url": "", "overview": ""})
+            meta = self.movie_lookup.get(rec.item_id, {"item_id": rec.item_id, "title": "Unknown", "genres": "", "poster_url": "", "backdrop_url": "", "overview": "", "tmdb_id": ""})
             enriched.append(
                 {
                     "item_id": int(rec.item_id),
@@ -226,6 +264,7 @@ class RecommenderService:
                     "poster_url": meta.get("poster_url", ""),
                     "backdrop_url": meta.get("backdrop_url", ""),
                     "overview": meta.get("overview", ""),
+                    "tmdb_id": meta.get("tmdb_id", ""),
                     "score": float(rec.score),
                 }
             )
@@ -237,7 +276,7 @@ class RecommenderService:
         recs = model.similar_items(item_id=item_id, n=n)
         enriched = []
         for rec in recs:
-            meta = self.movie_lookup.get(rec.item_id, {"item_id": rec.item_id, "title": "Unknown", "genres": "", "poster_url": "", "backdrop_url": "", "overview": ""})
+            meta = self.movie_lookup.get(rec.item_id, {"item_id": rec.item_id, "title": "Unknown", "genres": "", "poster_url": "", "backdrop_url": "", "overview": "", "tmdb_id": ""})
             enriched.append(
                 {
                     "item_id": int(rec.item_id),
@@ -246,6 +285,7 @@ class RecommenderService:
                     "poster_url": meta.get("poster_url", ""),
                     "backdrop_url": meta.get("backdrop_url", ""),
                     "overview": meta.get("overview", ""),
+                    "tmdb_id": meta.get("tmdb_id", ""),
                     "score": float(rec.score),
                 }
             )
@@ -371,5 +411,46 @@ class RecommenderService:
             self.active_model_name = model_name
             return True
         return False
+
+    def update_movie_enriched(
+        self,
+        item_id: int,
+        poster_url: str | None = None,
+        backdrop_url: str | None = None,
+        overview: str | None = None,
+        tmdb_id: int | None = None,
+    ) -> bool:
+        """Update one movie's enriched fields and persist to movies_enriched.csv."""
+        self._ensure_loaded()
+        if self.movies is None or item_id not in self.movie_lookup:
+            return False
+        for col in ("poster_url", "backdrop_url", "overview", "tmdb_id"):
+            if col not in self.movies.columns:
+                self.movies[col] = ""
+        row = self.movie_lookup[item_id]
+        if poster_url is not None:
+            row["poster_url"] = poster_url
+            idx = self.movies[self.movies["item_id"] == item_id].index
+            if len(idx) > 0:
+                self.movies.at[idx[0], "poster_url"] = poster_url
+        if backdrop_url is not None:
+            row["backdrop_url"] = backdrop_url
+            idx = self.movies[self.movies["item_id"] == item_id].index
+            if len(idx) > 0:
+                self.movies.at[idx[0], "backdrop_url"] = backdrop_url
+        if overview is not None:
+            row["overview"] = overview
+            idx = self.movies[self.movies["item_id"] == item_id].index
+            if len(idx) > 0:
+                self.movies.at[idx[0], "overview"] = overview
+        if tmdb_id is not None:
+            val = str(tmdb_id) if tmdb_id else ""
+            row["tmdb_id"] = val
+            idx = self.movies[self.movies["item_id"] == item_id].index
+            if len(idx) > 0:
+                self.movies.at[idx[0], "tmdb_id"] = val
+        out_path = self.artifacts_dir / "movies_enriched.csv"
+        self.movies.to_csv(out_path, index=False)
+        return True
 
 service = RecommenderService()

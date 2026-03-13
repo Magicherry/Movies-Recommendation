@@ -5,6 +5,7 @@ export type Movie = {
   poster_url?: string;
   backdrop_url?: string;
   overview?: string;
+  tmdb_id?: number | string;
 };
 
 export type Recommendation = Movie & {
@@ -46,7 +47,11 @@ export async function getMovies(
 
   logApiCall('/movies', params.toString());
   const res = await fetch(`${API_BASE}/movies?${params.toString()}`, { cache: "no-store" });
-  if (!res.ok) throw new Error("Failed to fetch movies.");
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    const msg = (errBody as { error?: string }).error || res.statusText || `HTTP ${res.status}`;
+    throw new Error(`Failed to fetch movies: ${msg}`);
+  }
   const data = await res.json();
   const items = (data.items ?? []).map((m: Movie) => ({ ...m, title: formatTitle(m.title) }));
   return { items, total: data.total ?? 0 };
@@ -69,7 +74,11 @@ export async function getUsers(limit = 50, offset = 0): Promise<{ items: { user_
   return await res.json();
 }
 
-export async function getUserHistory(userId: number, fetchAll: boolean = false): Promise<{ item_id: number; title: string; genres: string; rating: number }[]> {
+export type HistoryItem = Movie & {
+  rating: number;
+};
+
+export async function getUserHistory(userId: number, fetchAll: boolean = false): Promise<HistoryItem[]> {
   const url = fetchAll ? `${API_BASE}/user/${userId}/history?all=1` : `${API_BASE}/user/${userId}/history`;
   logApiCall(`/user/${userId}/history`, { fetchAll });
   const res = await fetch(url, { cache: "no-store" });
@@ -101,4 +110,82 @@ export async function searchMovies(query: string): Promise<Movie[]> {
   const data = await res.json();
   const items = data.items ?? [];
   return items.map((m: Movie) => ({ ...m, title: formatTitle(m.title) }));
+}
+
+export type TMDBSearchResult = {
+  tmdb_id: number;
+  title: string;
+  release_date: string;
+  overview: string;
+  poster_url: string;
+  backdrop_url: string;
+};
+
+export async function tmdbSearch(query: string, year?: string): Promise<{ results: TMDBSearchResult[] }> {
+  const params = new URLSearchParams({ q: query });
+  if (year) params.append("year", year);
+  const res = await fetch(`${API_BASE}/tmdb/search?${params.toString()}`, { cache: "no-store" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || "TMDB search failed.");
+  }
+  return res.json();
+}
+
+export type TMDBImageItem = { file_path: string; url: string; vote_average: number; width: number; height: number };
+
+export async function tmdbMovieImages(tmdbId: number): Promise<{ posters: TMDBImageItem[]; backdrops: TMDBImageItem[] }> {
+  const res = await fetch(`${API_BASE}/tmdb/movie/${tmdbId}/images`, { cache: "no-store" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || "Failed to load images.");
+  }
+  return res.json();
+}
+
+export async function movieApplyScrape(
+  itemId: number,
+  posterUrl: string,
+  backdropUrl: string,
+  overview: string,
+  tmdbId?: number
+): Promise<void> {
+  const body: { poster_url: string; backdrop_url: string; overview: string; tmdb_id?: number } = {
+    poster_url: posterUrl,
+    backdrop_url: backdropUrl,
+    overview,
+  };
+  if (tmdbId != null && tmdbId !== 0) body.tmdb_id = tmdbId;
+  const res = await fetch(`${API_BASE}/movie/${itemId}/scrape`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || "Failed to apply metadata.");
+  }
+}
+
+export async function movieRefreshMetadata(itemId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/movie/${itemId}/refresh-metadata`, { method: "POST" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string; message?: string }).message || (data as { error?: string }).error || "Refresh failed.");
+  }
+}
+
+export async function movieUpdateImages(itemId: number, posterUrl?: string, backdropUrl?: string): Promise<void> {
+  const body: { poster_url?: string; backdrop_url?: string } = {};
+  if (posterUrl !== undefined) body.poster_url = posterUrl;
+  if (backdropUrl !== undefined) body.backdrop_url = backdropUrl;
+  const res = await fetch(`${API_BASE}/movie/${itemId}/images`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || "Failed to update images.");
+  }
 }

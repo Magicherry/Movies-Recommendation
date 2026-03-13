@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 interface ModelConfig {
@@ -28,6 +28,7 @@ export default function AlgorithmSettings() {
   const [trendingCount, setTrendingCount] = useState(15);
   const [moreLikeThisCount, setMoreLikeThisCount] = useState(15);
   const [countsExpanded, setCountsExpanded] = useState(false);
+  const [chartsMounted, setChartsMounted] = useState(false);
 
   const MIN_REC = 5;
   const MAX_REC = 100;
@@ -36,6 +37,18 @@ export default function AlgorithmSettings() {
   const MAX_COL = 100;
   const STEP_COL = 5;
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
+
+  const fetchModelConfig = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/model-config`);
+      if (res.ok) {
+        const data = await res.json();
+        setModelConfig(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch model config", err);
+    }
+  }, [API_BASE]);
 
   useEffect(() => {
     fetchModelConfig();
@@ -60,21 +73,16 @@ export default function AlgorithmSettings() {
       const val = parseInt(savedMoreLikeThis, 10);
       if (!isNaN(val)) setMoreLikeThisCount(Math.min(MAX_COL, Math.max(MIN_COL, val)));
     }
+  }, [fetchModelConfig]);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      setChartsMounted(true);
+    });
+    return () => cancelAnimationFrame(id);
   }, []);
 
-  const fetchModelConfig = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/model-config`);
-      if (res.ok) {
-        const data = await res.json();
-        setModelConfig(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch model config", err);
-    }
-  };
-
-  const handleModelChange = async (modelName: string) => {
+  const handleModelChange = useCallback(async (modelName: string) => {
     if (modelName === modelConfig?.active_model) return;
     
     setIsChangingModel(true);
@@ -104,15 +112,15 @@ export default function AlgorithmSettings() {
     } finally {
       setIsChangingModel(false);
     }
-  };
+  }, [modelConfig?.active_model, API_BASE, fetchModelConfig]);
 
-  const handleRecCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRecCountChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseInt(e.target.value, 10);
     setRecCount(val);
     localStorage.setItem("streamx-rec-count", val.toString());
-  };
+  }, []);
 
-  const handleRecCountInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRecCountInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
     if (raw === "") return;
     const val = parseInt(raw, 10);
@@ -121,18 +129,18 @@ export default function AlgorithmSettings() {
       setRecCount(clamped);
       localStorage.setItem("streamx-rec-count", clamped.toString());
     }
-  };
+  }, []);
 
-  const handleRecCountInputBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+  const handleRecCountInputBlur = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
     const val = parseInt(e.target.value, 10);
     if (isNaN(val) || val < MIN_REC || val > MAX_REC) {
       const fallback = Math.min(MAX_REC, Math.max(MIN_REC, recCount));
       setRecCount(fallback);
       localStorage.setItem("streamx-rec-count", fallback.toString());
     }
-  };
+  }, [recCount]);
 
-  const makeCollectionHandlers = (
+  const makeCollectionHandlers = useCallback((
     setter: React.Dispatch<React.SetStateAction<number>>,
     key: string
   ) => ({
@@ -159,11 +167,11 @@ export default function AlgorithmSettings() {
         localStorage.setItem(key, fallback.toString());
       }
     },
-  });
+  }), []);
 
-  const watchAgainHandlers = makeCollectionHandlers(setWatchAgainCount, "streamx-watch-again-count");
-  const trendingHandlers = makeCollectionHandlers(setTrendingCount, "streamx-trending-count");
-  const moreLikeThisHandlers = makeCollectionHandlers(setMoreLikeThisCount, "streamx-more-like-this-count");
+  const watchAgainHandlers = useMemo(() => makeCollectionHandlers(setWatchAgainCount, "streamx-watch-again-count"), [makeCollectionHandlers]);
+  const trendingHandlers = useMemo(() => makeCollectionHandlers(setTrendingCount, "streamx-trending-count"), [makeCollectionHandlers]);
+  const moreLikeThisHandlers = useMemo(() => makeCollectionHandlers(setMoreLikeThisCount, "streamx-more-like-this-count"), [makeCollectionHandlers]);
 
   // Unified value when collapsed: use recCount as display; when changed, sync all four (5–100)
   const unifiedCount = recCount;
@@ -197,6 +205,25 @@ export default function AlgorithmSettings() {
     recCount === watchAgainCount &&
     watchAgainCount === trendingCount &&
     trendingCount === moreLikeThisCount;
+
+  const lossChartData = useMemo(() => {
+    const h = modelConfig?.history;
+    if (!h) return [];
+    if (h.loss) return h.loss.map((l, i) => ({ epoch: i + 1, loss: l, val_loss: h.val_loss?.[i] }));
+    return h.train_rmse?.map((r, i) => ({ epoch: i + 1, loss: r, val_loss: h.train_mae?.[i] })) || [];
+  }, [modelConfig?.history]);
+
+  const maeChartData = useMemo(() => {
+    const h = modelConfig?.history;
+    if (!h?.mae) return [];
+    return h.mae.map((m, i) => ({ epoch: i + 1, mae: m, val_mae: h.val_mae?.[i] }));
+  }, [modelConfig?.history]);
+
+  const rmseChartData = useMemo(() => {
+    const h = modelConfig?.history;
+    if (!h?.rmse) return [];
+    return h.rmse.map((r, i) => ({ epoch: i + 1, rmse: r, val_rmse: h.val_rmse?.[i] }));
+  }, [modelConfig?.history]);
 
   return (
     <section className="settings-card">
@@ -544,26 +571,14 @@ export default function AlgorithmSettings() {
         </div>
       )}
 
-      {modelConfig?.history && (
+      {modelConfig?.history && chartsMounted && (
         <div className="model-history">
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 400px' }}>
               <h4>Training History ({modelConfig.history.loss ? 'Loss' : 'RMSE'})</h4>
               <div className="chart-wrapper chart-wrapper-fixed">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={
-                    modelConfig.history.loss 
-                      ? modelConfig.history.loss.map((l, i) => ({
-                          epoch: i + 1,
-                          loss: l,
-                          val_loss: modelConfig.history!.val_loss?.[i]
-                        }))
-                      : modelConfig.history.train_rmse?.map((r, i) => ({
-                          epoch: i + 1,
-                          loss: r, // Map RMSE to 'loss' for the chart
-                          val_loss: modelConfig.history!.train_mae?.[i] // Map MAE to 'val_loss' to show two lines
-                        })) || []
-                  }>
+                  <LineChart data={lossChartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />
                     <XAxis dataKey="epoch" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                     <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} domain={['auto', 'auto']} />
@@ -597,13 +612,7 @@ export default function AlgorithmSettings() {
                 <h4>Training History (MAE)</h4>
                 <div className="chart-wrapper chart-wrapper-fixed">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={
-                      modelConfig.history.mae.map((m, i) => ({
-                        epoch: i + 1,
-                        mae: m,
-                        val_mae: modelConfig.history!.val_mae?.[i]
-                      }))
-                    }>
+                    <LineChart data={maeChartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />
                       <XAxis dataKey="epoch" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                       <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} domain={['auto', 'auto']} />
@@ -638,13 +647,7 @@ export default function AlgorithmSettings() {
                 <h4>Training History (RMSE)</h4>
                 <div className="chart-wrapper chart-wrapper-fixed">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={
-                      modelConfig.history.rmse.map((r, i) => ({
-                        epoch: i + 1,
-                        rmse: r,
-                        val_rmse: modelConfig.history!.val_rmse?.[i]
-                      }))
-                    }>
+                    <LineChart data={rmseChartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />
                       <XAxis dataKey="epoch" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
                       <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} domain={['auto', 'auto']} />

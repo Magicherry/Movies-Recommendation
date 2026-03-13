@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import AppNavbar from "../components/navbar";
 import { UserProvider } from "../context/user-context";
 import ScrollToTop from "../components/scroll-to-top";
+import ThemeSync from "../components/theme-sync";
 
 export const metadata: Metadata = {
   title: "StreamX | Personalized Movie Recommendations",
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" className="dark">
       <body>
         <UserProvider>
+          <ThemeSync />
           <Suspense fallback={null}>
             <AppNavbar />
           </Suspense>

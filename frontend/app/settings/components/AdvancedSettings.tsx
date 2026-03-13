@@ -46,9 +46,9 @@ export default function AdvancedSettings() {
             width: '10px', 
             height: '10px', 
             borderRadius: '50%', 
-            backgroundColor: apiStatus === 'online' ? 'var(--brand)' : apiStatus === 'offline' ? '#ef4444' : '#f59e0b' 
+            backgroundColor: apiStatus === 'online' ? '#6ae100' : apiStatus === 'offline' ? '#ef4444' : '#f59e0b' 
           }}></span>
-          <span style={{ fontWeight: 600, textTransform: 'capitalize', color: apiStatus === 'online' ? 'var(--brand)' : apiStatus === 'offline' ? '#ef4444' : '#f59e0b' }}>
+          <span style={{ fontWeight: 600, textTransform: 'capitalize', color: apiStatus === 'online' ? '#6ae100' : apiStatus === 'offline' ? '#ef4444' : '#f59e0b' }}>
             {apiStatus}
           </span>
           <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.85rem', marginLeft: '12px' }} onClick={checkApi}>

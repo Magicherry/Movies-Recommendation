@@ -20,7 +20,7 @@ scrape_state = {
     "message": ""
 }
 
-def run_scrape_thread(api_key: str):
+def run_scrape_thread(api_key: str, refresh: bool = False):
     global scrape_state
     scrape_state["status"] = "running"
     scrape_state["processed"] = 0
@@ -34,9 +34,13 @@ def run_scrape_thread(api_key: str):
     if api_key:
         env["TMDB_API_KEY"] = api_key
 
+    cmd = ["python", str(script_path)]
+    if refresh:
+        cmd.append("--refresh")
+
     try:
         process = subprocess.Popen(
-            ["python", str(script_path)],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -237,10 +241,12 @@ def scrape_start(request: HttpRequest) -> JsonResponse:
     try:
         body = json.loads(request.body)
         api_key = body.get("api_key", "")
+        refresh = body.get("refresh") is True
     except json.JSONDecodeError:
         api_key = ""
+        refresh = False
         
-    thread = threading.Thread(target=run_scrape_thread, args=(api_key,))
+    thread = threading.Thread(target=run_scrape_thread, args=(api_key, refresh))
     thread.daemon = True
     thread.start()
     
@@ -279,6 +285,265 @@ def scrape_key(request: HttpRequest) -> JsonResponse:
         api_key = ""
         
     return JsonResponse({"api_key": api_key})
+
+def _get_tmdb_api_key() -> str:
+    from pathlib import Path
+    project_root = Path(__file__).resolve().parents[2]
+    env_path = project_root / ".env"
+    api_key = ""
+    if env_path.exists():
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    if key.strip() == "TMDB_API_KEY":
+                        api_key = val.strip().strip("'\"")
+                        break
+    if not api_key:
+        api_key = os.environ.get("TMDB_API_KEY", "")
+    if api_key == "your_real_api_key_here":
+        api_key = ""
+    return api_key
+
+
+@require_GET
+def tmdb_search(request: HttpRequest) -> JsonResponse:
+    """Search TMDB by query and optional year. Returns list of results for user to pick."""
+    query = request.GET.get("q", "").strip()
+    if not query:
+        return _error("Missing query parameter: q", status=400)
+    year = request.GET.get("year", "").strip()
+    api_key = _get_tmdb_api_key()
+    if not api_key:
+        return _error("TMDB API key not configured. Set it in Settings.", status=503)
+    import requests
+    url = "https://api.themoviedb.org/3/search/movie"
+    base_params = {"api_key": api_key, "query": query}
+    use_year = bool(year and len(year) == 4 and year.isdigit())
+
+    def fetch_results(with_year: bool):
+        params = dict(base_params)
+        if with_year and use_year:
+            params["primary_release_year"] = year
+        resp = requests.get(url, params=params, timeout=8)
+        data = resp.json()
+        return resp, data
+
+    try:
+        resp, data = fetch_results(with_year=True)
+        results = data.get("results", [])
+        # Fallback: if strict year yields nothing, retry without year filter.
+        if resp.status_code == 200 and use_year and not results:
+            resp, data = fetch_results(with_year=False)
+    except Exception as e:
+        return _error(f"TMDB request failed: {e}", status=502)
+    if resp.status_code != 200:
+        return _error(data.get("status_message", "TMDB error"), status=502)
+    results = (data.get("results") or [])[:15]
+    out = []
+    for r in results:
+        poster_path = r.get("poster_path") or ""
+        backdrop_path = r.get("backdrop_path") or ""
+        out.append({
+            "tmdb_id": r.get("id"),
+            "title": r.get("title", ""),
+            "release_date": r.get("release_date", ""),
+            "overview": r.get("overview", ""),
+            "poster_url": f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else "",
+            "backdrop_url": f"https://image.tmdb.org/t/p/w1280{backdrop_path}" if backdrop_path else "",
+        })
+    return JsonResponse({"query": query, "year": year, "results": out})
+
+
+@require_GET
+def tmdb_movie_images(request: HttpRequest, tmdb_id: int) -> JsonResponse:
+    """Fetch all posters and backdrops for a TMDB movie (GET /movie/{id}/images)."""
+    api_key = _get_tmdb_api_key()
+    if not api_key:
+        return _error("TMDB API key not configured. Set it in Settings.", status=503)
+    import requests
+    url = f"https://api.themoviedb.org/3/movie/{tmdb_id}/images"
+    try:
+        resp = requests.get(url, params={"api_key": api_key}, timeout=10)
+        data = resp.json()
+    except Exception as e:
+        return _error(f"TMDB request failed: {e}", status=502)
+    if resp.status_code != 200:
+        return _error(data.get("status_message", "TMDB error"), status=502)
+    base = "https://image.tmdb.org/t/p"
+    posters_raw = data.get("posters") or []
+    backdrops_raw = data.get("backdrops") or []
+    seen_p = set()
+    posters = []
+    for p in sorted(posters_raw, key=lambda x: -(x.get("vote_average") or 0)):
+        fp = p.get("file_path") or ""
+        if not fp or fp in seen_p:
+            continue
+        seen_p.add(fp)
+        posters.append({
+            "file_path": fp,
+            "url": f"{base}/w500{fp}",
+            "vote_average": p.get("vote_average") or 0,
+            "width": p.get("width") or 0,
+            "height": p.get("height") or 0,
+        })
+    seen_b = set()
+    backdrops = []
+    for b in sorted(backdrops_raw, key=lambda x: -(x.get("vote_average") or 0)):
+        fp = b.get("file_path") or ""
+        if not fp or fp in seen_b:
+            continue
+        seen_b.add(fp)
+        backdrops.append({
+            "file_path": fp,
+            "url": f"{base}/w1280{fp}",
+            "vote_average": b.get("vote_average") or 0,
+            "width": b.get("width") or 0,
+            "height": b.get("height") or 0,
+        })
+    return JsonResponse({"posters": posters[:30], "backdrops": backdrops[:30]})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def movie_apply_scrape(request: HttpRequest, item_id: int) -> JsonResponse:
+    """Apply selected TMDB result to one movie (poster, backdrop, overview, tmdb_id)."""
+    try:
+        body = json.loads(request.body)
+        poster_url = (body.get("poster_url") or "").strip()
+        backdrop_url = (body.get("backdrop_url") or "").strip()
+        overview = (body.get("overview") or "").strip()
+        raw_tmdb_id = body.get("tmdb_id")
+        tmdb_id = int(raw_tmdb_id) if raw_tmdb_id not in (None, "") else None
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return _error("Invalid JSON or tmdb_id", status=400)
+    success = service.update_movie_enriched(
+        item_id=item_id,
+        poster_url=poster_url or None,
+        backdrop_url=backdrop_url or None,
+        overview=overview or None,
+        tmdb_id=tmdb_id,
+    )
+    if not success:
+        return _error("Movie not found", status=404)
+    return JsonResponse({"status": "ok", "item_id": item_id, "tmdb_id": tmdb_id})
+
+
+def _normalize_title_refresh(t):
+    t = t.strip()
+    if t.endswith(", The"):
+        t = "The " + t[:-5]
+    elif t.endswith(", A"):
+        t = "A " + t[:-3]
+    elif t.endswith(", An"):
+        t = "An " + t[:-4]
+    return t
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def movie_refresh_metadata(request: HttpRequest, item_id: int) -> JsonResponse:
+    """Re-fetch TMDB by current movie title/year; try clean title then names in parentheses until one returns results."""
+    movie = service.get_movie(item_id)
+    if not movie:
+        return _error("Movie not found", status=404)
+    import re
+    title_year = movie.get("title", "")
+    s = str(title_year).strip()
+    year = ""
+    match = re.search(r"^(.*?)\s*\((\d{4})\)\s*$", s)
+    if match:
+        s = match.group(1).strip()
+        year = match.group(2)
+    inner_names = re.findall(r"\(([^)]*)\)", s)
+    clean_title = re.sub(r"\s*\([^)]*\)\s*", " ", s)
+    clean_title = re.sub(r"\s+", " ", clean_title).strip()
+    queries = [_normalize_title_refresh(clean_title)] + [_normalize_title_refresh(n) for n in inner_names if n.strip()]
+
+    api_key = _get_tmdb_api_key()
+    if not api_key:
+        return _error("TMDB API key not configured.", status=503)
+    import requests
+    url = "https://api.themoviedb.org/3/search/movie"
+
+    def do_search(query, with_year=True):
+        params = {"api_key": api_key, "query": query}
+        if with_year and year:
+            params["primary_release_year"] = year
+        try:
+            resp = requests.get(url, params=params, timeout=8)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            if data.get("results"):
+                return data["results"][0]
+        except Exception:
+            pass
+        return None
+
+    best = None
+    for q in queries:
+        if not q:
+            continue
+        best = do_search(q, with_year=True)
+        if best:
+            break
+    if not best:
+        for q in queries:
+            if not q:
+                continue
+            best = do_search(q, with_year=False)
+            if best:
+                break
+
+    if not best:
+        return JsonResponse({
+            "status": "no_results",
+            "message": "No TMDB match found for this title.",
+            "item_id": item_id,
+        })
+
+    poster_path = best.get("poster_path") or ""
+    backdrop_path = best.get("backdrop_path") or ""
+    poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else ""
+    backdrop_url = f"https://image.tmdb.org/t/p/w1280{backdrop_path}" if backdrop_path else ""
+    overview = best.get("overview", "") or ""
+    tmdb_id = best.get("id")
+    success = service.update_movie_enriched(
+        item_id=item_id,
+        poster_url=poster_url or None,
+        backdrop_url=backdrop_url or None,
+        overview=overview or None,
+        tmdb_id=tmdb_id,
+    )
+    if not success:
+        return _error("Update failed", status=500)
+    return JsonResponse({"status": "ok", "item_id": item_id})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def movie_update_images(request: HttpRequest, item_id: int) -> JsonResponse:
+    """Update or clear poster and/or backdrop URL for one movie. Send empty string to clear."""
+    try:
+        body = json.loads(request.body)
+        poster_url = (body.get("poster_url") or "").strip() if "poster_url" in body else None
+        backdrop_url = (body.get("backdrop_url") or "").strip() if "backdrop_url" in body else None
+    except json.JSONDecodeError:
+        return _error("Invalid JSON", status=400)
+    if "poster_url" not in body and "backdrop_url" not in body:
+        return _error("Provide at least poster_url or backdrop_url", status=400)
+    success = service.update_movie_enriched(
+        item_id=item_id,
+        poster_url=poster_url,
+        backdrop_url=backdrop_url,
+        overview=None,
+    )
+    if not success:
+        return _error("Movie not found", status=404)
+    return JsonResponse({"status": "ok", "item_id": item_id})
+
 
 @csrf_exempt
 @require_http_methods(["POST"])

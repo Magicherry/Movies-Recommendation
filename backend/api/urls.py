@@ -18,4 +18,9 @@ urlpatterns = [
     path("scrape/status", views.scrape_status, name="scrape-status"),
     path("scrape/key", views.scrape_key, name="scrape-key"),
     path("scrape/test-key", views.scrape_test_key, name="scrape-test-key"),
+    path("tmdb/search", views.tmdb_search, name="tmdb-search"),
+    path("tmdb/movie/<int:tmdb_id>/images", views.tmdb_movie_images, name="tmdb-movie-images"),
+    path("movie/<int:item_id>/scrape", views.movie_apply_scrape, name="movie-apply-scrape"),
+    path("movie/<int:item_id>/refresh-metadata", views.movie_refresh_metadata, name="movie-refresh-metadata"),
+    path("movie/<int:item_id>/images", views.movie_update_images, name="movie-update-images"),
 ]

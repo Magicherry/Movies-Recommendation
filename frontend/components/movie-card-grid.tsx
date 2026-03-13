@@ -1,8 +1,12 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useCallback, memo, useState } from "react";
 import NextLink from "next/link";
 import { useRouter, usePathname } from "next/navigation";
+import MovieCardContextMenu from "./movie-card-context-menu";
+import ScrapeMetadataModal from "./scrape-metadata-modal";
+import ChangeImageModal from "./change-image-modal";
+import { movieRefreshMetadata } from "../lib/api";
 
 export type MovieCardItem = {
   item_id: number;
@@ -12,6 +16,7 @@ export type MovieCardItem = {
   poster_url?: string;
   backdrop_url?: string;
   overview?: string;
+  tmdb_id?: number | string;
 };
 
 type MovieCardGridProps = {
@@ -38,6 +43,76 @@ function getTopGenre(genres: string): string {
   return genres.split("|")[0]?.trim() ?? "";
 }
 
+const MovieCard = memo(function MovieCard({
+  movie,
+  scoreLabel,
+  showScore,
+  isRefreshing = false,
+  isFading = false,
+}: {
+  movie: MovieCardItem;
+  scoreLabel: string;
+  showScore: boolean;
+  isRefreshing?: boolean;
+  isFading?: boolean;
+}) {
+  const metaText = (() => {
+    const year = getMovieYear(movie.title);
+    const topGenre = getTopGenre(movie.genres);
+    return year && topGenre ? `${year} · ${topGenre}` : year || topGenre;
+  })();
+  return (
+    <NextLink href={`/movies/${movie.item_id}`} className="poster-card">
+      <div
+        className="poster-bg"
+        style={{ background: movie.poster_url ? "none" : getGradient(movie.item_id) }}
+      >
+        {movie.poster_url && (
+          <img src={movie.poster_url} alt={movie.title} loading="lazy" className="poster-img" />
+        )}
+        <div className="poster-overlay" />
+        <div className="poster-info-overlay">
+          <div className="poster-genres">
+            {movie.genres ? (
+              movie.genres.split("|").map((g, idx) => (
+                <span key={idx} className="genre-tag">{g}</span>
+              ))
+            ) : (
+              <span className="genre-tag">No genres</span>
+            )}
+          </div>
+          {showScore && typeof movie.score === "number" && (
+            <span className="poster-score">
+              {scoreLabel}: {(movie.score).toFixed(2)}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="poster-footer">
+        <h3 className="poster-title">{movie.title.replace(/\s*\(\d{4}\)$/, "")}</h3>
+        {metaText ? <span className="poster-year">{metaText}</span> : null}
+      </div>
+      {(isRefreshing || isFading) && (
+        <div
+          className={`poster-card-refresh-overlay${isFading ? " poster-card-refresh-overlay--fading" : ""}`}
+          aria-hidden="true"
+        >
+          <span className="poster-card-refresh-label">
+            {isRefreshing ? "Refreshing..." : "Done"}
+          </span>
+          {isRefreshing && (
+            <div className="poster-card-refresh-bar">
+              <div className="poster-card-refresh-bar-fill" />
+            </div>
+          )}
+        </div>
+      )}
+    </NextLink>
+  );
+});
+
+type ContextMenuState = { x: number; y: number; movie: MovieCardItem } | null;
+
 export default function MovieCardGrid({
   title,
   items,
@@ -48,27 +123,70 @@ export default function MovieCardGrid({
   const rowRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const [scrapeModalMovie, setScrapeModalMovie] = useState<MovieCardItem | null>(null);
+  const [imageModalMovie, setImageModalMovie] = useState<MovieCardItem | null>(null);
+  const [refreshingItemId, setRefreshingItemId] = useState<number | null>(null);
+  const [fadingItemId, setFadingItemId] = useState<number | null>(null);
 
-  const handleCollectionClick = () => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('collectionData', JSON.stringify({ title, items, scoreLabel }));
-      
-      // Determine base path for the 'from' query parameter to keep correct navbar highlight
-      let fromPath = '/';
-      if (pathname.startsWith('/movies')) fromPath = '/movies';
-      else if (pathname.startsWith('/users')) fromPath = '/users';
-      
+  const refreshAndPreserveScroll = useCallback(() => {
+    if (typeof window === "undefined") {
+      router.refresh();
+      return;
+    }
+    const x = window.scrollX;
+    const y = window.scrollY;
+    router.refresh();
+    // App Router refresh can briefly reset layout; restore twice for stability.
+    requestAnimationFrame(() => window.scrollTo(x, y));
+    window.setTimeout(() => window.scrollTo(x, y), 120);
+  }, [router]);
+
+  const handleRefreshMetadata = useCallback(async (itemId: number) => {
+    setContextMenu(null);
+    setRefreshingItemId(itemId);
+    try {
+      await movieRefreshMetadata(itemId);
+      refreshAndPreserveScroll();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("streamx-metadata-updated"));
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Refresh failed.");
+    } finally {
+      setRefreshingItemId(null);
+      setFadingItemId(itemId);
+      window.setTimeout(() => setFadingItemId(null), 220);
+    }
+  }, [refreshAndPreserveScroll]);
+
+  const handleModalSuccess = useCallback(() => {
+    refreshAndPreserveScroll();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("streamx-metadata-updated"));
+    }
+  }, [refreshAndPreserveScroll]);
+
+  const handleCollectionClick = useCallback(() => {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("collectionData", JSON.stringify({ title, items, scoreLabel }));
+      let fromPath = "/";
+      if (pathname.startsWith("/movies")) fromPath = "/movies";
+      else if (pathname.startsWith("/users")) fromPath = "/users";
       router.push(`/collection?from=${fromPath}`);
     }
-  };
+  }, [title, items, scoreLabel, pathname, router]);
 
-  const scroll = (direction: 'left' | 'right') => {
+  const scrollLeft = useCallback(() => {
     if (rowRef.current) {
-      const { clientWidth } = rowRef.current;
-      const scrollAmount = direction === 'left' ? -clientWidth * 0.8 : clientWidth * 0.8;
-      rowRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+      rowRef.current.scrollBy({ left: -rowRef.current.clientWidth * 0.8, behavior: "smooth" });
     }
-  };
+  }, []);
+  const scrollRight = useCallback(() => {
+    if (rowRef.current) {
+      rowRef.current.scrollBy({ left: rowRef.current.clientWidth * 0.8, behavior: "smooth" });
+    }
+  }, []);
 
   if (items.length === 0) {
     return <p style={{ color: "var(--text-subtle)", padding: "0 4vw" }}>{emptyMessage}</p>;
@@ -76,6 +194,7 @@ export default function MovieCardGrid({
 
   if (rowMode) {
     return (
+      <>
       <div className="card-row-section">
         {title && (
           <div className="row-header-container">
@@ -92,20 +211,12 @@ export default function MovieCardGrid({
               </svg>
             </div>
             <div className="row-controls">
-              <button 
-                className="row-scroll-btn" 
-                onClick={() => scroll('left')}
-                aria-label="Scroll left"
-              >
+              <button className="row-scroll-btn" onClick={scrollLeft} aria-label="Scroll left">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="15 18 9 12 15 6"></polyline>
                 </svg>
               </button>
-              <button 
-                className="row-scroll-btn" 
-                onClick={() => scroll('right')}
-                aria-label="Scroll right"
-              >
+              <button className="row-scroll-btn" onClick={scrollRight} aria-label="Scroll right">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
@@ -115,114 +226,105 @@ export default function MovieCardGrid({
         )}
         <div className="card-row" ref={rowRef}>
           {items.map((movie) => (
-            <NextLink
+            <div
               key={movie.item_id}
-              href={`/movies/${movie.item_id}`}
-              className="poster-card"
+              className="movie-card-wrapper"
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setContextMenu({ x: e.clientX, y: e.clientY, movie });
+              }}
+              style={{ position: "relative" }}
             >
-              <div
-                className="poster-bg"
-                style={{ 
-                  background: movie.poster_url ? 'none' : getGradient(movie.item_id)
-                }}
-              >
-                {movie.poster_url && (
-                  <img 
-                    src={movie.poster_url} 
-                    alt={movie.title} 
-                    loading="lazy"
-                    className="poster-img"
-                  />
-                )}
-                <div className="poster-overlay" />
-                <div className="poster-info-overlay">
-                  <div className="poster-genres">
-                    {movie.genres ? (
-                      movie.genres.split("|").map((g, idx) => (
-                        <span key={idx} className="genre-tag">
-                          {g}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="genre-tag">No genres</span>
-                    )}
-                  </div>
-                  {typeof movie.score === "number" && (
-                    <span className="poster-score">
-                      {scoreLabel}: {(movie.score).toFixed(2)}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="poster-footer">
-                <h3 className="poster-title">{movie.title.replace(/\s*\(\d{4}\)$/, '')}</h3>
-                {(() => {
-                  const year = getMovieYear(movie.title);
-                  const topGenre = getTopGenre(movie.genres);
-                  const metaText = year && topGenre ? `${year} · ${topGenre}` : year || topGenre;
-                  return metaText ? <span className="poster-year">{metaText}</span> : null;
-                })()}
-              </div>
-            </NextLink>
+              <MovieCard
+                movie={movie}
+                scoreLabel={scoreLabel}
+                showScore={typeof movie.score === "number"}
+                isRefreshing={refreshingItemId === movie.item_id}
+                isFading={fadingItemId === movie.item_id}
+              />
+            </div>
           ))}
         </div>
       </div>
+      {contextMenu && (
+        <MovieCardContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          movie={contextMenu.movie}
+          onClose={() => setContextMenu(null)}
+          onScrapeMetadata={() => setScrapeModalMovie(contextMenu.movie)}
+          onRefreshMetadata={() => handleRefreshMetadata(contextMenu.movie.item_id)}
+          onChangeImage={() => setImageModalMovie(contextMenu.movie)}
+        />
+      )}
+      {scrapeModalMovie && (
+        <ScrapeMetadataModal
+          movie={scrapeModalMovie}
+          onClose={() => setScrapeModalMovie(null)}
+          onSuccess={handleModalSuccess}
+        />
+      )}
+      {imageModalMovie && (
+        <ChangeImageModal
+          movie={imageModalMovie}
+          onClose={() => setImageModalMovie(null)}
+          onSuccess={handleModalSuccess}
+        />
+      )}
+    </>
     );
   }
 
   return (
+    <>
     <div className="card-grid">
       {items.map((movie) => (
-        <NextLink
+        <div
           key={movie.item_id}
-          href={`/movies/${movie.item_id}`}
-          className="poster-card"
+          className="movie-card-wrapper"
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setContextMenu({ x: e.clientX, y: e.clientY, movie });
+          }}
+          style={{ position: "relative" }}
         >
-          <div
-            className="poster-bg"
-            style={{ 
-              background: movie.poster_url ? 'none' : getGradient(movie.item_id)
-            }}
-          >
-            {movie.poster_url && (
-              <img 
-                src={movie.poster_url} 
-                alt={movie.title} 
-                loading="lazy"
-                className="poster-img"
-              />
-            )}
-            <div className="poster-overlay" />
-            <div className="poster-info-overlay">
-              <div className="poster-genres">
-                {movie.genres ? (
-                  movie.genres.split("|").map((g, idx) => (
-                    <span key={idx} className="genre-tag">
-                      {g}
-                    </span>
-                  ))
-                ) : (
-                  <span className="genre-tag">No genres</span>
-                )}
-              </div>
-              {typeof movie.score === "number" && (
-                <span className="poster-score">
-                  {scoreLabel}: {(movie.score).toFixed(2)}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="poster-footer">
-            <h3 className="poster-title">{movie.title.replace(/\s*\(\d{4}\)$/, '')}</h3>
-            {(() => {
-              const year = getMovieYear(movie.title);
-              const topGenre = getTopGenre(movie.genres);
-              const metaText = year && topGenre ? `${year} · ${topGenre}` : year || topGenre;
-              return metaText ? <span className="poster-year">{metaText}</span> : null;
-            })()}
-          </div>
-        </NextLink>
+          <MovieCard
+            movie={movie}
+            scoreLabel={scoreLabel}
+            showScore={typeof movie.score === "number"}
+            isRefreshing={refreshingItemId === movie.item_id}
+            isFading={fadingItemId === movie.item_id}
+          />
+        </div>
       ))}
     </div>
+      {contextMenu && (
+        <MovieCardContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          movie={contextMenu.movie}
+          onClose={() => setContextMenu(null)}
+          onScrapeMetadata={() => setScrapeModalMovie(contextMenu.movie)}
+          onRefreshMetadata={() => handleRefreshMetadata(contextMenu.movie.item_id)}
+          onChangeImage={() => setImageModalMovie(contextMenu.movie)}
+        />
+      )}
+      {scrapeModalMovie && (
+        <ScrapeMetadataModal
+          movie={scrapeModalMovie}
+          onClose={() => setScrapeModalMovie(null)}
+          onSuccess={handleModalSuccess}
+        />
+      )}
+      {imageModalMovie && (
+        <ChangeImageModal
+          movie={imageModalMovie}
+          onClose={() => setImageModalMovie(null)}
+          onSuccess={handleModalSuccess}
+        />
+      )}
+    </>
   );
 }

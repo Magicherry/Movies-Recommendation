@@ -18,18 +18,35 @@ let globalTrendingCount: number = 15;
 
 export default function HomePage() {
   const { userId } = useUser();
-  
-  // Use cached data if available for the current user
+  const [metadataVersion, setMetadataVersion] = useState(0);
   const hasCache = globalUserId === userId && globalTrending.length > 0;
   const [loading, setLoading] = useState(!hasCache);
-  
   const [featuredMovies, setFeaturedMovies] = useState<Movie[]>(hasCache ? globalFeatured : []);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [history, setHistory] = useState<Movie[]>(hasCache ? globalHistory : []);
   const [trending, setTrending] = useState<Movie[]>(hasCache ? globalTrending : []);
 
   useEffect(() => {
+    const handler = () => {
+      globalFeatured = [];
+      globalRecs = [];
+      globalHistory = [];
+      globalTrending = [];
+      globalLastRefresh = null;
+      setMetadataVersion((v) => v + 1);
+    };
+    window.addEventListener("streamx-metadata-updated", handler);
+    return () => window.removeEventListener("streamx-metadata-updated", handler);
+  }, []);
+
+  useEffect(() => {
     async function loadData() {
+      const hasVisibleContent =
+        featuredMovies.length > 0 ||
+        recommendations.length > 0 ||
+        history.length > 0 ||
+        trending.length > 0;
+
       // Read recCount and collection counts from localStorage
       const savedRecCount = localStorage.getItem("streamx-rec-count");
       const recCount = savedRecCount ? parseInt(savedRecCount, 10) : 10;
@@ -46,34 +63,35 @@ export default function HomePage() {
         return;
       }
       
-      setLoading(true);
+      // Keep existing content visible during metadata refresh to preserve scroll position.
+      if (!hasVisibleContent) {
+        setLoading(true);
+      }
       try {
-        // Fetch recommendations for the current user
-        const recs = await getRecommendations(userId, recCount).catch(() => []);
+        const trendingLimit = Math.max(20, trendingCount);
+        const [recs, hist, moviesData] = await Promise.all([
+          getRecommendations(userId, recCount).catch(() => []),
+          getUserHistory(userId).catch(() => []),
+          getMovies(trendingLimit, 0),
+        ]);
+
         setRecommendations(recs);
         globalRecs = recs;
 
-        // Fetch watch history
-        const hist = await getUserHistory(userId).catch(() => []);
         const formattedHist = hist.map(h => ({
           item_id: h.item_id,
           title: h.title,
           genres: h.genres,
-          // @ts-ignore
           poster_url: h.poster_url,
-          // @ts-ignore
           backdrop_url: h.backdrop_url,
-          // @ts-ignore
-          overview: h.overview
+          overview: h.overview,
+          tmdb_id: h.tmdb_id,
         }));
-        setHistory(formattedHist.slice(0, watchAgainCount));
-        globalHistory = formattedHist.slice(0, watchAgainCount);
+        const historySlice = formattedHist.slice(0, watchAgainCount);
+        setHistory(historySlice);
+        globalHistory = historySlice;
 
-        // Fetch some default movies for carousel and trending
-        const moviesData = await getMovies(Math.max(20, trendingCount), 0);
         const movies = moviesData.items;
-
-        // If user has recommendations, use top ones for carousel, else fallback to trending
         if (recs.length > 0) {
           setFeaturedMovies(recs.slice(0, 5));
           globalFeatured = recs.slice(0, 5);
@@ -96,7 +114,7 @@ export default function HomePage() {
     }
     
     loadData();
-  }, [userId]);
+  }, [userId, metadataVersion, featuredMovies.length, recommendations.length, history.length, trending.length]);
 
   if (loading) {
     return (

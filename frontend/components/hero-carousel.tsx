@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Movie } from "../lib/api";
 
@@ -19,6 +19,14 @@ export default function HeroCarousel({ movies }: HeroCarouselProps) {
       }, 30000);
       return () => clearInterval(interval);
     }, [isPaused, movies.length]);
+
+  const goPrev = useCallback(() => {
+    setCurrentIndex((prev) => (prev === 0 ? movies.length - 1 : prev - 1));
+  }, [movies.length]);
+  const goNext = useCallback(() => {
+    setCurrentIndex((prev) => (prev + 1) % movies.length);
+  }, [movies.length]);
+  const togglePause = useCallback(() => setIsPaused((p) => !p), []);
 
   if (!movies || movies.length === 0) return null;
 
@@ -53,30 +61,22 @@ export default function HeroCarousel({ movies }: HeroCarouselProps) {
       <div className="hero-banner-gradient" />
 
       {/* Navigation Arrows */}
-      <button 
-        className="hero-arrow hero-arrow-left"
-        onClick={() => setCurrentIndex((prev) => (prev === 0 ? movies.length - 1 : prev - 1))}
-        aria-label="Previous Slide"
-      >
+      <button className="hero-arrow hero-arrow-left" onClick={goPrev} aria-label="Previous Slide">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="15 18 9 12 15 6"></polyline>
         </svg>
       </button>
       
-      <button 
-        className="hero-arrow hero-arrow-right"
-        onClick={() => setCurrentIndex((prev) => (prev + 1) % movies.length)}
-        aria-label="Next Slide"
-      >
+      <button className="hero-arrow hero-arrow-right" onClick={goNext} aria-label="Next Slide">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="9 18 15 12 9 6"></polyline>
         </svg>
       </button>
 
       {/* Pause/Play Button */}
-      <button 
+      <button
         className="hero-carousel-toggle"
-        onClick={() => setIsPaused(!isPaused)}
+        onClick={togglePause}
         aria-label={isPaused ? "Play Carousel" : "Pause Carousel"}
       >
         {isPaused ? (
@@ -123,7 +123,7 @@ export default function HeroCarousel({ movies }: HeroCarouselProps) {
         {movies.map((_, idx) => (
           <button
             key={idx}
-            className={`hero-indicator ${idx === currentIndex ? 'active' : ''}`}
+            className={`hero-indicator ${idx === currentIndex ? "active" : ""}`}
             onClick={() => setCurrentIndex(idx)}
             aria-label={`Go to slide ${idx + 1}`}
           />

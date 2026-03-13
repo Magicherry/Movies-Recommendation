@@ -2,6 +2,15 @@
 
 import { useEffect, useState } from "react";
 
+const BG_PRESETS = [
+  { name: "Default", color: "#09090b" },
+  { name: "Dark Gray", color: "#171717" },
+  { name: "Charcoal", color: "#0c0c0c" },
+  { name: "Blue Black", color: "#0a0e17" },
+  { name: "Warm Black", color: "#0f0d0c" },
+  { name: "Soft Black", color: "#121212" },
+];
+
 const THEMES = [
   { name: "Green (Default)", color: "#6ae100", hover: "#55b400" },
   { name: "Blue", color: "#3b82f6", hover: "#2563eb" },
@@ -21,7 +30,7 @@ const THEMES = [
 ];
 
 export default function AppearanceSettings() {
-  const [activeTheme, setActiveTheme] = useState(THEMES[0]);
+  const [activeTheme, setActiveTheme] = useState(() => THEMES.find(t => t.name === "McLaren Papaya") ?? THEMES[0]);
   const [customColor, setCustomColor] = useState("#ffffff");
   const [isCustom, setIsCustom] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -35,6 +44,12 @@ export default function AppearanceSettings() {
     if (typeof window === "undefined") return false;
     const saved = localStorage.getItem("streamx-dense-layout");
     return saved === "true";
+  });
+  const [bgColor, setBgColor] = useState(() => {
+    if (typeof window === "undefined") return "#0a0e17";
+    const saved = localStorage.getItem("streamx-bg-color");
+    if (saved && BG_PRESETS.some((p) => p.color === saved)) return saved;
+    return "#0a0e17";
   });
 
   useEffect(() => {
@@ -59,6 +74,12 @@ export default function AppearanceSettings() {
     localStorage.setItem("streamx-theme-color", theme.color);
     setActiveTheme(theme);
     setIsCustom(false);
+  };
+
+  const applyBgPreset = (color: string) => {
+    document.documentElement.style.setProperty("--bg-base", color);
+    localStorage.setItem("streamx-bg-color", color);
+    setBgColor(color);
   };
 
   const handleCustomColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,7 +129,23 @@ export default function AppearanceSettings() {
   return (
     <section className="settings-card">
       <h2>Appearance</h2>
-      
+
+      <div className="setting-group">
+        <label>Page Background</label>
+        <p className="setting-desc">Set the background color for the entire site.</p>
+        <div className="theme-options" style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          {BG_PRESETS.map((preset) => (
+            <button
+              key={preset.name}
+              className={`theme-btn ${bgColor === preset.color ? "active" : ""}`}
+              style={{ backgroundColor: preset.color, border: "1px solid var(--border-soft)" }}
+              onClick={() => applyBgPreset(preset.color)}
+              title={preset.name}
+            />
+          ))}
+        </div>
+      </div>
+
       <div className="setting-group">
         <label>Theme Color</label>
         <p className="setting-desc">Choose a primary color for the application.</p>

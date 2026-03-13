@@ -28,6 +28,7 @@ export default function DashboardStats() {
   } | null>(null);
   const [testResult, setTestResult] = useState<{valid: boolean, message: string} | null>(null);
   const [isTesting, setIsTesting] = useState(false);
+  const [refreshAll, setRefreshAll] = useState(false);
   
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
 
@@ -96,7 +97,7 @@ export default function DashboardStats() {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ api_key: apiKey })
+        body: JSON.stringify({ api_key: apiKey, refresh: refreshAll })
       });
       if (res.ok) {
         fetchScrapeStatus();
@@ -246,28 +247,38 @@ export default function DashboardStats() {
                 disabled={scrapeState?.status === 'running'}
                 className="settings-action-btn settings-action-btn-primary"
               >
-                {scrapeState?.status === 'running' ? 'Scraping in Progress...' : 'Start Scraping'}
+                {scrapeState?.status === 'running' ? 'Scraping in Progress...' : refreshAll ? 'Refresh All Metadata' : 'Start Scraping'}
               </button>
-              {testResult && (
-                <div
-                  className="tmdb-test-result-inline"
-                  style={{
-                    fontSize: '0.85rem',
-                    color: testResult.valid ? '#10b981' : '#ef4444',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  {testResult.valid ? (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                  ) : (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                  )}
-                  {testResult.message}
-                </div>
-              )}
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: scrapeState?.status === 'running' ? 'not-allowed' : 'pointer', opacity: scrapeState?.status === 'running' ? 0.7 : 1, width: '100%' }}>
+              <input
+                type="checkbox"
+                checked={refreshAll}
+                onChange={(e) => setRefreshAll(e.target.checked)}
+                disabled={scrapeState?.status === 'running'}
+                style={{ width: '16px', height: '16px' }}
+              />
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>Refresh all (re-scrape existing metadata)</span>
+            </label>
+            {testResult && (
+              <div
+                className="tmdb-test-result-inline"
+                style={{
+                  fontSize: '0.85rem',
+                  color: testResult.valid ? '#10b981' : '#ef4444',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {testResult.valid ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                )}
+                {testResult.message}
+              </div>
+            )}
           </div>
 
           {scrapeState && scrapeState.status !== 'idle' && (
