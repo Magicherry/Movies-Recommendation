@@ -3084,8 +3084,12 @@ body {
   flex-shrink: 0;
   margin-top: 0;
   padding-top: 20px;
+  padding-right: 10px;
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-surface);
+}
+.change-image-footer-fixed .movie-modal-btn {
+  min-width: 108px;
 }
 .change-image-preview-section .movie-modal-section-title {
   margin-bottom: 16px;
