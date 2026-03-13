@@ -240,15 +240,16 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
           </button>
         </div>
         <div className="movie-modal-body-simple change-image-body">
-          {level === 1 ? (
-            <>
+          <div className="change-image-slider-wrap">
+            <div className={`change-image-slider change-image-slider--level-${level}`}>
+              <div className="change-image-panel change-image-panel--1">
               <div className="change-image-body-scroll">
               <p className="movie-modal-intro">
                 Change cover or backdrop below. Images are loaded directly from TMDB using the saved TMDB ID.
               </p>
 
               <section className="movie-modal-section change-image-level1-cards">
-                <h3 className="movie-modal-section-title">Cover & backdrop</h3>
+                <h3 className="movie-modal-section-title">Image Preview</h3>
                 <div className="change-image-cards-grid">
                   <div className="change-image-card change-image-card-ref">
                     <div className="change-image-card-preview change-image-card-poster">
@@ -344,8 +345,9 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
                   {saving ? "Saving…" : "Save"}
                 </button>
               </div>
-            </>
-          ) : (
+              </div>
+
+              <div className="change-image-panel change-image-panel--2">
             <div className="change-image-body-scroll">
               <p className="movie-modal-intro">
                 {level2Mode === "poster" ? "Select a cover image to use." : "Select a backdrop image to use."}
@@ -371,7 +373,9 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
               </div>
               {error && <p className="movie-modal-error">{error}</p>}
             </div>
-          )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

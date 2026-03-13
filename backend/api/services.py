@@ -19,6 +19,7 @@ class RecommenderService:
         self.active_model_name = "option1"
         self.movies: pd.DataFrame | None = None
         self.movie_lookup: Dict[int, Dict[str, Any]] = {}
+        self.movie_behavior_stats: pd.DataFrame = pd.DataFrame()
         self.users: List[int] = []
         self.user_history: Dict[int, List[Dict[str, Any]]] = {}
 
@@ -119,6 +120,21 @@ class RecommenderService:
             if train_ratings_path.exists():
                 ratings = pd.read_csv(train_ratings_path)
                 self.users = sorted(ratings["user_id"].astype(int).unique().tolist())
+
+                behavior_stats = ratings.groupby("item_id").agg(
+                    watched_count=("user_id", "nunique"),
+                    high_rating_count=("rating", lambda s: int((s >= 4.0).sum())),
+                    avg_rating=("rating", "mean"),
+                )
+                behavior_stats["behavior_score"] = (
+                    behavior_stats["high_rating_count"] * 2.0
+                    + behavior_stats["watched_count"]
+                    + behavior_stats["avg_rating"] / 5.0
+                )
+                behavior_stats = behavior_stats.reset_index()
+                behavior_stats["item_id"] = behavior_stats["item_id"].astype(int)
+                self.movie_behavior_stats = behavior_stats
+
                 self.user_history = {}
                 for row in ratings.itertuples(index=False):
                     uid = int(row.user_id)
@@ -144,6 +160,9 @@ class RecommenderService:
             else:
                 # Fallback if no train_ratings.csv
                 self.users = []
+                self.movie_behavior_stats = pd.DataFrame(
+                    columns=["item_id", "watched_count", "high_rating_count", "avg_rating", "behavior_score"]
+                )
 
             self._loaded = True
 
@@ -182,11 +201,26 @@ class RecommenderService:
         if year:
             frame = frame[frame["title"].str.contains(f"({year.strip()})", regex=False, na=False)]
 
-        sort_by = sort_by if sort_by in {"item_id", "title", "year"} else "item_id"
+        sort_by = sort_by if sort_by in {
+            "item_id",
+            "title",
+            "year",
+            "watched_count",
+            "high_rating_count",
+            "avg_rating",
+            "behavior_score",
+        } else "item_id"
         sort_order = sort_order.lower()
         ascending = sort_order != "desc"
 
         sortable = frame.copy()
+        if not self.movie_behavior_stats.empty:
+            sortable = sortable.merge(self.movie_behavior_stats, on="item_id", how="left")
+        for stat_col in ("watched_count", "high_rating_count", "avg_rating", "behavior_score"):
+            if stat_col not in sortable.columns:
+                sortable[stat_col] = 0.0
+            sortable[stat_col] = sortable[stat_col].fillna(0.0)
+
         if sort_by == "title":
             sortable["_sort_title"] = sortable["title"].str.replace(
                 r"\s*\(\d{4}\)\s*$", "", regex=True
@@ -203,6 +237,10 @@ class RecommenderService:
             )
             sortable = sortable.sort_values(
                 ["_sort_year", "item_id"], ascending=[ascending, True], kind="mergesort"
+            )
+        elif sort_by in {"watched_count", "high_rating_count", "avg_rating", "behavior_score"}:
+            sortable = sortable.sort_values(
+                [sort_by, "item_id"], ascending=[ascending, True], kind="mergesort"
             )
         else:
             sortable = sortable.sort_values("item_id", ascending=ascending, kind="mergesort")

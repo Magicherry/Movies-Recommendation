@@ -4,21 +4,33 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Movie } from "../lib/api";
 
+export type HeroCarouselSource = "personalized" | "trending";
+
 type HeroCarouselProps = {
   movies: Movie[];
+  source: HeroCarouselSource;
+  sourceNote?: string;
+  autoAdvanceMs?: number;
 };
 
-export default function HeroCarousel({ movies }: HeroCarouselProps) {
+export default function HeroCarousel({ movies, source, sourceNote, autoAdvanceMs = 30000 }: HeroCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const intervalMs = Math.min(120000, Math.max(5000, autoAdvanceMs));
+
+  useEffect(() => {
+    if (currentIndex >= movies.length) {
+      setCurrentIndex(0);
+    }
+  }, [currentIndex, movies.length]);
 
     useEffect(() => {
       if (isPaused) return;
       const interval = setInterval(() => {
         setCurrentIndex((prev) => (prev + 1) % movies.length);
-      }, 30000);
+      }, intervalMs);
       return () => clearInterval(interval);
-    }, [isPaused, movies.length]);
+    }, [isPaused, movies.length, intervalMs]);
 
   const goPrev = useCallback(() => {
     setCurrentIndex((prev) => (prev === 0 ? movies.length - 1 : prev - 1));
@@ -31,6 +43,7 @@ export default function HeroCarousel({ movies }: HeroCarouselProps) {
   if (!movies || movies.length === 0) return null;
 
   const featured = movies[currentIndex];
+  const sourceLabel = source === "personalized" ? "Personalized Picks" : "Trending Picks";
 
   // We can use a deterministic gradient for background based on item_id to make each slide look unique
   const getGradient = (id: number) => {
@@ -91,6 +104,12 @@ export default function HeroCarousel({ movies }: HeroCarouselProps) {
       </button>
 
       <div className="hero-content" style={{ animation: "fadeIn 0.5s ease" }} key={featured.item_id}>
+        <div className="hero-source-row">
+          <span className={`hero-source-badge ${source}`}>
+            {sourceLabel}
+          </span>
+          {sourceNote ? <span className="hero-source-note">{sourceNote}</span> : null}
+        </div>
         <h1 className="hero-title">{featured.title.replace(/\s*\(\d{4}\)$/, '')}</h1>
         <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontWeight: 'bold', color: 'white' }}>{featured.title.match(/\((\d{4})\)$/)?.[1] || "Movie"}</span>

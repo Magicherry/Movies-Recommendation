@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const BG_PRESETS = [
-  { name: "Default", color: "#09090b" },
-  { name: "Dark Gray", color: "#171717" },
+  { name: "Obsidian", color: "#09090b" },
+  { name: "Graphite", color: "#171717" },
   { name: "Charcoal", color: "#0c0c0c" },
-  { name: "Blue Black", color: "#0a0e17" },
-  { name: "Warm Black", color: "#0f0d0c" },
-  { name: "Soft Black", color: "#121212" },
+  { name: "Midnight", color: "#0a0e17" },
+  { name: "Umber", color: "#0f0d0c" },
+  { name: "Dusk", color: "#121212" },
 ];
 
 const THEMES = [
-  { name: "Green (Default)", color: "#6ae100", hover: "#55b400" },
+  { name: "Green", color: "#6ae100", hover: "#55b400" },
   { name: "Blue", color: "#3b82f6", hover: "#2563eb" },
   { name: "Purple", color: "#8b5cf6", hover: "#7c3aed" },
   { name: "Pink", color: "#ec4899", hover: "#db2777" },
@@ -28,6 +28,28 @@ const THEMES = [
   { name: "Emby", color: "#52B54B", hover: "#45a03f" },
   { name: "Jellyfin", color: "#00A4DC", hover: "#0089b8" },
 ];
+
+const MIN_REC = 5;
+const MAX_REC = 100;
+const STEP_REC = 5;
+const MIN_COL = 5;
+const MAX_COL = 100;
+const STEP_COL = 5;
+const MIN_CAROUSEL_COUNT = 1;
+const MAX_CAROUSEL_COUNT = 15;
+const STEP_CAROUSEL_COUNT = 1;
+const MIN_CAROUSEL_SECONDS = 5;
+const MAX_CAROUSEL_SECONDS = 120;
+const STEP_CAROUSEL_SECONDS = 5;
+
+function parseStoredNumber(key: string, fallback: number, min: number, max: number): number {
+  if (typeof window === "undefined") return fallback;
+  const raw = localStorage.getItem(key);
+  if (!raw) return fallback;
+  const parsed = parseInt(raw, 10);
+  if (isNaN(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
 
 export default function AppearanceSettings() {
   const [activeTheme, setActiveTheme] = useState(() => THEMES.find(t => t.name === "McLaren Papaya") ?? THEMES[0]);
@@ -51,6 +73,18 @@ export default function AppearanceSettings() {
     if (saved && BG_PRESETS.some((p) => p.color === saved)) return saved;
     return "#0a0e17";
   });
+  const [recCount, setRecCount] = useState(10);
+  const [watchAgainCount, setWatchAgainCount] = useState(15);
+  const [trendingCount, setTrendingCount] = useState(15);
+  const [moreLikeThisCount, setMoreLikeThisCount] = useState(15);
+  const [carouselCount, setCarouselCount] = useState(5);
+  const [carouselIntervalSeconds, setCarouselIntervalSeconds] = useState(30);
+  const [countsExpanded, setCountsExpanded] = useState(false);
+
+  const allCountsEqual =
+    recCount === watchAgainCount &&
+    watchAgainCount === trendingCount &&
+    trendingCount === moreLikeThisCount;
 
   useEffect(() => {
     const savedColor = localStorage.getItem("streamx-theme-color");
@@ -67,6 +101,110 @@ export default function AppearanceSettings() {
       }
     }
   }, []);
+
+  useEffect(() => {
+    setRecCount(parseStoredNumber("streamx-rec-count", 10, MIN_REC, MAX_REC));
+    setWatchAgainCount(parseStoredNumber("streamx-watch-again-count", 15, MIN_COL, MAX_COL));
+    setTrendingCount(parseStoredNumber("streamx-trending-count", 15, MIN_COL, MAX_COL));
+    setMoreLikeThisCount(parseStoredNumber("streamx-more-like-this-count", 15, MIN_COL, MAX_COL));
+    setCarouselCount(parseStoredNumber("streamx-carousel-count", 5, MIN_CAROUSEL_COUNT, MAX_CAROUSEL_COUNT));
+    setCarouselIntervalSeconds(
+      parseStoredNumber("streamx-carousel-interval-seconds", 30, MIN_CAROUSEL_SECONDS, MAX_CAROUSEL_SECONDS)
+    );
+  }, []);
+
+  const makeCountHandlers = useCallback(
+    (
+      setter: React.Dispatch<React.SetStateAction<number>>,
+      key: string,
+      min: number,
+      max: number
+    ) => ({
+      onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = parseInt(e.target.value, 10);
+        setter(val);
+        localStorage.setItem(key, val.toString());
+      },
+      onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+        const raw = e.target.value;
+        if (raw === "") return;
+        const val = parseInt(raw, 10);
+        if (!isNaN(val)) {
+          const clamped = Math.min(max, Math.max(min, val));
+          setter(clamped);
+          localStorage.setItem(key, clamped.toString());
+        }
+      },
+      onBlur: (e: React.FocusEvent<HTMLInputElement>, current: number) => {
+        const val = parseInt(e.target.value, 10);
+        if (isNaN(val) || val < min || val > max) {
+          const fallback = Math.min(max, Math.max(min, current));
+          setter(fallback);
+          localStorage.setItem(key, fallback.toString());
+        }
+      },
+    }),
+    []
+  );
+
+  const recHandlers = useMemo(
+    () => makeCountHandlers(setRecCount, "streamx-rec-count", MIN_REC, MAX_REC),
+    [makeCountHandlers]
+  );
+  const watchAgainHandlers = useMemo(
+    () => makeCountHandlers(setWatchAgainCount, "streamx-watch-again-count", MIN_COL, MAX_COL),
+    [makeCountHandlers]
+  );
+  const trendingHandlers = useMemo(
+    () => makeCountHandlers(setTrendingCount, "streamx-trending-count", MIN_COL, MAX_COL),
+    [makeCountHandlers]
+  );
+  const moreLikeThisHandlers = useMemo(
+    () => makeCountHandlers(setMoreLikeThisCount, "streamx-more-like-this-count", MIN_COL, MAX_COL),
+    [makeCountHandlers]
+  );
+  const carouselCountHandlers = useMemo(
+    () => makeCountHandlers(setCarouselCount, "streamx-carousel-count", MIN_CAROUSEL_COUNT, MAX_CAROUSEL_COUNT),
+    [makeCountHandlers]
+  );
+  const carouselIntervalHandlers = useMemo(
+    () =>
+      makeCountHandlers(
+        setCarouselIntervalSeconds,
+        "streamx-carousel-interval-seconds",
+        MIN_CAROUSEL_SECONDS,
+        MAX_CAROUSEL_SECONDS
+      ),
+    [makeCountHandlers]
+  );
+
+  const unifiedCount = recCount;
+  const setAllCounts = (val: number) => {
+    const clamped = Math.min(MAX_COL, Math.max(MIN_COL, val));
+    setRecCount(clamped);
+    setWatchAgainCount(clamped);
+    setTrendingCount(clamped);
+    setMoreLikeThisCount(clamped);
+    localStorage.setItem("streamx-rec-count", clamped.toString());
+    localStorage.setItem("streamx-watch-again-count", clamped.toString());
+    localStorage.setItem("streamx-trending-count", clamped.toString());
+    localStorage.setItem("streamx-more-like-this-count", clamped.toString());
+  };
+
+  const handleUnifiedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value, 10);
+    setAllCounts(val);
+  };
+  const handleUnifiedInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    if (raw === "") return;
+    const val = parseInt(raw, 10);
+    if (!isNaN(val)) setAllCounts(val);
+  };
+  const handleUnifiedBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value, 10);
+    if (isNaN(val) || val < MIN_COL || val > MAX_COL) setAllCounts(unifiedCount);
+  };
 
   const applyTheme = (theme: typeof THEMES[0]) => {
     document.documentElement.style.setProperty("--brand", theme.color);
@@ -261,6 +399,288 @@ export default function AppearanceSettings() {
         </div>
       </div>
 
+      <div className="setting-group setting-group-block setting-group-block-collapsible">
+        <button
+          type="button"
+          className="setting-block-header"
+          onClick={() => setCountsExpanded((e) => !e)}
+          aria-expanded={countsExpanded}
+          aria-controls="display-counts-body"
+        >
+          <span className="setting-block-header-inner">
+            <span className="setting-block-header-title">Display Counts</span>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="setting-block-chevron"
+              aria-hidden
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </span>
+          {!countsExpanded && !allCountsEqual && (
+            <span className="setting-block-badge">Custom</span>
+          )}
+        </button>
+        <p className="setting-desc" id="display-counts-desc">
+          How many items to show in each home and detail section. Edit each row below or use Set All to sync.
+        </p>
+        <div className="setting-block-body" id="display-counts-body">
+        <div
+          className="setting-row setting-row-expand-trigger"
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest("input")) return;
+            setCountsExpanded((prev) => !prev);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setCountsExpanded((prev) => !prev);
+            }
+          }}
+          aria-expanded={countsExpanded}
+          aria-controls="display-counts-body"
+        >
+          <div className="setting-row-info">
+            <h3>Set All Counts</h3>
+            <p>
+              {countsExpanded
+                ? "Use one value for Recommendation, Watch It Again, Trending Now, and More Like This."
+                : `Rec ${recCount} · Watch again ${watchAgainCount} · Trending ${trendingCount} · More ${moreLikeThisCount}. Expand to edit individually.`}
+            </p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <input
+              type="range"
+              min={MIN_COL}
+              max={MAX_COL}
+              step={STEP_COL}
+              value={unifiedCount}
+              onChange={handleUnifiedChange}
+              className="range-slider"
+              style={{ "--slider-progress": `${((unifiedCount - MIN_COL) / (MAX_COL - MIN_COL)) * 100}%` } as React.CSSProperties}
+            />
+            <input
+              type="number"
+              min={MIN_COL}
+              max={MAX_COL}
+              value={unifiedCount}
+              onChange={handleUnifiedInputChange}
+              onBlur={handleUnifiedBlur}
+              className="settings-number-input"
+              style={{ width: "72px" }}
+              aria-label="All display counts"
+            />
+          </div>
+        </div>
+
+        <div
+          className={`setting-block-expandable ${countsExpanded ? "setting-block-expandable--open" : ""}`}
+          aria-hidden={!countsExpanded}
+        >
+          <div className="setting-block-expandable-inner">
+        <div className="setting-row">
+          <div className="setting-row-info">
+            <h3>Recommendation Count</h3>
+            <p>Number of movies in your personalized feed.</p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <input
+              type="range"
+              min={MIN_REC}
+              max={MAX_REC}
+              step={STEP_REC}
+              value={recCount}
+              onChange={recHandlers.onChange}
+              className="range-slider"
+              style={{ "--slider-progress": `${((recCount - MIN_REC) / (MAX_REC - MIN_REC)) * 100}%` } as React.CSSProperties}
+            />
+            <input
+              type="number"
+              min={MIN_REC}
+              max={MAX_REC}
+              value={recCount}
+              onChange={recHandlers.onInputChange}
+              onBlur={(e) => recHandlers.onBlur(e, recCount)}
+              className="settings-number-input"
+              style={{ width: "72px" }}
+              aria-label="Recommendation count"
+            />
+          </div>
+        </div>
+
+        <div className="setting-row">
+          <div className="setting-row-info">
+            <h3>Watch It Again</h3>
+            <p>Max items in the Watch It Again row on the home page.</p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <input
+              type="range"
+              min={MIN_COL}
+              max={MAX_COL}
+              step={STEP_COL}
+              value={watchAgainCount}
+              onChange={watchAgainHandlers.onChange}
+              className="range-slider"
+              style={{ "--slider-progress": `${((watchAgainCount - MIN_COL) / (MAX_COL - MIN_COL)) * 100}%` } as React.CSSProperties}
+            />
+            <input
+              type="number"
+              min={MIN_COL}
+              max={MAX_COL}
+              value={watchAgainCount}
+              onChange={watchAgainHandlers.onInputChange}
+              onBlur={(e) => watchAgainHandlers.onBlur(e, watchAgainCount)}
+              className="settings-number-input"
+              style={{ width: "72px" }}
+              aria-label="Watch It Again count"
+            />
+          </div>
+        </div>
+
+        <div className="setting-row">
+          <div className="setting-row-info">
+            <h3>Trending Now</h3>
+            <p>Max items in the Trending Now row on the home page.</p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <input
+              type="range"
+              min={MIN_COL}
+              max={MAX_COL}
+              step={STEP_COL}
+              value={trendingCount}
+              onChange={trendingHandlers.onChange}
+              className="range-slider"
+              style={{ "--slider-progress": `${((trendingCount - MIN_COL) / (MAX_COL - MIN_COL)) * 100}%` } as React.CSSProperties}
+            />
+            <input
+              type="number"
+              min={MIN_COL}
+              max={MAX_COL}
+              value={trendingCount}
+              onChange={trendingHandlers.onInputChange}
+              onBlur={(e) => trendingHandlers.onBlur(e, trendingCount)}
+              className="settings-number-input"
+              style={{ width: "72px" }}
+              aria-label="Trending Now count"
+            />
+          </div>
+        </div>
+
+        <div className="setting-row">
+          <div className="setting-row-info">
+            <h3>More Like This</h3>
+            <p>Max items in the More Like This row on movie detail pages.</p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <input
+              type="range"
+              min={MIN_COL}
+              max={MAX_COL}
+              step={STEP_COL}
+              value={moreLikeThisCount}
+              onChange={moreLikeThisHandlers.onChange}
+              className="range-slider"
+              style={{ "--slider-progress": `${((moreLikeThisCount - MIN_COL) / (MAX_COL - MIN_COL)) * 100}%` } as React.CSSProperties}
+            />
+            <input
+              type="number"
+              min={MIN_COL}
+              max={MAX_COL}
+              value={moreLikeThisCount}
+              onChange={moreLikeThisHandlers.onInputChange}
+              onBlur={(e) => moreLikeThisHandlers.onBlur(e, moreLikeThisCount)}
+              className="settings-number-input"
+              style={{ width: "72px" }}
+              aria-label="More Like This count"
+            />
+          </div>
+        </div>
+          </div>
+        </div>
+        </div>
+      </div>
+
+      <div className="setting-group setting-group-block">
+        <label>Hero Carousel</label>
+        <p className="setting-desc">Configure autoplay interval and number of slides shown on the home banner.</p>
+        <div className="setting-block-body">
+        <div className="setting-row">
+          <div className="setting-row-info">
+            <h3>Slide Duration</h3>
+            <p>Time between auto-advance transitions, in seconds.</p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <input
+              type="range"
+              min={MIN_CAROUSEL_SECONDS}
+              max={MAX_CAROUSEL_SECONDS}
+              step={STEP_CAROUSEL_SECONDS}
+              value={carouselIntervalSeconds}
+              onChange={carouselIntervalHandlers.onChange}
+              className="range-slider"
+              style={{ "--slider-progress": `${((carouselIntervalSeconds - MIN_CAROUSEL_SECONDS) / (MAX_CAROUSEL_SECONDS - MIN_CAROUSEL_SECONDS)) * 100}%` } as React.CSSProperties}
+            />
+            <input
+              type="number"
+              min={MIN_CAROUSEL_SECONDS}
+              max={MAX_CAROUSEL_SECONDS}
+              value={carouselIntervalSeconds}
+              onChange={carouselIntervalHandlers.onInputChange}
+              onBlur={(e) => carouselIntervalHandlers.onBlur(e, carouselIntervalSeconds)}
+              className="settings-number-input"
+              style={{ width: "80px" }}
+              aria-label="Carousel slide duration in seconds"
+            />
+          </div>
+        </div>
+
+        <div className="setting-row">
+          <div className="setting-row-info">
+            <h3>Slide Count</h3>
+            <p>How many movies are included in the home carousel.</p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <input
+              type="range"
+              min={MIN_CAROUSEL_COUNT}
+              max={MAX_CAROUSEL_COUNT}
+              step={STEP_CAROUSEL_COUNT}
+              value={carouselCount}
+              onChange={carouselCountHandlers.onChange}
+              className="range-slider"
+              style={{ "--slider-progress": `${((carouselCount - MIN_CAROUSEL_COUNT) / (MAX_CAROUSEL_COUNT - MIN_CAROUSEL_COUNT)) * 100}%` } as React.CSSProperties}
+            />
+            <input
+              type="number"
+              min={MIN_CAROUSEL_COUNT}
+              max={MAX_CAROUSEL_COUNT}
+              value={carouselCount}
+              onChange={carouselCountHandlers.onInputChange}
+              onBlur={(e) => carouselCountHandlers.onBlur(e, carouselCount)}
+              className="settings-number-input"
+              style={{ width: "80px" }}
+              aria-label="Carousel slide count"
+            />
+          </div>
+        </div>
+        </div>
+      </div>
+
+      <div className="setting-group setting-group-block">
+        <label>Layout &amp; Motion</label>
+        <p className="setting-desc">Page transitions and grid density.</p>
+        <div className="setting-block-body">
       <div className="setting-row">
         <div className="setting-row-info">
           <h3>Enable Animations</h3>
@@ -281,6 +701,8 @@ export default function AppearanceSettings() {
           <input type="checkbox" checked={denseLayout} onChange={toggleLayout} />
           <span className="toggle-slider"></span>
         </label>
+      </div>
+        </div>
       </div>
     </section>
   );
