@@ -156,7 +156,7 @@ export default function ScrapeMetadataModal({ movie, onClose, onSuccess }: Scrap
     >
       <div className={panelClass} onClick={(e) => e.stopPropagation()}>
         <div className="movie-modal-header">
-          <h2 className="movie-modal-header-title">Scrape metadata</h2>
+          <h2 className="movie-modal-header-title">Scrape Metadata</h2>
           <button
             type="button"
             onClick={handleClose}
@@ -203,8 +203,12 @@ export default function ScrapeMetadataModal({ movie, onClose, onSuccess }: Scrap
                   </span>
                 </div>
                 <div className="dataset-info-row">
-                  <span className="dataset-info-label">Title</span>
-                  <span className="dataset-info-value">{displayMovieName(movie)}</span>
+                  <span className="dataset-info-label">Original title</span>
+                  <span className="dataset-info-value">{movie.title || "—"}</span>
+                </div>
+                <div className="dataset-info-row">
+                  <span className="dataset-info-label">TMDB title</span>
+                  <span className="dataset-info-value">{movie.scraped_title?.trim() || "—"}</span>
                 </div>
                 <div className="dataset-info-row">
                   <span className="dataset-info-label">Genres</span>

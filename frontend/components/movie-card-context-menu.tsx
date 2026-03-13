@@ -186,7 +186,7 @@ export default function MovieCardContextMenu({
         }}
       >
         <span className="movie-context-menu-item-icon"><IconScrape /></span>
-        <span>Scrape metadata</span>
+        <span>Scrape Metadata</span>
       </button>
       <button
         type="button"
@@ -198,7 +198,7 @@ export default function MovieCardContextMenu({
         }}
       >
         <span className="movie-context-menu-item-icon"><IconRefresh /></span>
-        <span>Refresh metadata</span>
+        <span>Refresh Metadata</span>
       </button>
       <button
         type="button"
@@ -210,7 +210,7 @@ export default function MovieCardContextMenu({
         }}
       >
         <span className="movie-context-menu-item-icon"><IconImage /></span>
-        <span>Change image</span>
+        <span>Change Image</span>
       </button>
     </div>
   );
