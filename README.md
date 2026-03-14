@@ -73,7 +73,7 @@ pip install -r requirements.txt
 
 ### 2. Train the Model
 
-Train the recommender model using the provided dataset. Artifacts (model, split data, metrics) will be saved to `models/artifacts/`.
+Train the recommender model using the provided dataset. Model files and train/test splits are saved under `models/artifacts/<model-type>/` (for example, `models/artifacts/option1/`), while metadata files are shared in `models/artifacts/`.
 
 ```bash
 python -m scripts.train_and_evaluate --dataset-dir frontend/ml-latest-small/ml-latest-small --top-k 10
@@ -81,8 +81,10 @@ python -m scripts.train_and_evaluate --dataset-dir frontend/ml-latest-small/ml-l
 
 Top-K relevance threshold can be configured (default: `rating >= 4.0`):
 ```bash
-python -m scripts.train_and_evaluate --top-k 10 --min-relevant-rating 4.0
+python -m scripts.train_and_evaluate --top-k 10 --topn-relevance rating_threshold --min-relevant-rating 4.0
 ```
+
+By default, Top-K evaluation follows the CS550 holdout definition (`--topn-relevance all_test`), which treats all testing interactions as relevant.
 
 *(Optional)* Tune Matrix Factorization hyperparameters:
 ```bash
@@ -98,13 +100,14 @@ Useful Option 2 controls:
 - `--option2-dropout-rate`
 - `--option2-l2-reg`
 - `--option2-validation-split`
-- `--option2-early-stopping-patience`
 - `--option2-lr-plateau-patience`
 - `--option2-rating-weight-power`
 
+The script caches a shared train/test split in `models/artifacts/splits/` so Option 1 and Option 2 are evaluated on the same holdout split. Use `--force-resplit` to regenerate.
+
 ### 3. Fetch Movie Images (Optional but Recommended)
 
-To display high-quality posters and backdrops, run the TMDB enrichment script. This will generate `movies_enriched.csv`.
+To display high-quality posters and backdrops, run the TMDB enrichment script. This will generate the shared metadata file `models/artifacts/movies_enriched.csv`.
 
 > **Note**: Before running the script, you must obtain a free API key from [TMDB](https://www.themoviedb.org/documentation/api). Then, create a `.env` file in the project root and add your key:
 > ```bash

@@ -52,7 +52,7 @@ function parseStoredNumber(key: string, fallback: number, min: number, max: numb
 }
 
 export default function AppearanceSettings() {
-  const [activeTheme, setActiveTheme] = useState(() => THEMES.find(t => t.name === "McLaren Papaya") ?? THEMES[0]);
+  const [activeTheme, setActiveTheme] = useState(() => THEMES.find(t => t.name === "Green") ?? THEMES[0]);
   const [customColor, setCustomColor] = useState("#ffffff");
   const [isCustom, setIsCustom] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);

@@ -104,6 +104,40 @@ export default function AlgorithmSettings() {
     return h.rmse.map((r, i) => ({ epoch: i + 1, rmse: r, val_rmse: h.val_rmse?.[i] }));
   }, [modelConfig?.history]);
 
+  const lrChartData = useMemo(() => {
+    const h = modelConfig?.history;
+    if (!h?.learning_rate) return [];
+    return h.learning_rate.map((lr, i) => ({ epoch: i + 1, lr }));
+  }, [modelConfig?.history]);
+
+  const topK = Number(modelConfig?.metrics?.top_k ?? 10);
+  const usesAllTestRelevance = modelConfig?.metrics?.topn_relevance === "all_test";
+
+  const formatMetricNumber = useCallback((value: unknown, digits = 4) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+    return value.toFixed(digits);
+  }, []);
+
+  const formatMetricInteger = useCallback((value: unknown) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+    return `${Math.round(value)}`;
+  }, []);
+
+  const metricCards = useMemo(() => {
+    const metrics = modelConfig?.metrics;
+    if (!metrics) return [];
+    return [
+      { label: "Best Model Epoch", value: formatMetricInteger(metrics.best_model_epoch ?? metrics.best_epoch) },
+      { label: "Best Model Val Loss", value: formatMetricNumber(metrics.best_model_val_loss) },
+      { label: "MAE", value: formatMetricNumber(metrics.mae) },
+      { label: "RMSE", value: formatMetricNumber(metrics.rmse) },
+      { label: `Precision@${topK}`, value: formatMetricNumber(metrics.precision) },
+      { label: `Recall@${topK}`, value: formatMetricNumber(metrics.recall) },
+      { label: `F-measure@${topK}`, value: formatMetricNumber(metrics.f_measure) },
+      { label: `NDCG@${topK}`, value: formatMetricNumber(metrics.ndcg) },
+    ];
+  }, [modelConfig?.metrics, formatMetricInteger, formatMetricNumber, topK]);
+
   return (
     <section className="settings-card">
       <h2>Engines</h2>
@@ -144,22 +178,12 @@ export default function AlgorithmSettings() {
         <div className="model-metrics settings-panel-strong">
           <h4>Current Model Metrics</h4>
           <div className="metrics-grid">
-            <div className="metric-item">
-              <span className="metric-label">RMSE</span>
-              <span className="metric-value">{modelConfig.metrics.rmse?.toFixed(4)}</span>
-            </div>
-            <div className="metric-item">
-              <span className="metric-label">MAE</span>
-              <span className="metric-value">{modelConfig.metrics.mae?.toFixed(4)}</span>
-            </div>
-            <div className="metric-item">
-              <span className="metric-label">Precision@10</span>
-              <span className="metric-value">{modelConfig.metrics.precision?.toFixed(4)}</span>
-            </div>
-            <div className="metric-item">
-              <span className="metric-label">NDCG@10</span>
-              <span className="metric-value">{modelConfig.metrics.ndcg?.toFixed(4)}</span>
-            </div>
+            {metricCards.map((card) => (
+              <div key={card.label} className="metric-item">
+                <span className="metric-label">{card.label}</span>
+                <span className="metric-value">{card.value}</span>
+              </div>
+            ))}
           </div>
           
           <div className="metrics-info settings-panel-inset" style={{ marginTop: '24px', marginBottom: 0 }}>
@@ -183,38 +207,54 @@ export default function AlgorithmSettings() {
               margin: 0, 
               paddingLeft: '0', 
               listStyle: 'none',
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: '12px' 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: '16px' 
             }}>
-              <li style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <li style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
                 <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
                 <div>
-                  <strong style={{ color: 'var(--text-main)' }}>Data Split Strategy:</strong> Per-user 80/20 random holdout split to ensure personalized and unbiased evaluation.
+                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Holdout Protocol</strong> 
+                  A per-user 80/20 random split is applied so each user is evaluated on personalized unseen interactions.
                 </div>
               </li>
-              <li style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <li style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
                 <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
                 <div>
-                  <strong style={{ color: 'var(--text-main)' }}>Unseen Items Only:</strong> Recommendations strictly exclude movies the user has already rated in the training set.
+                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Candidate Filtering</strong> 
+                  Recommendation candidates always exclude items already observed in each user's training set.
                 </div>
               </li>
-              <li style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <li style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
                 <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
                 <div>
-                  <strong style={{ color: 'var(--text-main)' }}>RMSE / MAE:</strong> Measures the error in rating predictions across all test items (lower is better).
+                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Point-wise Error</strong> 
+                  `MAE` and `RMSE` evaluate rating prediction error on hidden test interactions (lower is better).
                 </div>
               </li>
-              <li style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <li style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
                 <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
                 <div>
-                  <strong style={{ color: 'var(--text-main)' }}>Precision@10 / NDCG@10:</strong> Measures the quality of the top-10 recommended items (higher is better).
+                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Top-{topK} Ranking Quality</strong>{" "}
+                  {`Precision@${topK}, Recall@${topK}, F-measure@${topK}, and NDCG@${topK}`} measure recommendation quality in the top-{topK} list (higher is better).
                 </div>
               </li>
-              <li style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <li style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
                 <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
                 <div>
-                  <strong style={{ color: 'var(--text-main)' }}>Relevance Threshold:</strong> For Top-K metrics, a movie is considered a "relevant" recommendation if the user rated it <strong>≥ {modelConfig.metrics.min_relevant_rating || "4.0"}</strong> in the hidden test set.
+                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Top-K Relevance Rule</strong>{" "}
+                  {usesAllTestRelevance ? (
+                    <>All hidden test interactions are treated as relevant (`all_test`, CS550-aligned).</>
+                  ) : (
+                    <>A recommended item is relevant only when its hidden-test rating is <strong>≥ {modelConfig.metrics.min_relevant_rating || "4.0"}</strong> (`rating_threshold`).</>
+                  )}
+                </div>
+              </li>
+              <li style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
+                <div>
+                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Model Selection</strong> 
+                  The deployed checkpoint is chosen by validation performance (minimum validation loss), reported by Best Model Epoch and Best Model Val Loss.
                 </div>
               </li>
             </ul>
@@ -321,6 +361,34 @@ export default function AlgorithmSettings() {
                         strokeWidth={2} 
                         dot={false} 
                         name="Val RMSE" 
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {modelConfig.history.learning_rate && (
+              <div style={{ flex: '1 1 400px' }}>
+                <h4>Learning Rate Schedule</h4>
+                <div className="chart-wrapper chart-wrapper-fixed settings-chart-wrapper-strong">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={lrChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />
+                      <XAxis dataKey="epoch" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                      <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} domain={['auto', 'auto']} tickFormatter={(val) => val.toExponential(1)} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
+                        formatter={(value) => (typeof value === "number" ? value.toExponential(4) : `${value ?? "-"}`)}
+                      />
+                      <Legend />
+                      <Line 
+                        type="stepAfter" 
+                        dataKey="lr" 
+                        stroke="#06b6d4" 
+                        strokeWidth={2} 
+                        dot={false} 
+                        name="Learning Rate" 
                       />
                     </LineChart>
                   </ResponsiveContainer>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { getMovies, getRecommendations, getUserHistory, Movie, Recommendation } from "../lib/api";
 import MovieCardGrid from "../components/movie-card-grid";
 import HeroCarousel, { type HeroCarouselSource } from "../components/hero-carousel";
@@ -22,6 +23,7 @@ let globalCarouselSourceNote = "Personalized feed unavailable. Showing trending 
 
 export default function HomePage() {
   const { userId } = useUser();
+  const router = useRouter();
   const [metadataVersion, setMetadataVersion] = useState(0);
   const hasCache = globalUserId === userId && globalTrending.length > 0;
   const [loading, setLoading] = useState(!hasCache);
@@ -190,9 +192,26 @@ export default function HomePage() {
     );
   }
 
+  const handleExploreMore = () => {
+    if (typeof window !== "undefined") {
+      if (recommendations.length > 0) {
+        sessionStorage.setItem("collectionData", JSON.stringify({ title: "Top Picks for You", items: recommendations, scoreLabel: "Match" }));
+      } else {
+        sessionStorage.setItem("collectionData", JSON.stringify({ title: "Trending Now", items: trending, scoreLabel: undefined }));
+      }
+      router.push("/collection?from=/");
+    }
+  };
+
   return (
     <>
-      <HeroCarousel movies={featuredMovies} source={carouselSource} sourceNote={carouselSourceNote} autoAdvanceMs={carouselIntervalMs} />
+      <HeroCarousel 
+        movies={featuredMovies} 
+        source={carouselSource} 
+        sourceNote={carouselSourceNote} 
+        autoAdvanceMs={carouselIntervalMs} 
+        onExploreMore={handleExploreMore}
+      />
 
       <section id="browse" className="content-padding" style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
         

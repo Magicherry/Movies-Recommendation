@@ -1,6 +1,7 @@
 :root {
   color-scheme: dark;
   font-family: Inter, "SF Pro Display", system-ui, Arial, sans-serif;
+  
   --bg-base: #0a0e17;
   --bg-surface: #18181b;
   --bg-surface-hover: #27272a;
@@ -9,30 +10,36 @@
   --text-subtle: #a1a1aa;
   --border-soft: rgba(255, 255, 255, 0.1);
   --border-subtle: rgba(255, 255, 255, 0.05);
-  --brand: #FF8000;
-  --brand-hover: #e67300;
+  --brand: #6ae100;
+  --brand-hover: #55b400;
+
   /* Shared shadows */
   --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.2);
   --shadow-card-hover: 0 6px 16px rgba(0, 0, 0, 0.2);
   --shadow-btn: 0 4px 12px rgba(0, 0, 0, 0.25);
+
   /* Shared radii */
   --radius-card: 16px;
   --radius-panel: 12px;
   --radius-sm: 8px;
   --radius-xs: 4px;
+
   /* Chart tooltip (Recharts) */
   --chart-tooltip-bg: #18181b;
   --chart-tooltip-border: 1px solid rgba(255, 255, 255, 0.1);
   --chart-tooltip-radius: 8px;
+
   /* Overlays */
   --bg-overlay: rgba(0, 0, 0, 0.2);
   --bg-overlay-light: rgba(255, 255, 255, 0.02);
   --bg-hover-soft: rgba(255, 255, 255, 0.05);
   --bg-hover-medium: rgba(255, 255, 255, 0.1);
   --border-strong: rgba(255, 255, 255, 0.2);
+
   /* Chart grid/cursor (Recharts) */
   --chart-grid-stroke: rgba(255, 255, 255, 0.1);
   --chart-cursor-fill: rgba(255, 255, 255, 0.05);
+
   /* Misc */
   --shadow-dropdown: 0 10px 40px rgba(0, 0, 0, 0.5);
   --shadow-inset: inset 0 2px 10px rgba(0, 0, 0, 0.2);
@@ -3567,27 +3574,41 @@ body {
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
 }
 
 .metric-item {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.metric-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .metric-label {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   color: var(--text-subtle);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .metric-value {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  color: var(--text-main);
+  color: var(--brand);
 }
 
 .model-history {
@@ -3836,7 +3857,8 @@ body {
 
 @media (max-width: 480px) {
   .metrics-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
   }
   .stats-overview {
     grid-template-columns: 1fr;

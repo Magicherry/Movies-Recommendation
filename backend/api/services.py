@@ -103,6 +103,127 @@ class RecommenderService:
                 item["overview"] = meta.get("overview", item.get("overview", ""))
                 item["tmdb_id"] = meta.get("tmdb_id", item.get("tmdb_id", ""))
 
+    @staticmethod
+    def _first_existing_path(candidates: List[Path]) -> Path | None:
+        for path in candidates:
+            if path.exists():
+                return path
+        return None
+
+    def _resolve_model_data_paths(self, model_name: str) -> Dict[str, Path | None]:
+        model_dir = self.artifacts_dir / model_name
+        # Metadata is shared; training split is model-specific.
+        fallback_dir = self.artifacts_dir / "option1"
+
+        movies_candidates = [
+            self.artifacts_dir / "movies.csv",
+            model_dir / "movies.csv",
+            fallback_dir / "movies.csv",
+        ]
+        train_candidates = [
+            model_dir / "train_ratings.csv",
+        ]
+        enriched_candidates = [
+            self.artifacts_dir / "movies_enriched.csv",
+            model_dir / "movies_enriched.csv",
+            fallback_dir / "movies_enriched.csv",
+        ]
+
+        movies_path = self._first_existing_path(movies_candidates)
+        if movies_path is None:
+            raise FileNotFoundError(
+                f"Data files for model '{model_name}' not found. Run: python -m scripts.train_and_evaluate --model-type {model_name}"
+            )
+
+        train_ratings_path = self._first_existing_path(train_candidates)
+        if train_ratings_path is None:
+            raise FileNotFoundError(
+                f"train_ratings.csv for model '{model_name}' not found. Run training for this model: "
+                f"python -m scripts.train_and_evaluate --model-type {model_name}"
+            )
+        # Always write enriched metadata to the shared root file.
+        preferred_enriched_write_path = self.artifacts_dir / "movies_enriched.csv"
+        source_enriched_path = self._first_existing_path(enriched_candidates)
+
+        return {
+            "movies_path": movies_path,
+            "train_ratings_path": train_ratings_path,
+            "enriched_source_path": source_enriched_path,
+            "enriched_write_path": preferred_enriched_write_path,
+        }
+
+    def _load_ratings_from_path(self, train_ratings_path: Path | None) -> None:
+        if train_ratings_path is None or not train_ratings_path.exists():
+            raise FileNotFoundError("Model-specific train_ratings.csv not found.")
+
+        ratings = pd.read_csv(train_ratings_path)
+        self.users = sorted(ratings["user_id"].astype(int).unique().tolist())
+
+        behavior_stats = ratings.groupby("item_id").agg(
+            watched_count=("user_id", "nunique"),
+            high_rating_count=("rating", lambda s: int((s >= 4.0).sum())),
+            avg_rating=("rating", "mean"),
+        )
+        behavior_stats["behavior_score"] = (
+            behavior_stats["high_rating_count"] * 2.0
+            + behavior_stats["watched_count"]
+            + behavior_stats["avg_rating"] / 5.0
+        )
+        behavior_stats = behavior_stats.reset_index()
+        behavior_stats["item_id"] = behavior_stats["item_id"].astype(int)
+        self.movie_behavior_stats = behavior_stats
+
+        self.user_history = {}
+        for row in ratings.itertuples(index=False):
+            uid = int(row.user_id)
+            iid = int(row.item_id)
+            if uid not in self.user_history:
+                self.user_history[uid] = []
+
+            meta = self.movie_lookup.get(
+                iid,
+                {
+                    "item_id": iid,
+                    "title": "Unknown",
+                    "scraped_title": "",
+                    "genres": "",
+                    "poster_url": "",
+                    "backdrop_url": "",
+                    "overview": "",
+                    "tmdb_id": "",
+                },
+            )
+            self.user_history[uid].append(
+                {
+                    "item_id": iid,
+                    "title": meta["title"],
+                    "scraped_title": meta.get("scraped_title", ""),
+                    "genres": meta["genres"],
+                    "poster_url": meta["poster_url"],
+                    "backdrop_url": meta["backdrop_url"],
+                    "overview": meta["overview"],
+                    "tmdb_id": meta.get("tmdb_id", ""),
+                    "rating": float(row.rating),
+                }
+            )
+
+        for uid in self.user_history:
+            self.user_history[uid].sort(key=lambda x: x["rating"], reverse=True)
+
+    def _load_active_model_data(self) -> None:
+        paths = self._resolve_model_data_paths(self.active_model_name)
+        movies_path = paths["movies_path"]
+        train_ratings_path = paths["train_ratings_path"]
+        enriched_source_path = paths["enriched_source_path"]
+        enriched_write_path = paths["enriched_write_path"]
+
+        assert movies_path is not None
+        assert enriched_write_path is not None
+        self._movies_write_path = enriched_write_path
+        source_path = enriched_source_path if enriched_source_path is not None and enriched_source_path.exists() else movies_path
+        self._load_movies_from_path(source_path)
+        self._load_ratings_from_path(train_ratings_path)
+
     def _load_active_model_from_disk(self) -> None:
         path = self._active_model_state_path
         if not path.exists():
@@ -153,7 +274,10 @@ class RecommenderService:
             except OSError:
                 return
             if model_name in self.models:
+                model_changed = model_name != self.active_model_name
                 self.active_model_name = model_name
+                if model_changed:
+                    self._load_active_model_data()
             self._active_model_mtime_ns = mtime_ns
 
     def _resolve_active_movies_path(self) -> Path | None:
@@ -162,7 +286,7 @@ class RecommenderService:
         return self._movies_loaded_path
 
     def _ensure_movie_data_fresh(self) -> None:
-        self._ensure_loaded()
+        self._ensure_active_model_fresh()
         source_path = self._resolve_active_movies_path()
         if source_path is None or not source_path.exists():
             return
@@ -201,22 +325,6 @@ class RecommenderService:
 
             model_option1_path = self.artifacts_dir / "option1" / "model.pkl"
             model_option2_path = self.artifacts_dir / "option2" / "model.pkl"
-            
-            # Data files are common and stored in the root artifacts dir
-            movies_path = self.artifacts_dir / "movies.csv"
-            enriched_movies_path = self.artifacts_dir / "movies_enriched.csv"
-            train_ratings_path = self.artifacts_dir / "train_ratings.csv"
-
-            if not movies_path.exists():
-                # Fallback to option1 dir if old structure
-                movies_path = self.artifacts_dir / "option1" / "movies.csv"
-                enriched_movies_path = self.artifacts_dir / "option1" / "movies_enriched.csv"
-                train_ratings_path = self.artifacts_dir / "option1" / "train_ratings.csv"
-                
-                if not movies_path.exists():
-                    raise FileNotFoundError(
-                        "Model artifacts not found. Run: python -m scripts.train_and_evaluate"
-                    )
 
             if model_option1_path.exists():
                 with open(model_option1_path, "rb") as f:
@@ -251,70 +359,8 @@ class RecommenderService:
             if self.active_model_name not in self.models:
                 self.active_model_name = list(self.models.keys())[0]
             self._persist_active_model_to_disk()
-            
-            self._movies_write_path = enriched_movies_path
-            source_path = enriched_movies_path if enriched_movies_path.exists() else movies_path
-            self._load_movies_from_path(source_path)
-            
-            if train_ratings_path.exists():
-                ratings = pd.read_csv(train_ratings_path)
-                self.users = sorted(ratings["user_id"].astype(int).unique().tolist())
 
-                behavior_stats = ratings.groupby("item_id").agg(
-                    watched_count=("user_id", "nunique"),
-                    high_rating_count=("rating", lambda s: int((s >= 4.0).sum())),
-                    avg_rating=("rating", "mean"),
-                )
-                behavior_stats["behavior_score"] = (
-                    behavior_stats["high_rating_count"] * 2.0
-                    + behavior_stats["watched_count"]
-                    + behavior_stats["avg_rating"] / 5.0
-                )
-                behavior_stats = behavior_stats.reset_index()
-                behavior_stats["item_id"] = behavior_stats["item_id"].astype(int)
-                self.movie_behavior_stats = behavior_stats
-
-                self.user_history = {}
-                for row in ratings.itertuples(index=False):
-                    uid = int(row.user_id)
-                    iid = int(row.item_id)
-                    if uid not in self.user_history:
-                        self.user_history[uid] = []
-                    
-                    meta = self.movie_lookup.get(
-                        iid,
-                        {
-                            "item_id": iid,
-                            "title": "Unknown",
-                            "scraped_title": "",
-                            "genres": "",
-                            "poster_url": "",
-                            "backdrop_url": "",
-                            "overview": "",
-                            "tmdb_id": "",
-                        },
-                    )
-                    self.user_history[uid].append({
-                        "item_id": iid,
-                        "title": meta["title"],
-                        "scraped_title": meta.get("scraped_title", ""),
-                        "genres": meta["genres"],
-                        "poster_url": meta["poster_url"],
-                        "backdrop_url": meta["backdrop_url"],
-                        "overview": meta["overview"],
-                        "tmdb_id": meta.get("tmdb_id", ""),
-                        "rating": float(row.rating),
-                    })
-                
-                # Sort history by rating descending
-                for uid in self.user_history:
-                    self.user_history[uid].sort(key=lambda x: x["rating"], reverse=True)
-            else:
-                # Fallback if no train_ratings.csv
-                self.users = []
-                self.movie_behavior_stats = pd.DataFrame(
-                    columns=["item_id", "watched_count", "high_rating_count", "avg_rating", "behavior_score"]
-                )
+            self._load_active_model_data()
 
             self._loaded = True
 
@@ -549,7 +595,7 @@ class RecommenderService:
         return history[:limit]
 
     def list_users(self, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
-        self._ensure_loaded()
+        self._ensure_active_model_fresh()
         total = len(self.users)
         users_page = self.users[offset:offset+limit]
         return {
@@ -657,8 +703,12 @@ class RecommenderService:
         if model_name not in self.models:
             return False
         with self._lock:
+            if model_name == self.active_model_name:
+                self._persist_active_model_to_disk()
+                return True
             self.active_model_name = model_name
             self._persist_active_model_to_disk()
+            self._load_active_model_data()
         return True
 
     def update_movie_enriched(
@@ -670,7 +720,7 @@ class RecommenderService:
         tmdb_id: int | None = None,
         scraped_title: str | None = None,
     ) -> bool:
-        """Update one movie's enriched fields and persist to movies_enriched.csv."""
+        """Update one movie's shared enriched metadata fields."""
         self._ensure_movie_data_fresh()
         if self.movies is None or item_id not in self.movie_lookup:
             return False

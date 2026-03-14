@@ -3,12 +3,12 @@
 import { useEffect } from "react";
 
 const DEFAULT_BG = "#0a0e17";
-const DEFAULT_BRAND = "#FF8000";
-const DEFAULT_BRAND_HOVER = "#e67300";
+const DEFAULT_BRAND = "#6ae100";
+const DEFAULT_BRAND_HOVER = "#55b400";
 
 /**
  * Applies saved theme color and page background from localStorage on mount.
- * Uses Blue Black + McLaren Papaya as defaults when nothing is saved.
+ * Uses green as default theme when nothing is saved.
  */
 export default function ThemeSync() {
   useEffect(() => {

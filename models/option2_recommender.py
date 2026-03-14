@@ -37,7 +37,6 @@ class Option2DeepRecommender:
         dropout_rate: float = 0.15,
         l2_reg: float = 1e-6,
         validation_split: float = 0.1,
-        early_stopping_patience: int = 3,
         lr_plateau_patience: int = 2,
         lr_plateau_factor: float = 0.5,
         min_lr: float = 1e-5,
@@ -60,7 +59,6 @@ class Option2DeepRecommender:
         self.dropout_rate = dropout_rate
         self.l2_reg = l2_reg
         self.validation_split = validation_split
-        self.early_stopping_patience = early_stopping_patience
         self.lr_plateau_patience = lr_plateau_patience
         self.lr_plateau_factor = lr_plateau_factor
         self.min_lr = min_lr
@@ -374,16 +372,24 @@ class Option2DeepRecommender:
         train_w = sample_weights[:split_at]
 
         callbacks: List[tf.keras.callbacks.Callback] = []
+        best_val_loss = np.inf
+        best_val_epoch = 0
+        best_weights: list[np.ndarray] | None = None
+
+        class _BestModelSaver(tf.keras.callbacks.Callback):
+            def on_epoch_end(self, epoch, logs=None):
+                nonlocal best_val_loss, best_val_epoch, best_weights
+                if not logs or "val_loss" not in logs:
+                    return
+                current_val_loss = float(logs["val_loss"])
+                if current_val_loss < best_val_loss - 1e-8:
+                    best_val_loss = current_val_loss
+                    best_val_epoch = int(epoch) + 1
+                    best_weights = self.model.get_weights()
+
         if val_size > 0:
-            if self.early_stopping_patience > 0:
-                callbacks.append(
-                    tf.keras.callbacks.EarlyStopping(
-                        monitor="val_loss",
-                        patience=self.early_stopping_patience,
-                        min_delta=1e-4,
-                        restore_best_weights=True,
-                    )
-                )
+            # Keep full training schedule, but always restore the best validation checkpoint.
+            callbacks.append(_BestModelSaver())
             if self.lr_plateau_patience > 0:
                 callbacks.append(
                     tf.keras.callbacks.ReduceLROnPlateau(
@@ -421,10 +427,16 @@ class Option2DeepRecommender:
             **fit_kwargs,
         )
 
+        if best_weights is not None:
+            model.set_weights(best_weights)
+
         self.training_history = {
             key: [float(v) for v in value]
             for key, value in history.history.items()
         }
+        if best_weights is not None:
+            self.training_history["best_val_epoch"] = [float(best_val_epoch)]
+            self.training_history["best_val_loss"] = [float(best_val_loss)]
 
         user_idx_arr = np.arange(n_users, dtype=np.int32).reshape(-1, 1)
         item_idx_arr = np.arange(n_items, dtype=np.int32).reshape(-1, 1)

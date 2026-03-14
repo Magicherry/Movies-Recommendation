@@ -1,14 +1,22 @@
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, List, Protocol
 
 import numpy as np
 import pandas as pd
 
-from models.option1_recommender import Option1UserBasedCF
+
+class RecommendationLike(Protocol):
+    item_id: int
+    score: float
 
 
-def evaluate_rating_prediction(model: Option1UserBasedCF, test_ratings: pd.DataFrame) -> Dict[str, float]:
+class RecommenderLike(Protocol):
+    def predict(self, user_id: int, item_id: int) -> float: ...
+    def recommend_top_n(self, user_id: int, n: int = 10, exclude_seen: bool = True) -> List[RecommendationLike]: ...
+
+
+def evaluate_rating_prediction(model: RecommenderLike, test_ratings: pd.DataFrame) -> Dict[str, float]:
     if test_ratings.empty:
         return {"mae": 0.0, "rmse": 0.0}
 
@@ -26,31 +34,34 @@ def evaluate_rating_prediction(model: Option1UserBasedCF, test_ratings: pd.DataF
 
 
 def evaluate_top_n(
-    model: Option1UserBasedCF,
+    model: RecommenderLike,
     train_ratings: pd.DataFrame,
     test_ratings: pd.DataFrame,
     k: int = 10,
     min_relevant_rating: float = 4.0,
+    use_all_test_items: bool = True,
 ) -> Dict[str, float]:
     if test_ratings.empty or k <= 0:
         return {"precision": 0.0, "recall": 0.0, "f_measure": 0.0, "ndcg": 0.0}
 
-    positive_test = test_ratings[test_ratings["rating"] >= float(min_relevant_rating)]
-    if positive_test.empty:
+    if use_all_test_items:
+        relevant_test = test_ratings
+    else:
+        relevant_test = test_ratings[test_ratings["rating"] >= float(min_relevant_rating)]
+
+    test_users = sorted(test_ratings["user_id"].astype(int).unique().tolist())
+    if not test_users:
         return {"precision": 0.0, "recall": 0.0, "f_measure": 0.0, "ndcg": 0.0}
 
-    test_items_by_user = positive_test.groupby("user_id")["item_id"].apply(set).to_dict()
-    train_users = set(train_ratings["user_id"].astype(int).unique().tolist())
+    test_items_by_user = relevant_test.groupby("user_id")["item_id"].apply(set).to_dict()
 
     precisions = []
     recalls = []
     f_measures = []
     ndcgs = []
 
-    for user_id, true_items in test_items_by_user.items():
-        user_id = int(user_id)
-        if user_id not in train_users:
-            continue
+    for user_id in test_users:
+        true_items = test_items_by_user.get(user_id, set())
 
         recs = model.recommend_top_n(user_id=user_id, n=k, exclude_seen=True)
         rec_items = [r.item_id for r in recs]
@@ -61,11 +72,11 @@ def evaluate_top_n(
             ndcgs.append(0.0)
             continue
 
-        hit_set = set(rec_items) & set(true_items)
+        hit_set = set(rec_items) & true_items
         hits = len(hit_set)
 
         precision = hits / k
-        recall = hits / max(len(true_items), 1)
+        recall = hits / len(true_items) if true_items else 0.0
         if precision + recall > 0:
             f_measure = 2 * precision * recall / (precision + recall)
         else:

@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import pickle
 from pathlib import Path
 
+import pandas as pd
+
 from models.option1_recommender import Option1MatrixFactorizationSGD
 from models.option2_recommender import Option2DeepRecommender
-from scripts.data_pipeline import load_movielens, split_train_test_by_user
+from scripts.data_pipeline import DataSplit, load_movielens, split_train_test_by_user
 from scripts.evaluation import evaluate_rating_prediction, evaluate_top_n
 
 
@@ -34,7 +37,14 @@ def parse_args() -> argparse.Namespace:
         "--min-relevant-rating",
         type=float,
         default=4.0,
-        help="Minimum test rating treated as relevant item for Top-K metrics.",
+        help="Minimum test rating treated as relevant item when topn-relevance=rating_threshold.",
+    )
+    parser.add_argument(
+        "--topn-relevance",
+        type=str,
+        default="all_test",
+        choices=["all_test", "rating_threshold"],
+        help="Top-K relevance definition: use all holdout test items (CS550 default) or rating threshold.",
     )
     parser.add_argument(
         "--n-factors",
@@ -46,6 +56,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lr", type=float, default=0.01, help="Initial learning rate for SGD.")
     parser.add_argument("--reg", type=float, default=0.05, help="L2 regularization strength.")
     parser.add_argument("--lr-decay", type=float, default=0.98, help="Learning-rate decay after each epoch.")
+    parser.add_argument(
+        "--option1-validation-split",
+        type=float,
+        default=0.1,
+        help="Validation split ratio for option1.",
+    )
+    parser.add_argument(
+        "--option1-early-stopping-patience",
+        type=int,
+        default=3,
+        help="Early stopping patience for option1 (0 disables).",
+    )
     parser.add_argument("--batch-size", type=int, default=256, help="Mini-batch size used by deep model.")
     parser.add_argument(
         "--option2-lr",
@@ -70,12 +92,6 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.1,
         help="Validation split ratio for option2.",
-    )
-    parser.add_argument(
-        "--option2-early-stopping-patience",
-        type=int,
-        default=3,
-        help="Early stopping patience for option2.",
     )
     parser.add_argument(
         "--option2-lr-plateau-patience",
@@ -144,7 +160,97 @@ def parse_args() -> argparse.Namespace:
         default="models/artifacts",
         help="Directory to save model artifacts.",
     )
+    parser.add_argument(
+        "--force-resplit",
+        action="store_true",
+        help="Force regeneration of shared train/test split under artifacts/splits.",
+    )
     return parser.parse_args()
+
+
+def _normalize_split_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    normalized = frame[["user_id", "item_id", "rating", "timestamp"]].copy()
+    normalized["user_id"] = normalized["user_id"].astype(int)
+    normalized["item_id"] = normalized["item_id"].astype(int)
+    normalized["rating"] = normalized["rating"].astype(float)
+    normalized["timestamp"] = normalized["timestamp"].astype("int64")
+    return normalized.sort_values(["user_id", "item_id", "timestamp"], kind="mergesort").reset_index(drop=True)
+
+
+def _compute_split_hash(split: DataSplit) -> str:
+    digest = hashlib.sha256()
+    for split_name, frame in (("train", split.train), ("test", split.test)):
+        normalized = _normalize_split_frame(frame)
+        row_hashes = pd.util.hash_pandas_object(normalized, index=False).to_numpy(dtype="uint64")
+        digest.update(split_name.encode("utf-8"))
+        digest.update(row_hashes.tobytes())
+    return digest.hexdigest()
+
+
+def _load_or_create_shared_split(
+    ratings: pd.DataFrame,
+    artifacts_dir: Path,
+    dataset_dir: Path,
+    test_ratio: float,
+    seed: int,
+    force_resplit: bool,
+) -> tuple[DataSplit, str, str]:
+    split_dir = artifacts_dir / "splits"
+    split_dir.mkdir(parents=True, exist_ok=True)
+
+    train_split_path = split_dir / "train_ratings.csv"
+    test_split_path = split_dir / "test_ratings.csv"
+    split_meta_path = split_dir / "split_meta.json"
+
+    expected_dataset_dir = str(dataset_dir.resolve())
+    can_reuse_cached_split = (
+        not force_resplit
+        and train_split_path.exists()
+        and test_split_path.exists()
+        and split_meta_path.exists()
+    )
+
+    if can_reuse_cached_split:
+        try:
+            with open(split_meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            if (
+                int(meta.get("seed", -1)) == int(seed)
+                and float(meta.get("test_ratio", -1.0)) == float(test_ratio)
+                and str(meta.get("dataset_dir", "")) == expected_dataset_dir
+            ):
+                train = _normalize_split_frame(pd.read_csv(train_split_path))
+                test = _normalize_split_frame(pd.read_csv(test_split_path))
+                split = DataSplit(train=train, test=test)
+                split_hash = str(meta.get("split_hash") or _compute_split_hash(split))
+                return split, split_hash, "cached"
+        except (ValueError, OSError, json.JSONDecodeError, KeyError):
+            pass
+
+    split = split_train_test_by_user(
+        ratings=ratings,
+        test_ratio=test_ratio,
+        random_state=seed,
+    )
+    split = DataSplit(
+        train=_normalize_split_frame(split.train),
+        test=_normalize_split_frame(split.test),
+    )
+    split_hash = _compute_split_hash(split)
+
+    split.train.to_csv(train_split_path, index=False)
+    split.test.to_csv(test_split_path, index=False)
+    split_meta = {
+        "dataset_dir": expected_dataset_dir,
+        "seed": int(seed),
+        "test_ratio": float(test_ratio),
+        "split_hash": split_hash,
+        "train_size": int(len(split.train)),
+        "test_size": int(len(split.test)),
+    }
+    with open(split_meta_path, "w", encoding="utf-8") as f:
+        json.dump(split_meta, f, indent=2)
+    return split, split_hash, "generated"
 
 
 def main() -> None:
@@ -157,10 +263,13 @@ def main() -> None:
     model_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     ratings, movies = load_movielens(dataset_dir)
-    split = split_train_test_by_user(
+    split, split_hash, split_source = _load_or_create_shared_split(
         ratings=ratings,
+        artifacts_dir=artifacts_dir,
+        dataset_dir=dataset_dir,
         test_ratio=args.test_ratio,
-        random_state=args.seed,
+        seed=args.seed,
+        force_resplit=args.force_resplit,
     )
 
     if args.model_type == "option1":
@@ -170,6 +279,8 @@ def main() -> None:
             lr=args.lr,
             reg=args.reg,
             lr_decay=args.lr_decay,
+            validation_split=args.option1_validation_split,
+            early_stopping_patience=args.option1_early_stopping_patience,
             seed=args.seed,
         )
     else:
@@ -188,7 +299,6 @@ def main() -> None:
             dropout_rate=args.option2_dropout_rate,
             l2_reg=args.option2_l2_reg,
             validation_split=args.option2_validation_split,
-            early_stopping_patience=args.option2_early_stopping_patience,
             lr_plateau_patience=args.option2_lr_plateau_patience,
             lr_plateau_factor=args.option2_lr_plateau_factor,
             min_lr=args.option2_min_lr,
@@ -208,6 +318,7 @@ def main() -> None:
         split.test,
         k=args.top_k,
         min_relevant_rating=args.min_relevant_rating,
+        use_all_test_items=args.topn_relevance == "all_test",
     )
 
     if args.model_type == "option1":
@@ -217,6 +328,8 @@ def main() -> None:
             "lr": float(args.lr),
             "reg": float(args.reg),
             "lr_decay": float(args.lr_decay),
+            "validation_split": float(args.option1_validation_split),
+            "early_stopping_patience": int(args.option1_early_stopping_patience),
         }
     else:
         model_hparams = {
@@ -233,7 +346,6 @@ def main() -> None:
             "dropout_rate": float(args.option2_dropout_rate),
             "l2_reg": float(args.option2_l2_reg),
             "validation_split": float(args.option2_validation_split),
-            "early_stopping_patience": int(args.option2_early_stopping_patience),
             "lr_plateau_patience": int(args.option2_lr_plateau_patience),
             "lr_plateau_factor": float(args.option2_lr_plateau_factor),
             "min_lr": float(args.option2_min_lr),
@@ -243,12 +355,17 @@ def main() -> None:
 
     metrics = {
         "dataset_dir": str(dataset_dir),
+        "seed": int(args.seed),
+        "test_ratio": float(args.test_ratio),
+        "split_hash": split_hash,
+        "split_source": split_source,
         "train_size": int(len(split.train)),
         "test_size": int(len(split.test)),
         "users_train": int(split.train["user_id"].nunique()),
         "items_train": int(split.train["item_id"].nunique()),
         "model": args.model_type,
         "top_k": int(args.top_k),
+        "topn_relevance": args.topn_relevance,
         "min_relevant_rating": float(args.min_relevant_rating),
         **model_hparams,
         **rating_metrics,
@@ -258,24 +375,34 @@ def main() -> None:
     with open(model_artifacts_dir / "model.pkl", "wb") as f:
         pickle.dump(model, f)
     
-    # Save common data files to root artifacts dir
+    # Metadata stays shared; train/test split remains model-specific.
     movies.to_csv(artifacts_dir / "movies.csv", index=False)
-    split.train.to_csv(artifacts_dir / "train_ratings.csv", index=False)
-    split.test.to_csv(artifacts_dir / "test_ratings.csv", index=False)
+    split.train.to_csv(model_artifacts_dir / "train_ratings.csv", index=False)
+    split.test.to_csv(model_artifacts_dir / "test_ratings.csv", index=False)
     
     with open(model_artifacts_dir / "metrics.json", "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
 
     history = getattr(model, "training_history", None)
     if history:
-        if history.get("val_loss"):
+        best_epoch: int | None = None
+        if history.get("best_val_epoch"):
+            best_epoch = int(round(float(history["best_val_epoch"][0])))
+            metrics["best_model_epoch"] = best_epoch
+            if history.get("best_val_loss"):
+                metrics["best_model_val_loss"] = float(history["best_val_loss"][0])
+        elif history.get("val_loss"):
             best_epoch = int(min(range(len(history["val_loss"])), key=lambda i: history["val_loss"][i]) + 1)
-            metrics["best_epoch"] = best_epoch
+        elif history.get("val_rmse"):
+            best_epoch = int(min(range(len(history["val_rmse"])), key=lambda i: history["val_rmse"][i]) + 1)
         elif history.get("train_rmse"):
             best_epoch = int(
                 min(range(len(history["train_rmse"])), key=lambda i: history["train_rmse"][i]) + 1
             )
+
+        if best_epoch is not None:
             metrics["best_epoch"] = best_epoch
+            metrics["best_model_epoch"] = best_epoch
 
         with open(model_artifacts_dir / "metrics.json", "w", encoding="utf-8") as f:
             json.dump(metrics, f, indent=2)
