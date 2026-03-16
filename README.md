@@ -169,7 +169,9 @@ NEXT_PUBLIC_API_BASE_URL="http://localhost:8001/api" npm run dev -- -p 3001
 
 ### Analysis Report
 
-Run the analysis pipeline after training to produce a single technical report that compares both recommender options and documents the dataset structure:
+**Report:** [analysis/Report.md](analysis/Report.md)
+
+You can also run the analysis pipeline after training to produce a single technical report that compares both recommender options and documents the dataset structure:
 
 ```bash
 python -m scripts.generate_report
