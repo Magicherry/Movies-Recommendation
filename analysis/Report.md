@@ -32,30 +32,38 @@ The comparison is fundamentally between two recommendation paradigms: a simpler 
 It learns one latent vector for each user $p_u \in \mathbb{R}^{48}$, one latent vector for each item $q_i \in \mathbb{R}^{48}$, one user bias $b_u$, one item bias $b_i$, and a global mean rating $\mu$.
 
 Prediction formula:
-$$
+
+```math
 \hat{r}_{ui} = \text{clip}(\mu + b_u + b_i + p_u^T q_i, 0.5, 5.0)
-$$
+```
 
 Regularized training objective:
-$$
+
+```math
 \mathcal{L}_{\text{Option1}} = \sum_{(u,i)} (r_{ui} - \mu - b_u - b_i - p_u^T q_i)^2 + \lambda (\|p_u\|_2^2 + \|q_i\|_2^2 + b_u^2 + b_i^2)
-$$
+```
 
 ### Option 2: Two-Tower Hybrid Neural Architecture
 The user tower is a learned user-ID embedding with dropout. The item tower combines three signals: an item-ID embedding, a title-text branch, and a genre branch. The title branch uses token embeddings followed by 1D convolutions with kernel sizes 2, 3, and 4, global max pooling, and a dense projection. The genre branch uses genre embeddings followed by global average pooling. Those item-side features are concatenated, passed through dense layers, and projected into a 48-dimensional item vector.
 
 Title and genre feature construction:
-$$
-t_i = \text{Dense}(\text{concat}(\text{MaxPool}(\text{Conv2}(E_{\text{title}}(T_i))), \text{MaxPool}(\text{Conv3}(E_{\text{title}}(T_i))), \text{MaxPool}(\text{Conv4}(E_{\text{title}}(T_i))))) \\
-g_i = \text{AvgPool}(E_{\text{genre}}(G_i)) \\
-v_i = \text{Dense}(\text{concat}(e_{\text{i\_id}}, t_i, g_i))
-$$
+
+```math
+\begin{aligned}
+t_i &= \text{Dense}(\text{concat}(\text{MaxPool}(\text{Conv2}(E_{\text{title}}(T_i))), \text{MaxPool}(\text{Conv3}(E_{\text{title}}(T_i))), \text{MaxPool}(\text{Conv4}(E_{\text{title}}(T_i))))) \\
+g_i &= \text{AvgPool}(E_{\text{genre}}(G_i)) \\
+v_i &= \text{Dense}(\text{concat}(e_{\text{i\_id}}, t_i, g_i))
+\end{aligned}
+```
 
 Centered prediction formula:
-$$
-\hat{s}_{ui} = a_u^T v_i + b_u + b_i \\
-\hat{r}_{ui} = \text{clip}(\mu + \hat{s}_{ui}, 0.5, 5.0)
-$$
+
+```math
+\begin{aligned}
+\hat{s}_{ui} &= a_u^T v_i + b_u + b_i \\
+\hat{r}_{ui} &= \text{clip}(\mu + \hat{s}_{ui}, 0.5, 5.0)
+\end{aligned}
+```
 
 **Interpretation**: `Option 1` learns structure strictly from historical interactions, whereas `Option 2` explicitly injects external metadata constraints through title and genre encoders.
 
@@ -78,31 +86,43 @@ Both models are evaluated on a shared per-user 80/20 holdout split to ensure all
 The report compares the two strategies on both rating prediction and recommendation ranking quality.
 
 Rating-prediction criteria:
-$$
-\text{MAE} = \frac{1}{N} \sum |r_{ui} - \hat{r}_{ui}| \\
-\text{RMSE} = \sqrt{\frac{1}{N} \sum (r_{ui} - \hat{r}_{ui})^2}
-$$
+
+```math
+\begin{aligned}
+\text{MAE} &= \frac{1}{N} \sum |r_{ui} - \hat{r}_{ui}| \\
+\text{RMSE} &= \sqrt{\frac{1}{N} \sum (r_{ui} - \hat{r}_{ui})^2}
+\end{aligned}
+```
 
 Top-K recommendation criteria for each user $u$:
-$$
-\text{Precision@K} = \frac{|\text{Rec}_u(K) \cap \text{Rel}_u|}{K} \\
-\text{Recall@K} = \frac{|\text{Rec}_u(K) \cap \text{Rel}_u|}{|\text{Rel}_u|} \\
-\text{F1@K} = \frac{2 \times \text{Precision@K} \times \text{Recall@K}}{\text{Precision@K} + \text{Recall@K}}
-$$
+
+```math
+\begin{aligned}
+\text{Precision@K} &= \frac{|\text{Rec}_u(K) \cap \text{Rel}_u|}{K} \\
+\text{Recall@K} &= \frac{|\text{Rec}_u(K) \cap \text{Rel}_u|}{|\text{Rel}_u|} \\
+\text{F1@K} &= \frac{2 \times \text{Precision@K} \times \text{Recall@K}}{\text{Precision@K} + \text{Recall@K}}
+\end{aligned}
+```
 
 Ranking-quality criterion:
-$$
-\text{DCG@K} = \sum_{j=1}^{K} \frac{\text{rel}_j}{\log_2(j + 1)} \\
-\text{NDCG@K} = \frac{\text{DCG@K}}{\text{IDCG@K}}
-$$
+
+```math
+\begin{aligned}
+\text{DCG@K} &= \sum_{j=1}^{K} \frac{\text{rel}_j}{\log_2(j + 1)} \\
+\text{NDCG@K} &= \frac{\text{DCG@K}}{\text{IDCG@K}}
+\end{aligned}
+```
 
 In this project, $K = 10$ and $\text{Rel}_u$ is defined as all items in the held-out test set for user $u$ (`topn_relevance = all_test`). Lower MAE and RMSE are better, while higher Precision@10, Recall@10, F1@10, and NDCG@10 are better.
 
 Additional structural-fidelity criteria:
-$$
-\text{mean\_delta} = |\text{mean}(r_{\text{real}}) - \text{mean}(r_{\text{syn}})| \\
-\text{gini\_delta} = |\text{Gini}(\text{popularity}_{\text{real}}) - \text{Gini}(\text{popularity}_{\text{syn}})|
-$$
+
+```math
+\begin{aligned}
+\text{mean\_delta} &= |\text{mean}(r_{\text{real}}) - \text{mean}(r_{\text{syn}})| \\
+\text{gini\_delta} &= |\text{Gini}(\text{popularity}_{\text{real}}) - \text{Gini}(\text{popularity}_{\text{syn}})|
+\end{aligned}
+```
 
 The final judgment in this report is based primarily on two questions: (1) which model predicts ratings more accurately, and (2) which model ranks held-out items better. Training stability and synthetic-data fidelity serve as secondary decision criteria, where lower structural deltas indicate better preservation of the true data distribution.
 
