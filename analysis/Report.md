@@ -29,7 +29,7 @@ The comparison is fundamentally between two recommendation paradigms: a simpler 
 
 ## Model Architecture
 ### Option 1: Biased Matrix Factorization
-It learns one latent vector for each user \( p_u \in \mathbb{R}^{48} \), one latent vector for each item \( q_i \in \mathbb{R}^{48} \), one user bias \( b_u \), one item bias \( b_i \), and a global mean rating \( \mu \).
+It learns one latent vector for each user $p_u \in \mathbb{R}^{48}$, one latent vector for each item $q_i \in \mathbb{R}^{48}$, one user bias $b_u$, one item bias $b_i$, and a global mean rating $\mu$.
 
 Prediction formula:
 $$
@@ -70,8 +70,8 @@ Both models are evaluated on a shared per-user 80/20 holdout split to ensure all
 ### Option 2 Training
 - **Optimization**: Trained for up to 30 epochs using the Adam optimizer with gradient clipping (`clipnorm = 1.0`).
 - **Hyperparameters**: Embedding dimension of 48, batch size of 256, initial learning rate of 0.001, dropout rate of 0.15, and L2 regularization of `1e-6`.
-- **Loss Function**: Predicts a centered target \( y_{ui} = r_{ui} - \mu \) and optimizes the Huber loss instead of standard Mean Squared Error (MSE), rendering the model less sensitive to large residual outliers.
-- **Sample Weighting**: Upweights higher ratings during training to prioritize relevant items, using the formula \( w_{ui} = 1 + \text{rating\_scaled}_{ui}^{1.25} \), where \( \text{rating\_scaled}_{ui} = \text{clip}((r_{ui} - r_{\text{min}}) / (r_{\text{max}} - r_{\text{min}}), 0, 1) \).
+- **Loss Function**: Predicts a centered target $y_{ui} = r_{ui} - \mu$ and optimizes the Huber loss instead of standard Mean Squared Error (MSE), rendering the model less sensitive to large residual outliers.
+- **Sample Weighting**: Upweights higher ratings during training to prioritize relevant items, using the formula $w_{ui} = 1 + \text{rating\_scaled}_{ui}^{1.25}$, where $\text{rating\_scaled}_{ui} = \text{clip}((r_{ui} - r_{\text{min}}) / (r_{\text{max}} - r_{\text{min}}), 0, 1)$.
 - **Learning Rate Scheduling**: Uses a 10% validation slice to monitor validation loss. Applies `ReduceLROnPlateau` with a patience of 2 epochs, a reduction factor of 0.5, and a minimum learning rate of `1e-5`, restoring the best validation checkpoint upon completion.
 
 ## Evaluation Criteria And Decision Rules
@@ -83,7 +83,7 @@ $$
 \text{RMSE} = \sqrt{\frac{1}{N} \sum (r_{ui} - \hat{r}_{ui})^2}
 $$
 
-Top-K recommendation criteria for each user \( u \):
+Top-K recommendation criteria for each user $u$:
 $$
 \text{Precision@K} = \frac{|\text{Rec}_u(K) \cap \text{Rel}_u|}{K} \\
 \text{Recall@K} = \frac{|\text{Rec}_u(K) \cap \text{Rel}_u|}{|\text{Rel}_u|} \\
@@ -96,7 +96,7 @@ $$
 \text{NDCG@K} = \frac{\text{DCG@K}}{\text{IDCG@K}}
 $$
 
-In this project, \( K = 10 \) and \( \text{Rel}_u \) is defined as all items in the held-out test set for user \( u \) (`topn_relevance = all_test`). Lower MAE and RMSE are better, while higher Precision@10, Recall@10, F1@10, and NDCG@10 are better.
+In this project, $K = 10$ and $\text{Rel}_u$ is defined as all items in the held-out test set for user $u$ (`topn_relevance = all_test`). Lower MAE and RMSE are better, while higher Precision@10, Recall@10, F1@10, and NDCG@10 are better.
 
 Additional structural-fidelity criteria:
 $$
@@ -144,7 +144,7 @@ The strongest positive association derives from item popularity, while higher us
 ## Figure 3. Signal Versus Noise Ablation
 ![Ablation](figures/ablation.svg)
 
-The full linear feature model achieves a test \( R^2 = 0.1116 \). Ablating the content block reduces \( R^2 \) by 0.0534, which is larger than the engagement-block drop of 0.0302. In contrast, removing the injected random noise features has effectively zero impact. This directly addresses the signal-vs-noise question: both content and engagement provide valid signal, but the content block carries the strongest marginal predictive power in this observational setup.
+The full linear feature model achieves a test $R^2 = 0.1116$. Ablating the content block reduces $R^2$ by 0.0534, which is larger than the engagement-block drop of 0.0302. In contrast, removing the injected random noise features has effectively zero impact. This directly addresses the signal-vs-noise question: both content and engagement provide valid signal, but the content block carries the strongest marginal predictive power in this observational setup.
 
 ## Latent Structure
 - `Option 1` latent dimension: 48. Its first component explains only 0.034 of latent variance, which suggests a relatively distributed representation.
