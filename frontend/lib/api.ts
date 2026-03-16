@@ -7,6 +7,8 @@ export type Movie = {
   backdrop_url?: string;
   overview?: string;
   tmdb_id?: number | string;
+  cast?: any[];
+  directors?: any[];
 };
 
 export type Recommendation = Movie & {
@@ -157,6 +159,29 @@ export async function searchMovies(query: string): Promise<Movie[]> {
     title: formatTitle(m.title),
     scraped_title: m.scraped_title ? formatTitle(m.scraped_title) : "",
   }));
+}
+
+export async function getPersonMovies(name: string): Promise<Movie[]> {
+  logApiCall('/person/movies', { name });
+  const res = await fetch(`${API_BASE}/person/movies?name=${encodeURIComponent(name)}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch person movies.");
+  const data = await res.json();
+  const items = data.items ?? [];
+  return items.map((m: Movie) => ({
+    ...m,
+    title: formatTitle(m.title),
+    scraped_title: m.scraped_title ? formatTitle(m.scraped_title) : "",
+  }));
+}
+
+export async function getTmdbPerson(personId: number): Promise<any> {
+  logApiCall(`/tmdb/person/${personId}`);
+  const res = await fetch(`${API_BASE}/tmdb/person/${personId}`, { cache: "no-store" });
+  if (!res.ok) {
+    if (res.status === 404) return null;
+    throw new Error("Failed to fetch TMDB person details.");
+  }
+  return res.json();
 }
 
 export type TMDBSearchResult = {

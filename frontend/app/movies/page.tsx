@@ -5,6 +5,8 @@ import Link from "next/link";
 import CustomSelect from "../../components/custom-select";
 import CustomMultiSelect from "../../components/custom-multi-select";
 
+import MovieSearchInput from "../../components/movie-search-input";
+
 export default async function MoviesPage({
   searchParams,
 }: {
@@ -50,21 +52,10 @@ export default async function MoviesPage({
 
       <form action="/movies" method="GET" className="filter-form">
         <div className="filter-group-main">
-          <div className="search-input-wrapper">
-            <svg className="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input 
-              id="movie-search-input"
-              type="text" 
-              name="q" 
-              defaultValue={q} 
-              placeholder="Search movies by title..." 
-              className="search-input custom-search-input"
-              autoFocus={searchParams.focus === "search"}
-            />
-          </div>
+          <MovieSearchInput 
+            defaultValue={q || ""} 
+            autoFocus={searchParams.focus === "search"} 
+          />
           <button type="submit" className="btn-primary search-btn">
             Search
           </button>

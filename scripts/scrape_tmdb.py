@@ -1,4 +1,5 @@
 import argparse
+import json
 import pandas as pd
 import requests
 import re
@@ -23,7 +24,34 @@ if not API_KEY or API_KEY == "your_real_api_key_here":
     sys.exit(1)
 
 thread_local = threading.local()
-REQUIRED_ENRICHED_COLS = ("poster_url", "backdrop_url", "overview", "tmdb_id", "scraped_title")
+REQUIRED_ENRICHED_COLS = ("poster_url", "backdrop_url", "overview", "tmdb_id", "scraped_title", "cast", "directors")
+
+
+def init_scrape_summary() -> dict[str, int]:
+    return {
+        "links_id_hit": 0,
+        "title_search_hit": 0,
+        "no_match": 0,
+    }
+
+
+def update_scrape_summary(summary: dict[str, int], match_source: str) -> None:
+    if match_source == "links_id_hit":
+        summary["links_id_hit"] += 1
+    elif match_source == "title_search_hit":
+        summary["title_search_hit"] += 1
+    else:
+        summary["no_match"] += 1
+
+
+def print_scrape_summary(summary: dict[str, int]) -> None:
+    print(
+        "SCRAPE_SUMMARY "
+        f"links_id_hit={summary['links_id_hit']} "
+        f"title_search_hit={summary['title_search_hit']} "
+        f"no_match={summary['no_match']}",
+        flush=True,
+    )
 
 
 def _first_existing_path(candidates: list[Path]) -> Path | None:
@@ -55,6 +83,70 @@ def resolve_data_paths(artifacts_dir: Path) -> tuple[Path, Path | None, Path]:
     enriched_write_path = artifacts_dir / "movies_enriched.csv"
     return movies_path, enriched_source_path, enriched_write_path
 
+
+def resolve_links_path(
+    artifacts_dir: Path,
+    movies_path: Path,
+    links_path_arg: str | None = None,
+) -> Path | None:
+    if links_path_arg:
+        explicit = Path(links_path_arg)
+        if not explicit.is_absolute():
+            explicit = PROJECT_ROOT / explicit
+        if not explicit.exists():
+            raise FileNotFoundError(f"Specified links.csv path not found: {explicit}")
+        return explicit
+
+    # Try to recover original dataset dir from split metadata.
+    split_meta_path = artifacts_dir / "splits" / "split_meta.json"
+    if split_meta_path.exists():
+        try:
+            with open(split_meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            dataset_dir = meta.get("dataset_dir", "")
+            if dataset_dir:
+                candidate = Path(str(dataset_dir)) / "links.csv"
+                if candidate.exists():
+                    return candidate
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    candidates = [
+        movies_path.parent / "links.csv",
+        PROJECT_ROOT / "dataset" / "ml-latest-small" / "links.csv",
+        PROJECT_ROOT / "dataset" / "ml-latest" / "links.csv",
+        PROJECT_ROOT / "frontend" / "ml-latest-small" / "ml-latest-small" / "links.csv",
+    ]
+    return _first_existing_path(candidates)
+
+
+def load_links_tmdb_map(links_path: Path | None) -> pd.DataFrame:
+    if links_path is None or not links_path.exists():
+        return pd.DataFrame(columns=["item_id", "seed_tmdb_id"])
+
+    frame = pd.read_csv(links_path)
+    if "movieId" not in frame.columns or "tmdbId" not in frame.columns:
+        return pd.DataFrame(columns=["item_id", "seed_tmdb_id"])
+
+    out = frame.rename(columns={"movieId": "item_id", "tmdbId": "seed_tmdb_id"})[
+        ["item_id", "seed_tmdb_id"]
+    ].copy()
+    out["item_id"] = pd.to_numeric(out["item_id"], errors="coerce")
+    out["seed_tmdb_id"] = pd.to_numeric(out["seed_tmdb_id"], errors="coerce")
+    out = out.dropna(subset=["item_id", "seed_tmdb_id"])
+    out["item_id"] = out["item_id"].astype(int)
+    out["seed_tmdb_id"] = out["seed_tmdb_id"].astype(int)
+    out = out[out["seed_tmdb_id"] > 0]
+    return out.drop_duplicates(subset=["item_id"], keep="first")
+
+
+def attach_seed_tmdb_ids(frame: pd.DataFrame, links_map: pd.DataFrame) -> pd.DataFrame:
+    if links_map.empty:
+        frame = frame.copy()
+        frame["seed_tmdb_id"] = pd.NA
+        return frame
+    return frame.merge(links_map, on="item_id", how="left")
+
 def get_session():
     if not hasattr(thread_local, "session"):
         thread_local.session = requests.Session()
@@ -65,7 +157,10 @@ def ensure_enriched_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Ensure all enriched metadata columns exist."""
     for col in REQUIRED_ENRICHED_COLS:
         if col not in df.columns:
-            df[col] = ""
+            if col in ["cast", "directors"]:
+                df[col] = "[]"
+            else:
+                df[col] = ""
     return df
 
 def _normalize_title(t):
@@ -97,36 +192,81 @@ def parse_title_and_year(full_title):
 def fetch_tmdb_info(row):
     title_year = row['title']
     item_id = row['item_id']
+    seed_tmdb_id = row.get("seed_tmdb_id", pd.NA)
 
     clean_title, year, inner_names = parse_title_and_year(title_year)
     queries = [_normalize_title(clean_title)] + [_normalize_title(n) for n in inner_names if n.strip()]
 
-    url = "https://api.themoviedb.org/3/search/movie"
     session = get_session()
+    search_url = "https://api.themoviedb.org/3/search/movie"
+
+    def fetch_by_tmdb_id(tmdb_id: int, match_source: str = "links_id_hit"):
+        detail_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
+        try:
+            resp = session.get(detail_url, params={"api_key": API_KEY, "append_to_response": "credits"}, timeout=5)
+            if resp.status_code != 200:
+                return None
+            movie = resp.json()
+            resolved_tmdb_id = movie.get("id")
+            
+            cast = []
+            directors = []
+            credits = movie.get("credits", {})
+            if credits:
+                for c in credits.get("cast", [])[:10]:
+                    cast.append({
+                        "id": c.get("id"),
+                        "name": c.get("name"),
+                        "character": c.get("character"),
+                        "profile_path": c.get("profile_path")
+                    })
+                for c in credits.get("crew", []):
+                    if c.get("job") == "Director":
+                        directors.append({
+                            "id": c.get("id"),
+                            "name": c.get("name"),
+                            "profile_path": c.get("profile_path")
+                        })
+                        
+            return {
+                "item_id": item_id,
+                "poster_url": f"https://image.tmdb.org/t/p/w500{movie['poster_path']}" if movie.get("poster_path") else "",
+                "backdrop_url": f"https://image.tmdb.org/t/p/w1280{movie['backdrop_path']}" if movie.get("backdrop_path") else "",
+                "overview": movie.get("overview", ""),
+                "tmdb_id": str(resolved_tmdb_id) if resolved_tmdb_id is not None else "",
+                "scraped_title": (movie.get("title") or "").strip(),
+                "cast": json.dumps(cast),
+                "directors": json.dumps(directors),
+                "match_source": match_source,
+            }
+        except Exception:
+            return None
 
     def do_search(query, with_year=True):
         params = {"api_key": API_KEY, "query": query}
         if with_year and year:
             params["primary_release_year"] = year
         try:
-            resp = session.get(url, params=params, timeout=5)
+            resp = session.get(search_url, params=params, timeout=5)
             if resp.status_code != 200:
                 return None
             data = resp.json()
             if data.get("results"):
                 best = data["results"][0]
                 tmdb_id = best.get("id")
-                return {
-                    "item_id": item_id,
-                    "poster_url": f"https://image.tmdb.org/t/p/w500{best['poster_path']}" if best.get('poster_path') else "",
-                    "backdrop_url": f"https://image.tmdb.org/t/p/w1280{best['backdrop_path']}" if best.get('backdrop_path') else "",
-                    "overview": best.get('overview', ""),
-                    "tmdb_id": str(tmdb_id) if tmdb_id is not None else "",
-                    "scraped_title": (best.get("title") or "").strip(),
-                }
+                if tmdb_id:
+                    return fetch_by_tmdb_id(tmdb_id, match_source="title_search_hit")
         except Exception:
             pass
         return None
+
+    if pd.notna(seed_tmdb_id):
+        try:
+            result = fetch_by_tmdb_id(int(seed_tmdb_id))
+            if result:
+                return result
+        except (TypeError, ValueError):
+            pass
 
     for q in queries:
         if not q:
@@ -148,6 +288,9 @@ def fetch_tmdb_info(row):
         "overview": "",
         "tmdb_id": "",
         "scraped_title": "",
+        "cast": "[]",
+        "directors": "[]",
+        "match_source": "no_match",
     }
 
 
@@ -164,6 +307,12 @@ def main():
         action="store_true",
         help="Re-scrape all movies in movies_enriched.csv and overwrite (refresh existing data).",
     )
+    parser.add_argument(
+        "--links-path",
+        type=str,
+        default=None,
+        help="Optional path to MovieLens links.csv. If omitted, the script auto-detects it.",
+    )
     args = parser.parse_args()
     refresh = args.refresh
     artifacts_dir = Path(args.artifacts_dir)
@@ -171,6 +320,13 @@ def main():
         artifacts_dir = PROJECT_ROOT / artifacts_dir
 
     movies_path, enriched_source_path, enriched_write_path = resolve_data_paths(artifacts_dir)
+    links_path = resolve_links_path(artifacts_dir=artifacts_dir, movies_path=movies_path, links_path_arg=args.links_path)
+    links_map = load_links_tmdb_map(links_path)
+    if links_path is not None:
+        print(f"Using links.csv from {links_path}", flush=True)
+        print(f"Seed TMDB IDs available for {len(links_map)} movies", flush=True)
+    else:
+        print("links.csv not found. Falling back to title/year search only.", flush=True)
     enriched_write_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Validate API key first
@@ -193,12 +349,15 @@ def main():
         df = pd.read_csv(enriched_source_path)
         df = df.fillna("")
         df = ensure_enriched_columns(df)
+        df = attach_seed_tmdb_ids(df, links_map)
+        summary = init_scrape_summary()
         total = len(df)
         print(f"Scraping TMDB for {total} movies...", flush=True)
         with ThreadPoolExecutor(max_workers=20) as executor:
             futures = [executor.submit(fetch_tmdb_info, row) for _, row in df.iterrows()]
             for idx, f in enumerate(futures):
                 res = f.result()
+                update_scrape_summary(summary, str(res.get("match_source", "no_match")))
                 i = df.index[df["item_id"] == res["item_id"]].tolist()
                 if i:
                     df.at[i[0], "poster_url"] = res.get("poster_url", "")
@@ -206,14 +365,18 @@ def main():
                     df.at[i[0], "overview"] = res.get("overview", "")
                     df.at[i[0], "tmdb_id"] = res.get("tmdb_id", "")
                     df.at[i[0], "scraped_title"] = res.get("scraped_title", "")
+                    df.at[i[0], "cast"] = res.get("cast", "[]")
+                    df.at[i[0], "directors"] = res.get("directors", "[]")
                 if (idx + 1) % 100 == 0:
                     print(f"Processed {idx + 1}/{total}", flush=True)
-        df.to_csv(enriched_write_path, index=False)
+        df.drop(columns=["seed_tmdb_id"], errors="ignore").to_csv(enriched_write_path, index=False)
         print(f"Saved enriched data to {enriched_write_path}", flush=True)
+        print_scrape_summary(summary)
         return
 
     print(f"Loading movies from {movies_path}", flush=True)
     movies_df = pd.read_csv(movies_path)
+    movies_df = attach_seed_tmdb_ids(movies_df, links_map)
 
     existing_items = set()
     if enriched_source_path is not None and enriched_source_path.exists():
@@ -226,26 +389,35 @@ def main():
 
     if len(movies_to_fetch) == 0:
         print("All movies enriched.", flush=True)
+        print_scrape_summary(init_scrape_summary())
         return
 
     print(f"Scraping TMDB for {len(movies_to_fetch)} movies...", flush=True)
     is_first = not enriched_write_path.exists()
+    summary = init_scrape_summary()
 
     with ThreadPoolExecutor(max_workers=20) as executor:
         futures = [executor.submit(fetch_tmdb_info, row) for _, row in movies_to_fetch.iterrows()]
         for idx, f in enumerate(futures):
             res = f.result()
+            update_scrape_summary(summary, str(res.get("match_source", "no_match")))
             orig_row = movies_to_fetch[movies_to_fetch["item_id"] == res["item_id"]].iloc[0].to_dict()
+            orig_row.pop("seed_tmdb_id", None)
             orig_row.update(res)
+            orig_row.pop("match_source", None)
             for col in REQUIRED_ENRICHED_COLS:
                 if col not in orig_row:
-                    orig_row[col] = res.get(col, "") if col in res else ""
+                    if col in ["cast", "directors"]:
+                        orig_row[col] = res.get(col, "[]") if col in res else "[]"
+                    else:
+                        orig_row[col] = res.get(col, "") if col in res else ""
             pd.DataFrame([orig_row]).to_csv(enriched_write_path, mode="a", header=is_first, index=False)
             is_first = False
             if (idx + 1) % 100 == 0:
                 print(f"Processed {idx + 1}/{len(movies_to_fetch)}", flush=True)
 
     print(f"Saved enriched data to {enriched_write_path}", flush=True)
+    print_scrape_summary(summary)
 
 
 if __name__ == "__main__":

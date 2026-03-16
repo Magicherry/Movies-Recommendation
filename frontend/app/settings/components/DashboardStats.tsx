@@ -26,6 +26,11 @@ export default function DashboardStats() {
     processed: number;
     total: number;
     message: string;
+    summary?: {
+      links_id_hit: number;
+      title_search_hit: number;
+      no_match: number;
+    };
   } | null>(null);
   const [testResult, setTestResult] = useState<{valid: boolean, message: string} | null>(null);
   const [isTesting, setIsTesting] = useState(false);
@@ -296,6 +301,58 @@ export default function DashboardStats() {
                   <span style={{ whiteSpace: 'nowrap' }}>{scrapeState.processed} / {scrapeState.total} movies</span>
                 )}
               </div>
+
+              {scrapeState.summary && (
+                <div
+                  style={{
+                    marginTop: "10px",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    gap: "8px",
+                    fontSize: "0.78rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      background: "rgba(56, 189, 248, 0.12)",
+                      border: "1px solid rgba(56, 189, 248, 0.35)",
+                      borderRadius: "8px",
+                      padding: "8px",
+                    }}
+                  >
+                    <div style={{ color: "#7dd3fc", fontWeight: 600 }}>Links TMDB hits</div>
+                    <div style={{ color: "var(--text-main)", marginTop: "2px" }}>
+                      {scrapeState.summary.links_id_hit.toLocaleString()}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      background: "rgba(34, 197, 94, 0.12)",
+                      border: "1px solid rgba(34, 197, 94, 0.35)",
+                      borderRadius: "8px",
+                      padding: "8px",
+                    }}
+                  >
+                    <div style={{ color: "#86efac", fontWeight: 600 }}>Title search hits</div>
+                    <div style={{ color: "var(--text-main)", marginTop: "2px" }}>
+                      {scrapeState.summary.title_search_hit.toLocaleString()}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      background: "rgba(239, 68, 68, 0.12)",
+                      border: "1px solid rgba(239, 68, 68, 0.35)",
+                      borderRadius: "8px",
+                      padding: "8px",
+                    }}
+                  >
+                    <div style={{ color: "#fca5a5", fontWeight: 600 }}>No match</div>
+                    <div style={{ color: "var(--text-main)", marginTop: "2px" }}>
+                      {scrapeState.summary.no_match.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -1,0 +1,912 @@
+{
+  "model_type": "option1",
+  "distribution": {
+    "users": 610,
+    "items": 9724,
+    "ratings": 100836,
+    "sparsity": 0.9830003169443864,
+    "density": 0.016999683055613623,
+    "rating_mean": 3.501556983616962,
+    "rating_std": 1.0425240696180562,
+    "rating_skewness": -0.6371899104652522,
+    "rating_quantiles": {
+      "q10": 2.0,
+      "q50": 3.5,
+      "q90": 5.0
+    },
+    "user_activity": {
+      "mean": 165.30491803278687,
+      "median": 70.5,
+      "q90": 400.30000000000007,
+      "gini": 0.6039837450715299
+    },
+    "item_popularity": {
+      "mean": 10.369806663924312,
+      "median": 3.0,
+      "q90": 27.0,
+      "gini": 0.7162802414839502
+    },
+    "movies_with_tags_ratio": 0.16136316978033258,
+    "release_year": {
+      "min": 1902,
+      "median": 1999,
+      "max": 2018
+    },
+    "rating_histogram": [
+      {
+        "rating": "0.5",
+        "count": 1370
+      },
+      {
+        "rating": "1.0",
+        "count": 2811
+      },
+      {
+        "rating": "1.5",
+        "count": 1791
+      },
+      {
+        "rating": "2.0",
+        "count": 7551
+      },
+      {
+        "rating": "2.5",
+        "count": 5550
+      },
+      {
+        "rating": "3.0",
+        "count": 20047
+      },
+      {
+        "rating": "3.5",
+        "count": 13136
+      },
+      {
+        "rating": "4.0",
+        "count": 26818
+      },
+      {
+        "rating": "4.5",
+        "count": 8551
+      },
+      {
+        "rating": "5.0",
+        "count": 13211
+      }
+    ]
+  },
+  "feature_analysis": {
+    "test_r2_full_model": 0.11162161842272,
+    "top_coefficients": [
+      {
+        "feature": "log_item_popularity",
+        "coefficient": 0.1470449825163242,
+        "ci_low": 0.12330532569501251,
+        "ci_high": 0.16531841157527408,
+        "abs_coefficient": 0.1470449825163242
+      },
+      {
+        "feature": "log_user_activity",
+        "coefficient": -0.11119698092297677,
+        "ci_low": -0.12746492882256918,
+        "ci_high": -0.09846787454416643,
+        "abs_coefficient": 0.11119698092297677
+      },
+      {
+        "feature": "log_tag_count",
+        "coefficient": 0.09991785340457127,
+        "ci_low": -0.1293636906919978,
+        "ci_high": 0.3474247652712822,
+        "abs_coefficient": 0.09991785340457127
+      },
+      {
+        "feature": "genre_animation",
+        "coefficient": 0.09702921848646019,
+        "ci_low": 0.07753677138260885,
+        "ci_high": 0.11214410862387889,
+        "abs_coefficient": 0.09702921848646019
+      },
+      {
+        "feature": "genre_children",
+        "coefficient": -0.09379361931157262,
+        "ci_low": -0.10907679391755327,
+        "ci_high": -0.07542065866108057,
+        "abs_coefficient": 0.09379361931157262
+      },
+      {
+        "feature": "genre_drama",
+        "coefficient": 0.09216710604982203,
+        "ci_low": 0.07917403672550265,
+        "ci_high": 0.10772712000108642,
+        "abs_coefficient": 0.09216710604982203
+      },
+      {
+        "feature": "release_year",
+        "coefficient": -0.08981691686274916,
+        "ci_low": -0.10189706978050733,
+        "ci_high": -0.07535843244752995,
+        "abs_coefficient": 0.08981691686274916
+      },
+      {
+        "feature": "genre_documentary",
+        "coefficient": 0.06646055396752887,
+        "ci_low": 0.056753647143426365,
+        "ci_high": 0.0779444805268782,
+        "abs_coefficient": 0.06646055396752887
+      },
+      {
+        "feature": "genre_comedy",
+        "coefficient": -0.049827915749521015,
+        "ci_low": -0.06354181065079283,
+        "ci_high": -0.03615597084881809,
+        "abs_coefficient": 0.049827915749521015
+      },
+      {
+        "feature": "genre_action",
+        "coefficient": -0.04659221285441993,
+        "ci_low": -0.0654437739923742,
+        "ci_high": -0.029095272650490063,
+        "abs_coefficient": 0.04659221285441993
+      },
+      {
+        "feature": "interaction_year",
+        "coefficient": 0.0451821200322432,
+        "ci_low": 0.031334121274035176,
+        "ci_high": 0.06006229185342653,
+        "abs_coefficient": 0.0451821200322432
+      },
+      {
+        "feature": "genre_horror",
+        "coefficient": -0.03570339245846478,
+        "ci_low": -0.0548634270625479,
+        "ci_high": -0.024040029239833022,
+        "abs_coefficient": 0.03570339245846478
+      }
+    ],
+    "all_coefficients": [
+      {
+        "feature": "log_item_popularity",
+        "coefficient": 0.1470449825163242,
+        "ci_low": 0.12330532569501251,
+        "ci_high": 0.16531841157527408,
+        "abs_coefficient": 0.1470449825163242
+      },
+      {
+        "feature": "log_user_activity",
+        "coefficient": -0.11119698092297677,
+        "ci_low": -0.12746492882256918,
+        "ci_high": -0.09846787454416643,
+        "abs_coefficient": 0.11119698092297677
+      },
+      {
+        "feature": "log_tag_count",
+        "coefficient": 0.09991785340457127,
+        "ci_low": -0.1293636906919978,
+        "ci_high": 0.3474247652712822,
+        "abs_coefficient": 0.09991785340457127
+      },
+      {
+        "feature": "genre_animation",
+        "coefficient": 0.09702921848646019,
+        "ci_low": 0.07753677138260885,
+        "ci_high": 0.11214410862387889,
+        "abs_coefficient": 0.09702921848646019
+      },
+      {
+        "feature": "genre_children",
+        "coefficient": -0.09379361931157262,
+        "ci_low": -0.10907679391755327,
+        "ci_high": -0.07542065866108057,
+        "abs_coefficient": 0.09379361931157262
+      },
+      {
+        "feature": "genre_drama",
+        "coefficient": 0.09216710604982203,
+        "ci_low": 0.07917403672550265,
+        "ci_high": 0.10772712000108642,
+        "abs_coefficient": 0.09216710604982203
+      },
+      {
+        "feature": "release_year",
+        "coefficient": -0.08981691686274916,
+        "ci_low": -0.10189706978050733,
+        "ci_high": -0.07535843244752995,
+        "abs_coefficient": 0.08981691686274916
+      },
+      {
+        "feature": "genre_documentary",
+        "coefficient": 0.06646055396752887,
+        "ci_low": 0.056753647143426365,
+        "ci_high": 0.0779444805268782,
+        "abs_coefficient": 0.06646055396752887
+      },
+      {
+        "feature": "genre_comedy",
+        "coefficient": -0.049827915749521015,
+        "ci_low": -0.06354181065079283,
+        "ci_high": -0.03615597084881809,
+        "abs_coefficient": 0.049827915749521015
+      },
+      {
+        "feature": "genre_action",
+        "coefficient": -0.04659221285441993,
+        "ci_low": -0.0654437739923742,
+        "ci_high": -0.029095272650490063,
+        "abs_coefficient": 0.04659221285441993
+      },
+      {
+        "feature": "interaction_year",
+        "coefficient": 0.0451821200322432,
+        "ci_low": 0.031334121274035176,
+        "ci_high": 0.06006229185342653,
+        "abs_coefficient": 0.0451821200322432
+      },
+      {
+        "feature": "genre_horror",
+        "coefficient": -0.03570339245846478,
+        "ci_low": -0.0548634270625479,
+        "ci_high": -0.024040029239833022,
+        "abs_coefficient": 0.03570339245846478
+      },
+      {
+        "feature": "genre_crime",
+        "coefficient": 0.03471229996783895,
+        "ci_low": 0.019751312053968312,
+        "ci_high": 0.04682873460499442,
+        "abs_coefficient": 0.03471229996783895
+      },
+      {
+        "feature": "genre_thriller",
+        "coefficient": -0.02759004221546724,
+        "ci_low": -0.04392112358820867,
+        "ci_high": -0.013242449705461045,
+        "abs_coefficient": 0.02759004221546724
+      },
+      {
+        "feature": "genre_war",
+        "coefficient": 0.027144413129065566,
+        "ci_low": 0.01549735518861036,
+        "ci_high": 0.03790370628393696,
+        "abs_coefficient": 0.027144413129065566
+      },
+      {
+        "feature": "genre_film_noir",
+        "coefficient": 0.024520008887722856,
+        "ci_low": 0.011972762250170204,
+        "ci_high": 0.03759037275878037,
+        "abs_coefficient": 0.024520008887722856
+      },
+      {
+        "feature": "genre_sci_fi",
+        "coefficient": -0.022500517414262688,
+        "ci_low": -0.036690720581823474,
+        "ci_high": -0.008776835292453418,
+        "abs_coefficient": 0.022500517414262688
+      },
+      {
+        "feature": "genre_imax",
+        "coefficient": 0.021873958701244367,
+        "ci_low": 0.008406132785139058,
+        "ci_high": 0.03881356945922246,
+        "abs_coefficient": 0.021873958701244367
+      },
+      {
+        "feature": "genre_mystery",
+        "coefficient": 0.01394583909222249,
+        "ci_low": 0.0023714792483860323,
+        "ci_high": 0.028613185430170492,
+        "abs_coefficient": 0.01394583909222249
+      },
+      {
+        "feature": "genre_romance",
+        "coefficient": -0.012880486356618863,
+        "ci_low": -0.025235481999958218,
+        "ci_high": 0.002375284640862879,
+        "abs_coefficient": 0.012880486356618863
+      },
+      {
+        "feature": "genre_western",
+        "coefficient": 0.008861886643987358,
+        "ci_low": -0.004688632591876728,
+        "ci_high": 0.021705442502143606,
+        "abs_coefficient": 0.008861886643987358
+      },
+      {
+        "feature": "genre_fantasy",
+        "coefficient": 0.00786272620573347,
+        "ci_low": -0.006069526228347511,
+        "ci_high": 0.02070351745500669,
+        "abs_coefficient": 0.00786272620573347
+      },
+      {
+        "feature": "genre_musical",
+        "coefficient": -0.007243742209299491,
+        "ci_low": -0.0216500461839299,
+        "ci_high": 0.010572779939408217,
+        "abs_coefficient": 0.007243742209299491
+      },
+      {
+        "feature": "noise_feature_1",
+        "coefficient": -0.00639019195744529,
+        "ci_low": -0.018961161450285296,
+        "ci_high": 0.007492668376087233,
+        "abs_coefficient": 0.00639019195744529
+      },
+      {
+        "feature": "genre_adventure",
+        "coefficient": 0.006064763457276643,
+        "ci_low": -0.010983294177849096,
+        "ci_high": 0.02359784154080481,
+        "abs_coefficient": 0.006064763457276643
+      },
+      {
+        "feature": "log_unique_tag_count",
+        "coefficient": 0.004141932942554568,
+        "ci_low": -0.24920369331030728,
+        "ci_high": 0.2283491748619447,
+        "abs_coefficient": 0.004141932942554568
+      },
+      {
+        "feature": "genre_count",
+        "coefficient": 0.003067628365046048,
+        "ci_low": -0.005538510130393091,
+        "ci_high": 0.013715307680613336,
+        "abs_coefficient": 0.003067628365046048
+      },
+      {
+        "feature": "noise_feature_2",
+        "coefficient": -0.0003167494983578021,
+        "ci_low": -0.013623572897506441,
+        "ci_high": 0.014096910938273173,
+        "abs_coefficient": 0.0003167494983578021
+      }
+    ],
+    "block_ablation": [
+      {
+        "block": "content",
+        "test_r2_without_block": 0.058220376982519584,
+        "delta_r2": 0.05340124144020042
+      },
+      {
+        "block": "engagement",
+        "test_r2_without_block": 0.08145144392664883,
+        "delta_r2": 0.030170174496071178
+      },
+      {
+        "block": "noise",
+        "test_r2_without_block": 0.11168689159488898,
+        "delta_r2": -6.52731721689781e-05
+      }
+    ]
+  },
+  "latent_analysis": {
+    "embedding_dim": 48,
+    "components": [
+      {
+        "component": 1,
+        "explained_variance_ratio": 0.034290194118367874,
+        "year_correlation": 0.0680157671332253,
+        "top_positive_genres": [
+          {
+            "genre": "Action",
+            "correlation": 0.057704440694903575
+          },
+          {
+            "genre": "Comedy",
+            "correlation": 0.05170076333959968
+          },
+          {
+            "genre": "Romance",
+            "correlation": 0.03272019006775701
+          }
+        ],
+        "top_negative_genres": [
+          {
+            "genre": "Drama",
+            "correlation": -0.07308696576376898
+          },
+          {
+            "genre": "War",
+            "correlation": -0.04114643110740245
+          },
+          {
+            "genre": "Crime",
+            "correlation": -0.03816049073947164
+          }
+        ],
+        "top_positive_movies": [
+          {
+            "item_id": 4025,
+            "title": "Miss Congeniality (2000)",
+            "score": 0.6966454472998508
+          },
+          {
+            "item_id": 3623,
+            "title": "Mission: Impossible II (2000)",
+            "score": 0.6486140738073035
+          },
+          {
+            "item_id": 160,
+            "title": "Congo (1995)",
+            "score": 0.6400577753736744
+          },
+          {
+            "item_id": 4447,
+            "title": "Legally Blonde (2001)",
+            "score": 0.5717900598552605
+          },
+          {
+            "item_id": 95,
+            "title": "Broken Arrow (1996)",
+            "score": 0.5665301546502375
+          }
+        ],
+        "top_negative_movies": [
+          {
+            "item_id": 296,
+            "title": "Pulp Fiction (1994)",
+            "score": -1.084232745697055
+          },
+          {
+            "item_id": 2959,
+            "title": "Fight Club (1999)",
+            "score": -0.9174197925738852
+          },
+          {
+            "item_id": 858,
+            "title": "Godfather, The (1972)",
+            "score": -0.8408143698582473
+          },
+          {
+            "item_id": 1206,
+            "title": "Clockwork Orange, A (1971)",
+            "score": -0.8287535063919913
+          },
+          {
+            "item_id": 551,
+            "title": "Nightmare Before Christmas, The (1993)",
+            "score": -0.7996919429479548
+          }
+        ]
+      },
+      {
+        "component": 2,
+        "explained_variance_ratio": 0.03037218261506976,
+        "year_correlation": -0.049063960942815184,
+        "top_positive_genres": [
+          {
+            "genre": "Musical",
+            "correlation": 0.058631705051138225
+          },
+          {
+            "genre": "Drama",
+            "correlation": 0.05741477944950141
+          },
+          {
+            "genre": "Romance",
+            "correlation": 0.035895184609338215
+          }
+        ],
+        "top_negative_genres": [
+          {
+            "genre": "Adventure",
+            "correlation": -0.0854947744884348
+          },
+          {
+            "genre": "Action",
+            "correlation": -0.08464041091092873
+          },
+          {
+            "genre": "Sci-Fi",
+            "correlation": -0.07349126442657783
+          }
+        ],
+        "top_positive_movies": [
+          {
+            "item_id": 919,
+            "title": "Wizard of Oz, The (1939)",
+            "score": 0.9121331748065702
+          },
+          {
+            "item_id": 357,
+            "title": "Four Weddings and a Funeral (1994)",
+            "score": 0.8872630764088509
+          },
+          {
+            "item_id": 527,
+            "title": "Schindler's List (1993)",
+            "score": 0.8198338458734714
+          },
+          {
+            "item_id": 596,
+            "title": "Pinocchio (1940)",
+            "score": 0.7482897544034879
+          },
+          {
+            "item_id": 912,
+            "title": "Casablanca (1942)",
+            "score": 0.6793468669682625
+          }
+        ],
+        "top_negative_movies": [
+          {
+            "item_id": 344,
+            "title": "Ace Ventura: Pet Detective (1994)",
+            "score": -0.8653155104905942
+          },
+          {
+            "item_id": 6365,
+            "title": "Matrix Reloaded, The (2003)",
+            "score": -0.8481009969020774
+          },
+          {
+            "item_id": 5481,
+            "title": "Austin Powers in Goldmember (2002)",
+            "score": -0.8008183832237142
+          },
+          {
+            "item_id": 231,
+            "title": "Dumb & Dumber (Dumb and Dumber) (1994)",
+            "score": -0.6854068335667309
+          },
+          {
+            "item_id": 10,
+            "title": "GoldenEye (1995)",
+            "score": -0.5920585852184339
+          }
+        ]
+      },
+      {
+        "component": 3,
+        "explained_variance_ratio": 0.028584338438846,
+        "year_correlation": -0.07638833098946166,
+        "top_positive_genres": [
+          {
+            "genre": "Adventure",
+            "correlation": 0.051124610294271226
+          },
+          {
+            "genre": "Comedy",
+            "correlation": 0.038290625819366694
+          },
+          {
+            "genre": "Children",
+            "correlation": 0.02245363053953747
+          }
+        ],
+        "top_negative_genres": [
+          {
+            "genre": "Thriller",
+            "correlation": -0.04817831823221486
+          },
+          {
+            "genre": "Horror",
+            "correlation": -0.04622109144521352
+          },
+          {
+            "genre": "Mystery",
+            "correlation": -0.01981219852809075
+          }
+        ],
+        "top_positive_movies": [
+          {
+            "item_id": 1270,
+            "title": "Back to the Future (1985)",
+            "score": 0.8061886069221248
+          },
+          {
+            "item_id": 231,
+            "title": "Dumb & Dumber (Dumb and Dumber) (1994)",
+            "score": 0.6678019173398818
+          },
+          {
+            "item_id": 1097,
+            "title": "E.T. the Extra-Terrestrial (1982)",
+            "score": 0.6336981377811958
+          },
+          {
+            "item_id": 1234,
+            "title": "Sting, The (1973)",
+            "score": 0.6126094792817709
+          },
+          {
+            "item_id": 2987,
+            "title": "Who Framed Roger Rabbit? (1988)",
+            "score": 0.6081262473197471
+          }
+        ],
+        "top_negative_movies": [
+          {
+            "item_id": 8949,
+            "title": "Sideways (2004)",
+            "score": -0.5979923314862539
+          },
+          {
+            "item_id": 21,
+            "title": "Get Shorty (1995)",
+            "score": -0.534051850896714
+          },
+          {
+            "item_id": 36,
+            "title": "Dead Man Walking (1995)",
+            "score": -0.5065209875283805
+          },
+          {
+            "item_id": 5266,
+            "title": "Panic Room (2002)",
+            "score": -0.5037906871554746
+          },
+          {
+            "item_id": 1391,
+            "title": "Mars Attacks! (1996)",
+            "score": -0.47370546549521086
+          }
+        ]
+      }
+    ]
+  },
+  "synthetic_comparison": {
+    "real": {
+      "ratings": 80672.0,
+      "rating_mean": 3.501853183260611,
+      "rating_std": 1.0420994450318843,
+      "user_activity_mean": 132.24918032786886,
+      "user_activity_gini": 0.6039057978553918,
+      "item_popularity_mean": 8.977520587580681,
+      "item_popularity_gini": 0.6992677406734245
+    },
+    "synthetic": {
+      "ratings": 80672.0,
+      "rating_mean": 3.525802013090044,
+      "rating_std": 0.9582890578305215,
+      "user_activity_mean": 132.24918032786886,
+      "user_activity_gini": 0.6039057978553918,
+      "item_popularity_mean": 9.835649841502073,
+      "item_popularity_gini": 0.6528579010924185
+    },
+    "absolute_deltas": {
+      "ratings": 0.0,
+      "rating_mean": 0.023948829829433027,
+      "rating_std": 0.0838103872013628,
+      "user_activity_mean": 0.0,
+      "user_activity_gini": 0.0,
+      "item_popularity_mean": 0.8581292539213923,
+      "item_popularity_gini": 0.046409839581005974
+    }
+  },
+  "metrics_summary": {
+    "option1": {
+      "dataset_dir": "dataset\\ml-latest-small",
+      "seed": 42,
+      "test_ratio": 0.2,
+      "split_hash": "b304b43e63d88277254f8d4c8e80af6b7482de6826bbe351e6024091e8297af0",
+      "split_source": "generated",
+      "train_size": 80672,
+      "test_size": 20164,
+      "users_train": 610,
+      "items_train": 8986,
+      "model": "option1",
+      "top_k": 10,
+      "topn_relevance": "all_test",
+      "min_relevant_rating": 4.0,
+      "n_factors": 48,
+      "epochs": 30,
+      "lr": 0.01,
+      "reg": 0.05,
+      "lr_decay": 0.98,
+      "validation_split": 0.1,
+      "early_stopping_patience": 3,
+      "mae": 0.6625151690642818,
+      "rmse": 0.8668234734205092,
+      "precision": 0.038688524590163934,
+      "recall": 0.01443153190329136,
+      "f_measure": 0.01637702597553333,
+      "ndcg": 0.04430782627059342,
+      "best_epoch": 28
+    },
+    "option2": {
+      "dataset_dir": "dataset\\ml-latest-small",
+      "seed": 42,
+      "test_ratio": 0.2,
+      "split_hash": "b304b43e63d88277254f8d4c8e80af6b7482de6826bbe351e6024091e8297af0",
+      "split_source": "cached",
+      "train_size": 80672,
+      "test_size": 20164,
+      "users_train": 610,
+      "items_train": 8986,
+      "model": "option2",
+      "top_k": 10,
+      "topn_relevance": "all_test",
+      "min_relevant_rating": 4.0,
+      "embedding_dim": 48,
+      "epochs": 30,
+      "batch_size": 256,
+      "lr": 0.001,
+      "title_max_len": 15,
+      "title_vocab_size": 20000,
+      "title_embedding_dim": 32,
+      "title_num_filters": 32,
+      "genre_max_len": 4,
+      "genre_embedding_dim": 8,
+      "dropout_rate": 0.15,
+      "l2_reg": 1e-06,
+      "validation_split": 0.1,
+      "lr_plateau_patience": 2,
+      "lr_plateau_factor": 0.5,
+      "min_lr": 1e-05,
+      "rating_weight_power": 1.25,
+      "popularity_prior_count": 20.0,
+      "mae": 0.67424880360865,
+      "rmse": 0.9025086721111648,
+      "precision": 0.025737704918032785,
+      "recall": 0.009665733112280481,
+      "f_measure": 0.01060058600750985,
+      "ndcg": 0.03129499867663904,
+      "best_model_epoch": 5,
+      "best_model_val_loss": 0.4847073256969452,
+      "best_epoch": 5
+    }
+  },
+  "training_history": {
+    "train_mae": [
+      0.7008951902389526,
+      0.67340487241745,
+      0.659447193145752,
+      0.6486569046974182,
+      0.6397592425346375,
+      0.6317424774169922,
+      0.6251125335693359,
+      0.6186496615409851,
+      0.6115490198135376,
+      0.6060767769813538,
+      0.5982939004898071,
+      0.5914449095726013,
+      0.5841977596282959,
+      0.5768383741378784,
+      0.5694800615310669,
+      0.5620255470275879,
+      0.5545958280563354,
+      0.5461105704307556,
+      0.5383455753326416,
+      0.5307483673095703,
+      0.5233849883079529,
+      0.5159326195716858,
+      0.5084178447723389,
+      0.5014156103134155,
+      0.4945926368236542,
+      0.4879343807697296,
+      0.4814588129520416,
+      0.4754117429256439,
+      0.469279408454895,
+      0.4634957015514374
+    ],
+    "train_rmse": [
+      0.8979580998420715,
+      0.8692653775215149,
+      0.8515739440917969,
+      0.8384981155395508,
+      0.8275688290596008,
+      0.8176804184913635,
+      0.8085847496986389,
+      0.8000513315200806,
+      0.7906695604324341,
+      0.782037615776062,
+      0.7726920247077942,
+      0.7635952830314636,
+      0.7534990906715393,
+      0.7433592677116394,
+      0.7335352301597595,
+      0.7230333089828491,
+      0.7125083804130554,
+      0.7019954919815063,
+      0.6914108991622925,
+      0.6811752319335938,
+      0.6709104180335999,
+      0.660933792591095,
+      0.6513516306877136,
+      0.641934335231781,
+      0.6328787803649902,
+      0.6240338683128357,
+      0.615561842918396,
+      0.6074380874633789,
+      0.5999054312705994,
+      0.5920512080192566
+    ],
+    "learning_rate": [
+      0.01,
+      0.0098,
+      0.009604,
+      0.009411919999999999,
+      0.009223681599999999,
+      0.009039207967999998,
+      0.008858423808639998,
+      0.008681255332467197,
+      0.008507630225817853,
+      0.008337477621301496,
+      0.008170728068875466,
+      0.008007313507497957,
+      0.007847167237347998,
+      0.007690223892601038,
+      0.007536419414749017,
+      0.007385691026454037,
+      0.0072379772059249555,
+      0.007093217661806457,
+      0.006951353308570328,
+      0.006812326242398921,
+      0.006676079717550942,
+      0.006542558123199923,
+      0.0064117069607359245,
+      0.006283472821521206,
+      0.006157803365090782,
+      0.006034647297788966,
+      0.005913954351833187,
+      0.0057956752647965225,
+      0.005679761759500592,
+      0.00556616652431058
+    ],
+    "val_mae": [
+      0.7000066041946411,
+      0.6805570721626282,
+      0.6718879342079163,
+      0.6671946048736572,
+      0.6639219522476196,
+      0.6621443033218384,
+      0.659809410572052,
+      0.6582695841789246,
+      0.6568747758865356,
+      0.6563428640365601,
+      0.6550396680831909,
+      0.6543879508972168,
+      0.6532346606254578,
+      0.6525706052780151,
+      0.6519497036933899,
+      0.652088463306427,
+      0.6516402363777161,
+      0.6505403518676758,
+      0.650334358215332,
+      0.6495844125747681,
+      0.6495640277862549,
+      0.6495242118835449,
+      0.6490746140480042,
+      0.6494455337524414,
+      0.6492111682891846,
+      0.6489786505699158,
+      0.648948609828949,
+      0.6491992473602295,
+      0.6491016149520874,
+      0.6493803858757019
+    ],
+    "val_rmse": [
+      0.9035533666610718,
+      0.8850029110908508,
+      0.8758000135421753,
+      0.8712952136993408,
+      0.8678388595581055,
+      0.8655897378921509,
+      0.8630325198173523,
+      0.8613467216491699,
+      0.8599210977554321,
+      0.8591195940971375,
+      0.8584949970245361,
+      0.857811689376831,
+      0.8566855192184448,
+      0.8555535674095154,
+      0.8553633093833923,
+      0.8552306294441223,
+      0.8541792035102844,
+      0.8538587093353271,
+      0.8533485531806946,
+      0.852700412273407,
+      0.8521641492843628,
+      0.8521391153335571,
+      0.8519867062568665,
+      0.8521500825881958,
+      0.8517546653747559,
+      0.8515963554382324,
+      0.8516072034835815,
+      0.8515443205833435,
+      0.8515895009040833,
+      0.851842999458313
+    ]
+  }
+}

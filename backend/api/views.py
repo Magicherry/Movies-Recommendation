@@ -13,12 +13,82 @@ import os
 
 from api.services import service
 
-scrape_state = {
-    "status": "idle",
-    "processed": 0,
-    "total": 0,
-    "message": ""
-}
+SCRAPE_STATE_PATH = Path(__file__).resolve().parents[2] / "models" / "artifacts" / "scrape_state.json"
+
+
+def _default_scrape_summary() -> dict[str, int]:
+    return {
+        "links_id_hit": 0,
+        "title_search_hit": 0,
+        "no_match": 0,
+    }
+
+
+def _default_scrape_state() -> dict[str, object]:
+    return {
+        "status": "idle",
+        "processed": 0,
+        "total": 0,
+        "message": "",
+        "summary": _default_scrape_summary(),
+    }
+
+
+def _normalize_scrape_state(raw: object) -> dict[str, object]:
+    base = _default_scrape_state()
+    if not isinstance(raw, dict):
+        return base
+
+    status = str(raw.get("status", base["status"]))
+    processed = int(raw.get("processed", base["processed"]) or 0)
+    total = int(raw.get("total", base["total"]) or 0)
+    message = str(raw.get("message", base["message"]))
+
+    summary_raw = raw.get("summary", {})
+    if not isinstance(summary_raw, dict):
+        summary_raw = {}
+    summary = {
+        "links_id_hit": int(summary_raw.get("links_id_hit", 0) or 0),
+        "title_search_hit": int(summary_raw.get("title_search_hit", 0) or 0),
+        "no_match": int(summary_raw.get("no_match", 0) or 0),
+    }
+
+    # If server restarted while status was running, keep last counters but reset state.
+    if status in {"running", "starting"}:
+        status = "idle"
+        message = "No active scraping process."
+
+    return {
+        "status": status,
+        "processed": max(0, processed),
+        "total": max(0, total),
+        "message": message,
+        "summary": summary,
+    }
+
+
+def _load_scrape_state() -> dict[str, object]:
+    if not SCRAPE_STATE_PATH.exists():
+        return _default_scrape_state()
+    try:
+        with open(SCRAPE_STATE_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return _normalize_scrape_state(data)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return _default_scrape_state()
+
+
+def _save_scrape_state(state: dict[str, object]) -> None:
+    try:
+        SCRAPE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(SCRAPE_STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+    except OSError:
+        # Persistence is best-effort and should not break API behavior.
+        pass
+
+
+scrape_state = _load_scrape_state()
 
 def run_scrape_thread(api_key: str, refresh: bool = False):
     global scrape_state
@@ -26,6 +96,12 @@ def run_scrape_thread(api_key: str, refresh: bool = False):
     scrape_state["processed"] = 0
     scrape_state["total"] = 0
     scrape_state["message"] = "Starting scrape..."
+    scrape_state["summary"] = {
+        "links_id_hit": 0,
+        "title_search_hit": 0,
+        "no_match": 0,
+    }
+    _save_scrape_state(scrape_state)
     
     project_root = Path(__file__).resolve().parents[2]
     script_path = project_root / "scripts" / "scrape_tmdb.py"
@@ -62,20 +138,36 @@ def run_scrape_thread(api_key: str, refresh: bool = False):
             if match:
                 scrape_state["processed"] = int(match.group(1))
                 scrape_state["total"] = int(match.group(2))
+                _save_scrape_state(scrape_state)
             elif "Scraping TMDB for" in line:
                 match = re.search(r"Scraping TMDB for (\d+) movies", line)
                 if match:
                     scrape_state["total"] = int(match.group(1))
+                    _save_scrape_state(scrape_state)
+            elif line.startswith("SCRAPE_SUMMARY "):
+                match = re.search(
+                    r"links_id_hit=(\d+)\s+title_search_hit=(\d+)\s+no_match=(\d+)",
+                    line,
+                )
+                if match:
+                    scrape_state["summary"] = {
+                        "links_id_hit": int(match.group(1)),
+                        "title_search_hit": int(match.group(2)),
+                        "no_match": int(match.group(3)),
+                    }
+                    _save_scrape_state(scrape_state)
             elif "All movies enriched" in line:
                 scrape_state["status"] = "completed"
                 if scrape_state["total"] > 0:
                     scrape_state["processed"] = scrape_state["total"]
+                _save_scrape_state(scrape_state)
                 
         process.wait()
         if process.returncode == 0:
             scrape_state["status"] = "completed"
             if scrape_state["total"] > 0:
                 scrape_state["processed"] = scrape_state["total"]
+            _save_scrape_state(scrape_state)
         else:
             scrape_state["status"] = "error"
             error_msg = " ".join(error_lines) if error_lines else scrape_state['message']
@@ -83,10 +175,12 @@ def run_scrape_thread(api_key: str, refresh: bool = False):
                 scrape_state["message"] = error_msg
             else:
                 scrape_state["message"] = f"Error: {error_msg}"
+            _save_scrape_state(scrape_state)
             
     except Exception as e:
         scrape_state["status"] = "error"
         scrape_state["message"] = str(e)
+        _save_scrape_state(scrape_state)
 
 
 
@@ -200,6 +294,36 @@ def search(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"query": query, "items": rows})
 
 @require_GET
+def person_movies(request: HttpRequest) -> JsonResponse:
+    name = request.GET.get("name", "")
+    if not name.strip():
+        return _error("Missing required query parameter: name", status=400)
+    try:
+        rows = service.get_movies_by_person(person_name=name)
+    except FileNotFoundError as exc:
+        return _error(str(exc), status=500)
+    return JsonResponse({"person_name": name, "items": rows})
+
+@require_GET
+def tmdb_person(request: HttpRequest, person_id: int) -> JsonResponse:
+    """Fetch person details from TMDB."""
+    api_key = _get_tmdb_api_key()
+    if not api_key:
+        return _error("TMDB API key not configured.", status=503)
+    import requests
+    url = f"https://api.themoviedb.org/3/person/{person_id}"
+    try:
+        resp = requests.get(url, params={"api_key": api_key}, timeout=8)
+        if resp.status_code == 404:
+            return _error("Person not found", status=404)
+        if resp.status_code != 200:
+            return _error("TMDB error", status=502)
+        data = resp.json()
+        return JsonResponse(data)
+    except Exception as e:
+        return _error(f"TMDB request failed: {e}", status=502)
+
+@require_GET
 def db_stats(request: HttpRequest) -> JsonResponse:
     try:
         stats = service.get_db_stats()
@@ -245,6 +369,17 @@ def scrape_start(request: HttpRequest) -> JsonResponse:
     except json.JSONDecodeError:
         api_key = ""
         refresh = False
+
+    scrape_state["status"] = "starting"
+    scrape_state["processed"] = 0
+    scrape_state["total"] = 0
+    scrape_state["message"] = "Starting scrape..."
+    scrape_state["summary"] = {
+        "links_id_hit": 0,
+        "title_search_hit": 0,
+        "no_match": 0,
+    }
+    _save_scrape_state(scrape_state)
         
     thread = threading.Thread(target=run_scrape_thread, args=(api_key, refresh))
     thread.daemon = True
@@ -419,6 +554,37 @@ def movie_apply_scrape(request: HttpRequest, item_id: int) -> JsonResponse:
         tmdb_id = int(raw_tmdb_id) if raw_tmdb_id not in (None, "") else None
     except (json.JSONDecodeError, ValueError, TypeError):
         return _error("Invalid JSON or tmdb_id", status=400)
+        
+    cast = []
+    directors = []
+    if tmdb_id:
+        api_key = _get_tmdb_api_key()
+        if api_key:
+            import requests
+            detail_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
+            try:
+                detail_resp = requests.get(detail_url, params={"api_key": api_key, "append_to_response": "credits"}, timeout=8)
+                if detail_resp.status_code == 200:
+                    movie_data = detail_resp.json()
+                    credits = movie_data.get("credits", {})
+                    if credits:
+                        for c in credits.get("cast", [])[:10]:
+                            cast.append({
+                                "id": c.get("id"),
+                                "name": c.get("name"),
+                                "character": c.get("character"),
+                                "profile_path": c.get("profile_path")
+                            })
+                        for c in credits.get("crew", []):
+                            if c.get("job") == "Director":
+                                directors.append({
+                                    "id": c.get("id"),
+                                    "name": c.get("name"),
+                                    "profile_path": c.get("profile_path")
+                                })
+            except Exception:
+                pass
+
     success = service.update_movie_enriched(
         item_id=item_id,
         poster_url=poster_url or None,
@@ -426,6 +592,8 @@ def movie_apply_scrape(request: HttpRequest, item_id: int) -> JsonResponse:
         overview=overview or None,
         tmdb_id=tmdb_id,
         scraped_title=scraped_title or None,
+        cast=json.dumps(cast),
+        directors=json.dumps(directors),
     )
     if not success:
         return _error("Movie not found", status=404)
@@ -479,7 +647,14 @@ def movie_refresh_metadata(request: HttpRequest, item_id: int) -> JsonResponse:
                 return None
             data = resp.json()
             if data.get("results"):
-                return data["results"][0]
+                best = data["results"][0]
+                tmdb_id = best.get("id")
+                if tmdb_id:
+                    detail_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
+                    detail_resp = requests.get(detail_url, params={"api_key": api_key, "append_to_response": "credits"}, timeout=8)
+                    if detail_resp.status_code == 200:
+                        return detail_resp.json()
+                return best
         except Exception:
             pass
         return None
@@ -513,6 +688,26 @@ def movie_refresh_metadata(request: HttpRequest, item_id: int) -> JsonResponse:
     overview = best.get("overview", "") or ""
     tmdb_id = best.get("id")
     scraped_title = (best.get("title") or "").strip()
+    
+    cast = []
+    directors = []
+    credits = best.get("credits", {})
+    if credits:
+        for c in credits.get("cast", [])[:10]:
+            cast.append({
+                "id": c.get("id"),
+                "name": c.get("name"),
+                "character": c.get("character"),
+                "profile_path": c.get("profile_path")
+            })
+        for c in credits.get("crew", []):
+            if c.get("job") == "Director":
+                directors.append({
+                    "id": c.get("id"),
+                    "name": c.get("name"),
+                    "profile_path": c.get("profile_path")
+                })
+                
     success = service.update_movie_enriched(
         item_id=item_id,
         poster_url=poster_url or None,
@@ -520,6 +715,8 @@ def movie_refresh_metadata(request: HttpRequest, item_id: int) -> JsonResponse:
         overview=overview or None,
         tmdb_id=tmdb_id,
         scraped_title=scraped_title or None,
+        cast=json.dumps(cast),
+        directors=json.dumps(directors),
     )
     if not success:
         return _error("Update failed", status=500)

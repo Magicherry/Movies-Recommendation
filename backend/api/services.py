@@ -30,7 +30,7 @@ class RecommenderService:
 
     def _load_movies_from_path(self, source_path: Path) -> None:
         frame = pd.read_csv(source_path)
-        text_cols = ("poster_url", "backdrop_url", "overview", "tmdb_id", "scraped_title")
+        text_cols = ("poster_url", "backdrop_url", "overview", "tmdb_id", "scraped_title", "cast", "directors")
         for col in text_cols:
             if col not in frame.columns:
                 frame[col] = ""
@@ -49,6 +49,21 @@ class RecommenderService:
                 norm_tmdb_id = str(int(raw_tmdb_id))
             else:
                 norm_tmdb_id = str(raw_tmdb_id).strip()
+            
+            cast_str = getattr(row, "cast", "")
+            directors_str = getattr(row, "directors", "")
+            
+            import json
+            try:
+                cast_data = json.loads(cast_str) if cast_str else []
+            except json.JSONDecodeError:
+                cast_data = []
+                
+            try:
+                directors_data = json.loads(directors_str) if directors_str else []
+            except json.JSONDecodeError:
+                directors_data = []
+
             self.movie_lookup[int(row.item_id)] = {
                 "item_id": int(row.item_id),
                 "title": row.title,
@@ -58,6 +73,8 @@ class RecommenderService:
                 "backdrop_url": getattr(row, "backdrop_url", ""),
                 "overview": getattr(row, "overview", ""),
                 "tmdb_id": norm_tmdb_id,
+                "cast": cast_data,
+                "directors": directors_data,
             }
 
         self._movies_loaded_path = source_path
@@ -502,6 +519,44 @@ class RecommenderService:
         frame = self.movies[mask].head(limit)
         return frame.to_dict(orient="records")
 
+    def get_movies_by_person(self, person_name: str) -> List[Dict[str, Any]]:
+        self._ensure_movie_data_fresh()
+        if not person_name:
+            return []
+            
+        matched_items = []
+        for item_id, meta in self.movie_lookup.items():
+            found = False
+            for c in meta.get("cast", []):
+                if c.get("name") == person_name:
+                    found = True
+                    break
+            if not found:
+                for d in meta.get("directors", []):
+                    if d.get("name") == person_name:
+                        found = True
+                        break
+            if found:
+                matched_items.append(item_id)
+                
+        if not matched_items:
+            return []
+            
+        frame = self.movies[self.movies["item_id"].isin(matched_items)]
+        
+        # Sort by year descending (newest first)
+        sortable = frame.copy()
+        sortable["_sort_year"] = (
+            sortable["title"]
+            .str.extract(r"\((\d{4})\)\s*$", expand=False)
+            .fillna("0")
+            .astype(int)
+        )
+        sortable = sortable.sort_values(["_sort_year", "item_id"], ascending=[False, True], kind="mergesort")
+        sortable = sortable[[c for c in sortable.columns if not c.startswith("_sort_")]]
+        
+        return sortable.to_dict(orient="records")
+
     def predict_rating(self, user_id: int, item_id: int) -> Dict[str, Any]:
         self._ensure_active_model_fresh()
         try:
@@ -719,12 +774,14 @@ class RecommenderService:
         overview: str | None = None,
         tmdb_id: int | None = None,
         scraped_title: str | None = None,
+        cast: str | None = None,
+        directors: str | None = None,
     ) -> bool:
         """Update one movie's shared enriched metadata fields."""
         self._ensure_movie_data_fresh()
         if self.movies is None or item_id not in self.movie_lookup:
             return False
-        for col in ("poster_url", "backdrop_url", "overview", "tmdb_id", "scraped_title"):
+        for col in ("poster_url", "backdrop_url", "overview", "tmdb_id", "scraped_title", "cast", "directors"):
             if col not in self.movies.columns:
                 self.movies[col] = ""
         row = self.movie_lookup[item_id]
@@ -754,6 +811,24 @@ class RecommenderService:
             idx = self.movies[self.movies["item_id"] == item_id].index
             if len(idx) > 0:
                 self.movies.at[idx[0], "scraped_title"] = scraped_title
+        if cast is not None:
+            import json
+            try:
+                row["cast"] = json.loads(cast) if cast else []
+            except json.JSONDecodeError:
+                row["cast"] = []
+            idx = self.movies[self.movies["item_id"] == item_id].index
+            if len(idx) > 0:
+                self.movies.at[idx[0], "cast"] = cast
+        if directors is not None:
+            import json
+            try:
+                row["directors"] = json.loads(directors) if directors else []
+            except json.JSONDecodeError:
+                row["directors"] = []
+            idx = self.movies[self.movies["item_id"] == item_id].index
+            if len(idx) > 0:
+                self.movies.at[idx[0], "directors"] = directors
         self._sync_user_history_for_item(item_id)
         out_path = self._movies_write_path or (self.artifacts_dir / "movies_enriched.csv")
         out_path.parent.mkdir(parents=True, exist_ok=True)

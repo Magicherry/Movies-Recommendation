@@ -22,6 +22,8 @@
 - **Comprehensive Evaluation Metrics**
   - **Rating Prediction**: `MAE`, `RMSE`
   - **Top-K Recommendations**: `Precision@10`, `Recall@10`, `F-measure@10`, `NDCG@10`
+- **Structural Data Analysis**
+  - Distribution profiling, feature influence analysis, latent factor interpretation, and synthetic data generation.
 - **Modern Web Interface (Next.js + Django)**
   - Browse library with multi-genre filtering and sorting.
   - Detailed movie pages with metadata and similar movie suggestions.
@@ -34,22 +36,23 @@
 | :---: | :---: |
 | ![Home](preview/Home.png) | ![Top Picks](preview/TopPicks.png) |
 
-| Collection | Library | Movie Detail |
+| Library | Movie Detail | Community |
 | :---: | :---: | :---: |
-| ![Collection](preview/Collection.png) | ![Library](preview/Library.png) | ![Movies Detail](preview/MoviesDetail.png) |
+| ![Library](preview/Library.png) | ![Movie Detail](preview/MovieDetail.png) | ![Community](preview/Community.png) |
 
-| Community | User Profile |
-| :---: | :---: |
-| ![Community](preview/Community.png) | ![User Profile](preview/UserProfile.png) |
+| User Profile | Actor Detail | Settings |
+| :---: | :---: | :---: |
+| ![User Profile](preview/UserDetail.png) | ![Actor Detail](preview/ActorDetail.png) | ![Settings](preview/Settings.png) |
 
 ## Project Structure
 
 ```text
-dataset/          # Raw datasets (MovieLens format supported)
+dataset/          # Raw MovieLens data (e.g. ml-latest-small/, ml-latest/)
 backend/          # Django REST API
 frontend/         # Next.js web application
-models/           # ML model architecture and generated artifacts
-scripts/          # Training, evaluation, and data enrichment scripts
+models/           # ML model code and generated artifacts (option1, option2, splits)
+scripts/          # Training, evaluation, enrichment, and report generation
+analysis/         # Final report (final_report.md), figures, and JSON/CSV artifacts
 ```
 
 ## Getting Started
@@ -73,10 +76,10 @@ pip install -r requirements.txt
 
 ### 2. Train the Model
 
-Train the recommender model using the provided dataset. Model files and train/test splits are saved under `models/artifacts/<model-type>/` (for example, `models/artifacts/option1/`), while metadata files are shared in `models/artifacts/`.
+Train the recommender model using the provided dataset. Place MovieLens data under `dataset/ml-latest-small/` (or pass `--dataset-dir`). Model files and train/test splits are saved under `models/artifacts/<model-type>/` (e.g. `models/artifacts/option1/`); metadata is shared in `models/artifacts/`.
 
 ```bash
-python -m scripts.train_and_evaluate --dataset-dir frontend/ml-latest-small/ml-latest-small --top-k 10
+python -m scripts.train_and_evaluate --dataset-dir dataset/ml-latest-small --top-k 10
 ```
 
 Top-K relevance threshold can be configured (default: `rating >= 4.0`):
@@ -88,7 +91,7 @@ By default, Top-K evaluation follows the CS550 holdout definition (`--topn-relev
 
 *(Optional)* Tune Matrix Factorization hyperparameters:
 ```bash
-python -m scripts.train_and_evaluate --dataset-dir frontend/ml-latest-small/ml-latest-small --n-factors 48 --epochs 30 --lr 0.01 --reg 0.05
+python -m scripts.train_and_evaluate --dataset-dir dataset/ml-latest-small --n-factors 48 --epochs 30 --lr 0.01 --reg 0.05
 ```
 
 Train the improved Option 2 hybrid deep model (title + genre features):
@@ -105,18 +108,18 @@ Useful Option 2 controls:
 
 The script caches a shared train/test split in `models/artifacts/splits/` so Option 1 and Option 2 are evaluated on the same holdout split. Use `--force-resplit` to regenerate.
 
-### 3. Fetch Movie Images (Optional but Recommended)
+### 3. Fetch Movie Information (Optional but Recommended)
 
-To display high-quality posters and backdrops, run the TMDB enrichment script. This will generate the shared metadata file `models/artifacts/movies_enriched.csv`.
+Enrich movie records with posters, backdrops, overviews, and cast/director data from [TMDB](https://www.themoviedb.org/documentation/api). The script reads `movies.csv` from training artifacts and writes `models/artifacts/movies_enriched.csv`. Run **after** training (Step 2).
 
-> **Note**: Before running the script, you must obtain a free API key from [TMDB](https://www.themoviedb.org/documentation/api). Then, create a `.env` file in the project root and add your key:
-> ```bash
-> TMDB_API_KEY=your_real_api_key_here
-> ```
-
-```bash
-python -m scripts.scrape_tmdb
-```
+1. Get a free API key at [TMDB](https://www.themoviedb.org/documentation/api) and create a `.env` in the project root:
+   ```bash
+   TMDB_API_KEY=your_api_key_here
+   ```
+2. Run the scraper:
+   ```bash
+   python -m scripts.scrape_tmdb
+   ```
 
 ### 4. Start the Backend API
 
@@ -128,10 +131,17 @@ python manage.py runserver 8001
 ```
 
 **Key Endpoints:**
-- `GET /api/health`
-- `GET /api/movies` (Supports pagination, search, and genre filtering)
-- `GET /api/movie/{id}`
-- `GET /api/recommend/{user_id}`
+- `GET /api/health` — API health check
+- `GET /api/movies` — Paginated movies with search and genre filters
+- `GET /api/movie/<id>` — Movie detail and metadata
+- `GET /api/recommend/<user_id>` — Top-K recommendations for a user
+- `GET /api/users` — User list
+- `GET /api/user/<user_id>/history` — User rating history
+- `GET /api/predict/<user_id>/<item_id>` — Predicted rating for a user–item pair
+- `GET /api/search` — Full-text movie search
+- `GET /api/stats` — Database statistics
+- `GET /api/model-config` — Loaded model configuration
+- TMDB and scrape endpoints for image enrichment (see backend `api/urls.py` for full list)
 
 ### 5. Start the Frontend Application
 
@@ -154,7 +164,34 @@ NEXT_PUBLIC_API_BASE_URL="http://localhost:8001/api" npm run dev -- -p 3001
 
 - The data loader supports both `csv` and `dat` MovieLens formats.
 - The recommender algorithm is built from scratch and does not rely on black-box recommendation libraries.
+- The analysis pipeline is designed to support course-style interpretation questions, not only predictive metrics.
 - The UI features a responsive design, glass-morphism effects, and dynamic filtering components.
+
+### Analysis Report
+
+Run the analysis pipeline after training to produce a single technical report that compares both recommender options and documents the dataset structure:
+
+```bash
+python -m scripts.generate_report
+```
+
+This generates:
+- `analysis/figures/`
+- `analysis/artifacts/final_summary.json`
+- `analysis/artifacts/option1_analysis.json`
+- `analysis/artifacts/option1_synthetic_ratings.csv`
+- `analysis/artifacts/option2_analysis.json`
+- `analysis/artifacts/option2_synthetic_ratings.csv`
+
+The report covers:
+- Data distribution and sparsity
+- Option 1 vs Option 2 performance comparison
+- Training-curve analysis
+- Feature influence with bootstrap confidence intervals
+- Signal-vs-noise ablation checks
+- Latent factor interpretation for both models
+- Synthetic rating generation for realism checks
+- Limitations and recommendation for the final submission
 
 ## Acknowledgements
 

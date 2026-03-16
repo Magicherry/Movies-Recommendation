@@ -4,6 +4,8 @@ import BackButton from "../../../components/back-button";
 import PredictionDisplay from "../../../components/prediction-display";
 import RefreshOnEngineChange from "../../../components/refresh-on-engine-change";
 import MovieDetailActions from "../../../components/movie-detail-actions";
+import PersonList from "../../../components/person-list";
+import Link from "next/link";
 
 type MovieDetailPageProps = {
   params: {
@@ -20,6 +22,9 @@ function getGradient(id: number) {
 export default async function MovieDetailPage({ params }: MovieDetailPageProps) {
   const itemId = Number(params.id);
   const data = await getMovieDetail(itemId);
+
+  const cast = data.movie.cast || [];
+  const directors = data.movie.directors || [];
 
   return (
     <div className="page-transition">
@@ -55,6 +60,8 @@ export default async function MovieDetailPage({ params }: MovieDetailPageProps) 
       </div>
 
       <section className="content-padding">
+        <PersonList directors={directors} cast={cast} tmdbId={data.movie.tmdb_id} movieTitle={displayMovieName(data.movie)} />
+
         <CollectionLimitGrid
           settingKey="more-like-this"
           title="More Like This"

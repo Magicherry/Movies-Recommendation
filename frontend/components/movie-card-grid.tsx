@@ -113,6 +113,8 @@ const MovieCard = memo(function MovieCard({
   );
 });
 
+import ScrollableRow from "./scrollable-row";
+
 type ContextMenuState = { x: number; y: number; movie: MovieCardItem } | null;
 
 export default function MovieCardGrid({
@@ -122,7 +124,6 @@ export default function MovieCardGrid({
   emptyMessage = "No movies to display.",
   rowMode = false
 }: MovieCardGridProps) {
-  const rowRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
@@ -131,8 +132,6 @@ export default function MovieCardGrid({
   const [refreshingItemId, setRefreshingItemId] = useState<number | null>(null);
   const [fadingItemId, setFadingItemId] = useState<number | null>(null);
   const [imageOverrides, setImageOverrides] = useState<Record<number, { poster_url: string; backdrop_url: string }>>({});
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
 
   const withImageOverrides = useCallback((movie: MovieCardItem): MovieCardItem => {
     const override = imageOverrides[movie.item_id];
@@ -200,54 +199,6 @@ export default function MovieCardGrid({
     }
   }, [title, items, scoreLabel, pathname, router, withImageOverrides]);
 
-  const scrollLeft = useCallback(() => {
-    if (rowRef.current) {
-      rowRef.current.scrollBy({ left: -rowRef.current.clientWidth * 0.8, behavior: "smooth" });
-    }
-  }, []);
-  const scrollRight = useCallback(() => {
-    if (rowRef.current) {
-      rowRef.current.scrollBy({ left: rowRef.current.clientWidth * 0.8, behavior: "smooth" });
-    }
-  }, []);
-
-  const updateScrollState = useCallback(() => {
-    const row = rowRef.current;
-    if (!row) {
-      setCanScrollLeft(false);
-      setCanScrollRight(false);
-      return;
-    }
-    const maxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
-    const epsilon = 1;
-    setCanScrollLeft(row.scrollLeft > epsilon);
-    setCanScrollRight(row.scrollLeft < maxScrollLeft - epsilon);
-  }, []);
-
-  useEffect(() => {
-    if (!rowMode) return;
-    const row = rowRef.current;
-    if (!row) return;
-
-    const onRecalculate = () => updateScrollState();
-    row.addEventListener("scroll", onRecalculate, { passive: true });
-    window.addEventListener("resize", onRecalculate);
-
-    const resizeObserver = typeof ResizeObserver !== "undefined"
-      ? new ResizeObserver(onRecalculate)
-      : null;
-    resizeObserver?.observe(row);
-
-    const rafId = window.requestAnimationFrame(onRecalculate);
-
-    return () => {
-      row.removeEventListener("scroll", onRecalculate);
-      window.removeEventListener("resize", onRecalculate);
-      resizeObserver?.disconnect();
-      window.cancelAnimationFrame(rafId);
-    };
-  }, [rowMode, items.length, updateScrollState]);
-
   if (items.length === 0) {
     return <p style={{ color: "var(--text-subtle)", padding: "0 4vw" }}>{emptyMessage}</p>;
   }
@@ -255,40 +206,21 @@ export default function MovieCardGrid({
   if (rowMode) {
     return (
       <>
-      <div className="card-row-section">
-        {title && (
-          <div className="row-header-container">
-            <div 
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', opacity: 0.9, transition: 'opacity 0.2s' }}
-              onClick={handleCollectionClick}
-              title={`View all in ${title}`}
-              onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-              onMouseLeave={(e) => e.currentTarget.style.opacity = '0.9'}
-            >
-              <h2 className="row-header">{title}</h2>
+        <ScrollableRow
+          title={title}
+          onHeaderClick={handleCollectionClick}
+          headerTitle={title ? `View all in ${title}` : undefined}
+          headerIcon={
+            title ? (
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-subtle)', transform: 'translateY(1px)' }}>
                 <polyline points="9 18 15 12 9 6"></polyline>
               </svg>
-            </div>
-            <div className="row-controls">
-              <button className="row-scroll-btn" onClick={scrollLeft} aria-label="Scroll left" disabled={!canScrollLeft}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="15 18 9 12 15 6"></polyline>
-                </svg>
-              </button>
-              <button className="row-scroll-btn" onClick={scrollRight} aria-label="Scroll right" disabled={!canScrollRight}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="9 18 15 12 9 6"></polyline>
-                </svg>
-              </button>
-            </div>
-          </div>
-        )}
-        <div className="card-row-container">
-          <div className="card-row" ref={rowRef}>
-            {items.map((movie) => {
-              const mergedMovie = withImageOverrides(movie);
-              return (
+            ) : undefined
+          }
+        >
+          {items.map((movie) => {
+            const mergedMovie = withImageOverrides(movie);
+            return (
               <div
                 key={movie.item_id}
                 className="movie-card-wrapper"
@@ -307,36 +239,35 @@ export default function MovieCardGrid({
                   isFading={fadingItemId === movie.item_id}
                 />
               </div>
-            )})}
-          </div>
-        </div>
-      </div>
-      {contextMenu && (
-        <MovieCardContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          movie={contextMenu.movie}
-          onClose={() => setContextMenu(null)}
-          onScrapeMetadata={() => setScrapeModalMovie(contextMenu.movie)}
-          onRefreshMetadata={() => handleRefreshMetadata(contextMenu.movie.item_id)}
-          onChangeImage={() => setImageModalMovie(contextMenu.movie)}
-        />
-      )}
-      {scrapeModalMovie && (
-        <ScrapeMetadataModal
-          movie={scrapeModalMovie}
-          onClose={() => setScrapeModalMovie(null)}
-          onSuccess={handleModalSuccess}
-        />
-      )}
-      {imageModalMovie && (
-        <ChangeImageModal
-          movie={imageModalMovie}
-          onClose={() => setImageModalMovie(null)}
-          onSuccess={handleModalSuccess}
-        />
-      )}
-    </>
+            );
+          })}
+        </ScrollableRow>
+        {contextMenu && (
+          <MovieCardContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            movie={contextMenu.movie}
+            onClose={() => setContextMenu(null)}
+            onScrapeMetadata={() => setScrapeModalMovie(contextMenu.movie)}
+            onRefreshMetadata={() => handleRefreshMetadata(contextMenu.movie.item_id)}
+            onChangeImage={() => setImageModalMovie(contextMenu.movie)}
+          />
+        )}
+        {scrapeModalMovie && (
+          <ScrapeMetadataModal
+            movie={scrapeModalMovie}
+            onClose={() => setScrapeModalMovie(null)}
+            onSuccess={handleModalSuccess}
+          />
+        )}
+        {imageModalMovie && (
+          <ChangeImageModal
+            movie={imageModalMovie}
+            onClose={() => setImageModalMovie(null)}
+            onSuccess={handleModalSuccess}
+          />
+        )}
+      </>
     );
   }
 
