@@ -17,10 +17,25 @@ export type Recommendation = Movie & {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
 
-function logApiCall(endpoint: string, params?: any) {
-  if (typeof window !== 'undefined' && localStorage.getItem("streamx-dev-mode") === "true") {
-    console.log(`[StreamX API] Fetching ${endpoint}`, params || '');
+function isDevMode(): boolean {
+  return typeof window !== "undefined" && localStorage.getItem("streamx-dev-mode") === "true";
+}
+
+/** When dev mode is on, logs request endpoint and duration after fetch completes. */
+async function devFetch(
+  url: string,
+  options?: RequestInit,
+  endpoint?: string,
+  params?: unknown
+): Promise<Response> {
+  const start = performance.now();
+  const res = await fetch(url, options);
+  if (isDevMode() && endpoint !== undefined) {
+    const ms = Math.round(performance.now() - start);
+    const paramStr = params !== undefined && params !== "" ? ` ${JSON.stringify(params)}` : "";
+    console.log(`[StreamX API] ${endpoint}${paramStr} — ${ms}ms`);
   }
+  return res;
 }
 
 function formatTitle(title: string): string {
@@ -69,8 +84,7 @@ export async function getMovies(
   params.append("sort_by", sortBy);
   params.append("sort_order", sortOrder);
 
-  logApiCall('/movies', params.toString());
-  const res = await fetch(`${API_BASE}/movies?${params.toString()}`, { cache: "no-store" });
+  const res = await devFetch(`${API_BASE}/movies?${params.toString()}`, { cache: "no-store" }, "/movies", params.toString());
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
     const msg = (errBody as { error?: string }).error || res.statusText || `HTTP ${res.status}`;
@@ -86,8 +100,7 @@ export async function getMovies(
 }
 
 export async function getMovieDetail(itemId: number): Promise<{ movie: Movie; similar: Recommendation[] }> {
-  logApiCall(`/movie/${itemId}`);
-  const res = await fetch(`${API_BASE}/movie/${itemId}`, { cache: "no-store" });
+  const res = await devFetch(`${API_BASE}/movie/${itemId}`, { cache: "no-store" }, `/movie/${itemId}`);
   if (!res.ok) throw new Error("Failed to fetch movie detail.");
   const data = await res.json();
   if (data.movie) {
@@ -105,8 +118,7 @@ export async function getMovieDetail(itemId: number): Promise<{ movie: Movie; si
 }
 
 export async function getUsers(limit = 50, offset = 0): Promise<{ items: { user_id: number; history_count: number }[]; total: number }> {
-  logApiCall('/users', { limit, offset });
-  const res = await fetch(`${API_BASE}/users?limit=${limit}&offset=${offset}`, { cache: "no-store" });
+  const res = await devFetch(`${API_BASE}/users?limit=${limit}&offset=${offset}`, { cache: "no-store" }, "/users", { limit, offset });
   if (!res.ok) throw new Error("Failed to fetch users.");
   return await res.json();
 }
@@ -117,8 +129,7 @@ export type HistoryItem = Movie & {
 
 export async function getUserHistory(userId: number, fetchAll: boolean = false): Promise<HistoryItem[]> {
   const url = fetchAll ? `${API_BASE}/user/${userId}/history?all=1` : `${API_BASE}/user/${userId}/history`;
-  logApiCall(`/user/${userId}/history`, { fetchAll });
-  const res = await fetch(url, { cache: "no-store" });
+  const res = await devFetch(url, { cache: "no-store" }, `/user/${userId}/history`, { fetchAll });
   if (!res.ok) {
     const errData = await res.json().catch(() => null);
     throw new Error(errData?.error || "Failed to fetch user history.");
@@ -133,8 +144,7 @@ export async function getUserHistory(userId: number, fetchAll: boolean = false):
 }
 
 export async function getRecommendations(userId: number, n: number = 10): Promise<Recommendation[]> {
-  logApiCall(`/recommend/${userId}`, { n });
-  const res = await fetch(`${API_BASE}/recommend/${userId}?n=${n}`, { cache: "no-store" });
+  const res = await devFetch(`${API_BASE}/recommend/${userId}?n=${n}`, { cache: "no-store" }, `/recommend/${userId}`, { n });
   if (!res.ok) {
     const errData = await res.json().catch(() => null);
     throw new Error(errData?.error || "Failed to fetch recommendations.");
@@ -149,8 +159,7 @@ export async function getRecommendations(userId: number, n: number = 10): Promis
 }
 
 export async function searchMovies(query: string): Promise<Movie[]> {
-  logApiCall('/search', { q: query });
-  const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`, { cache: "no-store" });
+  const res = await devFetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`, { cache: "no-store" }, "/search", { q: query });
   if (!res.ok) throw new Error("Failed to search movies.");
   const data = await res.json();
   const items = data.items ?? [];
@@ -162,8 +171,7 @@ export async function searchMovies(query: string): Promise<Movie[]> {
 }
 
 export async function getPersonMovies(name: string): Promise<Movie[]> {
-  logApiCall('/person/movies', { name });
-  const res = await fetch(`${API_BASE}/person/movies?name=${encodeURIComponent(name)}`, { cache: "no-store" });
+  const res = await devFetch(`${API_BASE}/person/movies?name=${encodeURIComponent(name)}`, { cache: "no-store" }, "/person/movies", { name });
   if (!res.ok) throw new Error("Failed to fetch person movies.");
   const data = await res.json();
   const items = data.items ?? [];
@@ -175,8 +183,7 @@ export async function getPersonMovies(name: string): Promise<Movie[]> {
 }
 
 export async function getTmdbPerson(personId: number): Promise<any> {
-  logApiCall(`/tmdb/person/${personId}`);
-  const res = await fetch(`${API_BASE}/tmdb/person/${personId}`, { cache: "no-store" });
+  const res = await devFetch(`${API_BASE}/tmdb/person/${personId}`, { cache: "no-store" }, `/tmdb/person/${personId}`);
   if (!res.ok) {
     if (res.status === 404) return null;
     throw new Error("Failed to fetch TMDB person details.");
@@ -196,7 +203,7 @@ export type TMDBSearchResult = {
 export async function tmdbSearch(query: string, year?: string): Promise<{ results: TMDBSearchResult[] }> {
   const params = new URLSearchParams({ q: query });
   if (year) params.append("year", year);
-  const res = await fetch(`${API_BASE}/tmdb/search?${params.toString()}`, { cache: "no-store" });
+  const res = await devFetch(`${API_BASE}/tmdb/search?${params.toString()}`, { cache: "no-store" }, "/tmdb/search", year ? { q: query, year } : { q: query });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error((data as { error?: string }).error || "TMDB search failed.");
@@ -207,7 +214,7 @@ export async function tmdbSearch(query: string, year?: string): Promise<{ result
 export type TMDBImageItem = { file_path: string; url: string; vote_average: number; width: number; height: number };
 
 export async function tmdbMovieImages(tmdbId: number): Promise<{ posters: TMDBImageItem[]; backdrops: TMDBImageItem[] }> {
-  const res = await fetch(`${API_BASE}/tmdb/movie/${tmdbId}/images`, { cache: "no-store" });
+  const res = await devFetch(`${API_BASE}/tmdb/movie/${tmdbId}/images`, { cache: "no-store" }, `/tmdb/movie/${tmdbId}/images`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error((data as { error?: string }).error || "Failed to load images.");
@@ -236,11 +243,11 @@ export async function movieApplyScrape(
   };
   if (tmdbId != null && tmdbId !== 0) body.tmdb_id = tmdbId;
   if (scrapedTitle && scrapedTitle.trim()) body.scraped_title = scrapedTitle.trim();
-  const res = await fetch(`${API_BASE}/movie/${itemId}/scrape`, {
+  const res = await devFetch(`${API_BASE}/movie/${itemId}/scrape`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  });
+  }, `POST /movie/${itemId}/scrape`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error((data as { error?: string }).error || "Failed to apply metadata.");
@@ -248,7 +255,7 @@ export async function movieApplyScrape(
 }
 
 export async function movieRefreshMetadata(itemId: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/movie/${itemId}/refresh-metadata`, { method: "POST" });
+  const res = await devFetch(`${API_BASE}/movie/${itemId}/refresh-metadata`, { method: "POST" }, `POST /movie/${itemId}/refresh-metadata`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error((data as { error?: string; message?: string }).message || (data as { error?: string }).error || "Refresh failed.");
@@ -259,11 +266,11 @@ export async function movieUpdateImages(itemId: number, posterUrl?: string, back
   const body: { poster_url?: string; backdrop_url?: string } = {};
   if (posterUrl !== undefined) body.poster_url = posterUrl;
   if (backdropUrl !== undefined) body.backdrop_url = backdropUrl;
-  const res = await fetch(`${API_BASE}/movie/${itemId}/images`, {
+  const res = await devFetch(`${API_BASE}/movie/${itemId}/images`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  });
+  }, `POST /movie/${itemId}/images`, Object.keys(body));
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error((data as { error?: string }).error || "Failed to update images.");

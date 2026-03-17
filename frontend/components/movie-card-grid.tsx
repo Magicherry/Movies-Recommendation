@@ -117,6 +117,19 @@ import ScrollableRow from "./scrollable-row";
 
 type ContextMenuState = { x: number; y: number; movie: MovieCardItem } | null;
 
+function useShowCardScores(): boolean {
+  const [show, setShow] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("streamx-show-card-scores") !== "false";
+  });
+  useEffect(() => {
+    const handler = () => setShow(localStorage.getItem("streamx-show-card-scores") !== "false");
+    window.addEventListener("streamx-settings-changed", handler);
+    return () => window.removeEventListener("streamx-settings-changed", handler);
+  }, []);
+  return show;
+}
+
 export default function MovieCardGrid({
   title,
   items,
@@ -126,6 +139,7 @@ export default function MovieCardGrid({
 }: MovieCardGridProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const showCardScores = useShowCardScores();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [scrapeModalMovie, setScrapeModalMovie] = useState<MovieCardItem | null>(null);
   const [imageModalMovie, setImageModalMovie] = useState<MovieCardItem | null>(null);
@@ -234,7 +248,7 @@ export default function MovieCardGrid({
                 <MovieCard
                   movie={mergedMovie}
                   scoreLabel={scoreLabel}
-                  showScore={typeof movie.score === "number"}
+                  showScore={showCardScores && typeof movie.score === "number"}
                   isRefreshing={refreshingItemId === movie.item_id}
                   isFading={fadingItemId === movie.item_id}
                 />
@@ -290,7 +304,7 @@ export default function MovieCardGrid({
           <MovieCard
             movie={mergedMovie}
             scoreLabel={scoreLabel}
-            showScore={typeof movie.score === "number"}
+            showScore={showCardScores && typeof movie.score === "number"}
             isRefreshing={refreshingItemId === movie.item_id}
             isFading={fadingItemId === movie.item_id}
           />

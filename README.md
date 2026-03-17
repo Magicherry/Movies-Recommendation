@@ -57,6 +57,15 @@ analysis/         # Final report (final_report.md), figures, and JSON/CSV artifa
 
 ## Getting Started
 
+### Quick start (after environment setup)
+
+Once the Python venv and dependencies are installed (Step 1 below) and the model is trained (Step 2), you can start both backend and frontend with one command:
+
+- **Windows (PowerShell):** `.\start.ps1`
+- **macOS / Linux:** `./start.sh`
+
+This starts the Django API on port 8001 and the Next.js app on port 3001, and opens the app in your browser.
+
 ### 1. Python Environment Setup
 
 Requires **Python 3.11** (or a compatible 3.x version). Create and activate a virtual environment, then install dependencies:

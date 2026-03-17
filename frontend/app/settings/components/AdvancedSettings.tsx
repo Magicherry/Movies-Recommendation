@@ -70,7 +70,7 @@ export default function AdvancedSettings() {
       <div className="setting-row">
         <div className="setting-row-info">
           <h3>Developer Mode</h3>
-          <p>Enable verbose logging in the console.</p>
+          <p>Log each API request and its response time in the console for debugging.</p>
         </div>
         <label className="toggle-switch">
           <input 

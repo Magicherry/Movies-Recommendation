@@ -5,6 +5,19 @@ import NextLink from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useUser } from "../context/user-context";
 
+function useShowBrandAlgorithm(): boolean {
+  const [show, setShow] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("streamx-show-brand-algorithm") !== "false";
+  });
+  useEffect(() => {
+    const handler = () => setShow(localStorage.getItem("streamx-show-brand-algorithm") !== "false");
+    window.addEventListener("streamx-settings-changed", handler);
+    return () => window.removeEventListener("streamx-settings-changed", handler);
+  }, []);
+  return show;
+}
+
 export default function AppNavbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -14,6 +27,7 @@ export default function AppNavbar() {
   const [inputId, setInputId] = useState(userId.toString());
   const [activeEngine, setActiveEngine] = useState<string>("Demo");
   const engineFetchSeqRef = useRef(0);
+  const showBrandAlgorithm = useShowBrandAlgorithm();
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
 
@@ -124,7 +138,9 @@ export default function AppNavbar() {
           <NextLink href="/" className="brand-link" onClick={() => setIsMenuOpen(false)}>
             <span style={{ color: 'var(--brand)' }}>STREAM</span>X
           </NextLink>
-          <span className="option-badge" title="Current Recommendation Engine">{activeEngine}</span>
+          {showBrandAlgorithm && (
+            <span className="option-badge" title="Current Recommendation Engine">{activeEngine}</span>
+          )}
         </div>
 
         <button 

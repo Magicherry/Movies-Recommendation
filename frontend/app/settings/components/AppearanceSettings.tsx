@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const BG_PRESETS = [
+  { name: "Midnight", color: "#0a0e17" },
   { name: "Obsidian", color: "#09090b" },
   { name: "Graphite", color: "#171717" },
   { name: "Charcoal", color: "#0c0c0c" },
-  { name: "Midnight", color: "#0a0e17" },
   { name: "Umber", color: "#0f0d0c" },
   { name: "Dusk", color: "#121212" },
 ];
@@ -41,6 +41,22 @@ const STEP_CAROUSEL_COUNT = 1;
 const MIN_CAROUSEL_SECONDS = 5;
 const MAX_CAROUSEL_SECONDS = 120;
 const STEP_CAROUSEL_SECONDS = 5;
+
+/** Default values for appearance-only keys. Resetting does not touch user id, dev mode, etc. */
+const APPEARANCE_DEFAULTS: Record<string, string> = {
+  "streamx-theme-color": "#6ae100",
+  "streamx-bg-color": "#0a0e17",
+  "streamx-animations": "true",
+  "streamx-dense-layout": "false",
+  "streamx-rec-count": "10",
+  "streamx-watch-again-count": "15",
+  "streamx-trending-count": "15",
+  "streamx-more-like-this-count": "15",
+  "streamx-carousel-count": "5",
+  "streamx-carousel-interval-seconds": "30",
+  "streamx-show-card-scores": "true",
+  "streamx-show-brand-algorithm": "true",
+};
 
 function parseStoredNumber(key: string, fallback: number, min: number, max: number): number {
   if (typeof window === "undefined") return fallback;
@@ -262,6 +278,20 @@ export default function AppearanceSettings() {
     } else {
       document.body.classList.remove("dense-layout");
     }
+  };
+
+  const handleResetAppearance = () => {
+    if (!confirm("Reset all appearance settings to default? This will reload the page.")) return;
+    for (const [key, value] of Object.entries(APPEARANCE_DEFAULTS)) {
+      localStorage.setItem(key, value);
+    }
+    document.documentElement.style.setProperty("--brand", APPEARANCE_DEFAULTS["streamx-theme-color"]);
+    document.documentElement.style.setProperty("--brand-hover", "#55b400");
+    document.documentElement.style.setProperty("--bg-base", APPEARANCE_DEFAULTS["streamx-bg-color"]);
+    document.body.classList.remove("disable-animations");
+    document.body.classList.remove("dense-layout");
+    window.dispatchEvent(new CustomEvent("streamx-settings-changed"));
+    window.location.reload();
   };
 
   return (
@@ -703,6 +733,60 @@ export default function AppearanceSettings() {
         </label>
       </div>
         </div>
+      </div>
+
+      <div className="setting-group setting-group-block">
+        <label>Labels &amp; Scores</label>
+        <p className="setting-desc">Control visibility of scores and algorithm badge in the UI.</p>
+        <div className="setting-block-body">
+          <div className="setting-row">
+            <div className="setting-row-info">
+              <h3>Show score and similarity on cards</h3>
+              <p>Display matching score, similarity, or rating on movie cards when available.</p>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                defaultChecked={typeof window !== "undefined" ? localStorage.getItem("streamx-show-card-scores") !== "false" : true}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  localStorage.setItem("streamx-show-card-scores", enabled.toString());
+                  window.dispatchEvent(new CustomEvent("streamx-settings-changed"));
+                }}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+          <div className="setting-row">
+            <div className="setting-row-info">
+              <h3>Show algorithm label next to brand</h3>
+              <p>Display the current recommendation engine (e.g. MF, NCF) next to the StreamX logo in the navbar.</p>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                defaultChecked={typeof window !== "undefined" ? localStorage.getItem("streamx-show-brand-algorithm") !== "false" : true}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  localStorage.setItem("streamx-show-brand-algorithm", enabled.toString());
+                  window.dispatchEvent(new CustomEvent("streamx-settings-changed"));
+                }}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <hr style={{ margin: "24px 0", border: "none", borderTop: "1px solid var(--border-soft)" }} aria-hidden />
+      <div className="setting-row">
+        <div className="setting-row-info">
+          <h3>Reset to Default Appearance</h3>
+          <p>Restore theme, background, layout, display counts, and label options to their defaults. Other settings (e.g. user ID, developer mode) are not changed. The page will reload.</p>
+        </div>
+        <button type="button" onClick={handleResetAppearance} className="btn-secondary">
+          Restore Defaults
+        </button>
       </div>
     </section>
   );
