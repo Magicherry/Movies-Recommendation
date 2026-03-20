@@ -14,13 +14,9 @@ services:
       - key: ALLOWED_HOSTS
         value: ".onrender.com"
       - key: STREAMX_DATA_DIR
-        value: /var/data/streamx
+        value: /tmp/streamx
       - key: TMDB_API_KEY
         sync: false
-    disk:
-      name: streamx-data
-      mountPath: /var/data/streamx
-      sizeGB: 2
 
   - type: web
     name: streamx-frontend

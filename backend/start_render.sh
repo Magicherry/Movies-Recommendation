@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DATA_DIR="${STREAMX_DATA_DIR:-/var/data/streamx}"
+DATA_DIR="${STREAMX_DATA_DIR:-/tmp/streamx}"
 SEED_DIR="$PROJECT_ROOT/models/artifacts"
 
 mkdir -p "$DATA_DIR"

@@ -188,12 +188,13 @@ Set frontend env var `NEXT_PUBLIC_API_BASE_URL` to your backend public URL:
 https://<your-backend-service>.onrender.com/api
 ```
 
-### 3) Persistent model/data storage
+### 3) Model/data storage on Render
 
-The backend is configured to use persistent disk via `STREAMX_DATA_DIR` (default: `/var/data/streamx` on Render).
+For the free-tier blueprint, the backend uses `STREAMX_DATA_DIR=/tmp/streamx`.
 
-- On first boot, `backend/start_render.sh` seeds the persistent directory from `models/artifacts/`.
-- Runtime updates (for example `active_model.txt`, `movies_enriched.csv`, and `scrape_state.json`) are then written to the persistent disk.
+- On first boot, `backend/start_render.sh` seeds that directory from `models/artifacts/`.
+- Runtime updates (for example `active_model.txt`, `movies_enriched.csv`, and `scrape_state.json`) are written there while the instance is alive.
+- Note: `/tmp` is ephemeral on free tier, so data may reset after restart/redeploy.
 
 ### 4) Required backend environment variables
 
