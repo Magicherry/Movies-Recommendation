@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import pickle
 from pathlib import Path
 from threading import Lock
@@ -11,7 +12,8 @@ import pandas as pd
 class RecommenderService:
     def __init__(self) -> None:
         self.project_root = Path(__file__).resolve().parents[2]
-        self.artifacts_dir = self.project_root / "models" / "artifacts"
+        data_dir_env = os.environ.get("STREAMX_DATA_DIR", "").strip()
+        self.artifacts_dir = Path(data_dir_env) if data_dir_env else (self.project_root / "models" / "artifacts")
         self._loaded = False
         self._lock = Lock()
         self._movies_loaded_path: Path | None = None

@@ -13,7 +13,7 @@ import os
 
 from api.services import service
 
-SCRAPE_STATE_PATH = Path(__file__).resolve().parents[2] / "models" / "artifacts" / "scrape_state.json"
+SCRAPE_STATE_PATH = service.artifacts_dir / "scrape_state.json"
 
 
 def _default_scrape_summary() -> dict[str, int]:
@@ -111,6 +111,9 @@ def run_scrape_thread(api_key: str, refresh: bool = False):
         env["TMDB_API_KEY"] = api_key
 
     cmd = ["python", str(script_path)]
+    artifacts_dir_env = os.environ.get("STREAMX_DATA_DIR", "").strip()
+    if artifacts_dir_env:
+        cmd.extend(["--artifacts-dir", artifacts_dir_env])
     if refresh:
         cmd.append("--refresh")
 

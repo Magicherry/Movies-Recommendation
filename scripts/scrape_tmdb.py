@@ -299,7 +299,7 @@ def main():
     parser.add_argument(
         "--artifacts-dir",
         type=str,
-        default="models/artifacts",
+        default=os.environ.get("STREAMX_DATA_DIR", "models/artifacts"),
         help="Artifacts root directory.",
     )
     parser.add_argument(

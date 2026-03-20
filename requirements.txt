@@ -3,3 +3,5 @@ numpy>=2.1
 pandas>=2.2
 python-dotenv>=1.0
 tensorflow>=2.10
+gunicorn>=22.0
+requests>=2.32

@@ -169,6 +169,39 @@ NEXT_PUBLIC_API_BASE_URL="http://localhost:8001/api" npm run dev -- -p 3001
 
 **Access the application at:** `http://localhost:3001`
 
+## Deploy on Render
+
+This repository includes a `render.yaml` blueprint for a two-service deployment:
+
+- `streamx-backend` (Django API, Python)
+- `streamx-frontend` (Next.js UI, Node.js)
+
+### 1) Connect the repository
+
+In Render, create a **Blueprint** service and point it to this repository. Render will detect `render.yaml` and propose both services.
+
+### 2) Configure frontend API URL
+
+Set frontend env var `NEXT_PUBLIC_API_BASE_URL` to your backend public URL:
+
+```text
+https://<your-backend-service>.onrender.com/api
+```
+
+### 3) Persistent model/data storage
+
+The backend is configured to use persistent disk via `STREAMX_DATA_DIR` (default: `/var/data/streamx` on Render).
+
+- On first boot, `backend/start_render.sh` seeds the persistent directory from `models/artifacts/`.
+- Runtime updates (for example `active_model.txt`, `movies_enriched.csv`, and `scrape_state.json`) are then written to the persistent disk.
+
+### 4) Required backend environment variables
+
+- `SECRET_KEY` (generated in blueprint by default)
+- `DEBUG=False`
+- `ALLOWED_HOSTS=.onrender.com` (or your custom domain list)
+- `TMDB_API_KEY` (optional, required for TMDB scraping endpoints)
+
 ## Technical Notes
 
 - The data loader supports both `csv` and `dat` MovieLens formats.
