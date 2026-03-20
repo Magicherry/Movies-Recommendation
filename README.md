@@ -83,6 +83,12 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+If you plan to train the Option 2 deep model locally, install training extras:
+
+```bash
+pip install -r requirements-train.txt
+```
+
 ### 2. Train the Model
 
 Train the recommender model using the provided dataset. Place MovieLens data under `dataset/ml-latest-small/` (or pass `--dataset-dir`). Model files and train/test splits are saved under `models/artifacts/<model-type>/` (e.g. `models/artifacts/option1/`); metadata is shared in `models/artifacts/`.
