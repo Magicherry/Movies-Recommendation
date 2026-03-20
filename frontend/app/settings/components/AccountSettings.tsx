@@ -91,7 +91,7 @@ export default function AccountSettings() {
               marginTop: '12px',
               marginBottom: 0,
               fontSize: '0.9rem',
-              color: switchMessage.type === 'success' ? 'var(--brand)' : '#ef4444',
+              color: switchMessage.type === 'success' ? 'var(--brand-default)' : '#ef4444',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',

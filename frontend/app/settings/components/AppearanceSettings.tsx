@@ -429,35 +429,13 @@ export default function AppearanceSettings() {
         </div>
       </div>
 
-      <div className="setting-group setting-group-block setting-group-block-collapsible">
-        <button
-          type="button"
-          className="setting-block-header"
-          onClick={() => setCountsExpanded((e) => !e)}
-          aria-expanded={countsExpanded}
-          aria-controls="display-counts-body"
-        >
-          <span className="setting-block-header-inner">
-            <span className="setting-block-header-title">Display Counts</span>
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="setting-block-chevron"
-              aria-hidden
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </span>
-          {!countsExpanded && !allCountsEqual && (
+      <div className="setting-group setting-group-block">
+        <label className="setting-block-title-with-badge">
+          Display Counts
+          {!allCountsEqual && (
             <span className="setting-block-badge">Custom</span>
           )}
-        </button>
+        </label>
         <p className="setting-desc" id="display-counts-desc">
           How many items to show in each home and detail section. Edit each row below or use Set All to sync.
         </p>
@@ -487,7 +465,21 @@ export default function AppearanceSettings() {
                 : `Rec ${recCount} · Watch again ${watchAgainCount} · Trending ${trendingCount} · More ${moreLikeThisCount}. Expand to edit individually.`}
             </p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "nowrap" }}>
+          <div className="setting-row-expand-controls">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="setting-block-chevron setting-row-expand-chevron"
+              aria-hidden
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
             <input
               type="range"
               min={MIN_COL}

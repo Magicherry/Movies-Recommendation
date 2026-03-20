@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import BackButton from "../../components/back-button";
 import Link from "next/link";
 
 type PersonData = {
@@ -77,8 +76,6 @@ export default function CastPage() {
 
   return (
     <div className="page-transition" style={{ paddingBottom: '60px' }}>
-      <BackButton top="40px" />
-      
       <div className="content-padding" style={{ paddingTop: '100px' }}>
         <h1 style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '40px', color: 'var(--text-main)' }}>
           {data.title}

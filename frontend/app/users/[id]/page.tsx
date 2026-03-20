@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { getUserHistory, getRecommendations, displayMovieName } from "../../../lib/api";
 import MovieCardGrid from "../../../components/movie-card-grid";
-import BackButton from "../../../components/back-button";
 import UserProfileActions from "../../../components/user-profile-actions";
 import ClientRecommendations from "./client-recommendations";
 
@@ -85,7 +84,6 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
 
   return (
     <div className="page-transition" style={{ position: "relative" }}>
-      <BackButton top="30px" />
       <div className="content-padding" style={{ paddingTop: "90px", paddingBottom: "80px" }}>
         <div className="user-profile-glass-card">
           

@@ -1,6 +1,5 @@
 import { getTmdbPerson, getPersonMovies } from "../../../lib/api";
 import CollectionLimitGrid from "../../../components/collection-limit-grid";
-import BackButton from "../../../components/back-button";
 import RefreshOnEngineChange from "../../../components/refresh-on-engine-change";
 import { Metadata } from "next";
 
@@ -37,7 +36,6 @@ export default async function PersonPage({ params, searchParams }: PersonPagePro
   return (
     <div className="page-transition">
       <RefreshOnEngineChange />
-      <BackButton top="110px" />
       
       <div className="hero-banner" style={{ height: 'auto', minHeight: '400px', paddingBottom: '60px', paddingTop: '140px' }}>
         <div 

@@ -231,12 +231,13 @@ def movies(request: HttpRequest) -> JsonResponse:
 
 
 @require_GET
-def movie_detail(_: HttpRequest, item_id: int) -> JsonResponse:
+def movie_detail(request: HttpRequest, item_id: int) -> JsonResponse:
     try:
         movie = service.get_movie(item_id)
         if movie is None:
             return _error(f"Movie {item_id} not found", status=404)
-        similar = service.similar_for_item(item_id=item_id, n=10)
+        n = max(1, min(_int_param(request, "n", 100), 200))
+        similar = service.similar_for_item(item_id=item_id, n=n)
     except FileNotFoundError as exc:
         return _error(str(exc), status=500)
     return JsonResponse({"movie": movie, "similar": similar})

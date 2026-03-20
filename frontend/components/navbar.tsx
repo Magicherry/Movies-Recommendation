@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import NextLink from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "../context/user-context";
 
 function useShowBrandAlgorithm(): boolean {
@@ -22,6 +22,7 @@ export default function AppNavbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { userId, setUserId } = useUser();
   const [inputId, setInputId] = useState(userId.toString());
@@ -131,13 +132,41 @@ export default function AppNavbar() {
     }
   };
 
+  const shouldShowBackButton =
+    /^\/movies\/[^/]+$/.test(pathname) ||
+    /^\/person\/[^/]+$/.test(pathname) ||
+    /^\/users\/[^/]+$/.test(pathname) ||
+    pathname.startsWith("/collection") ||
+    pathname.startsWith("/cast");
+
+  const handleBackClick = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/");
+  };
+
   return (
     <header className={`top-nav ${isScrolled ? "scrolled" : ""}`}>
       <div className="simple-nav">
         <div className="brand-wrap">
-          <NextLink href="/" className="brand-link" onClick={() => setIsMenuOpen(false)}>
+          <div className={`nav-back-btn-wrapper ${shouldShowBackButton ? 'visible' : ''}`}>
+            <button
+              type="button"
+              className="nav-back-btn"
+              onClick={handleBackClick}
+              aria-label="Go back"
+              tabIndex={shouldShowBackButton ? 0 : -1}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
+          </div>
+          <span className="brand-link brand-link-static" aria-label="STREAMX">
             <span style={{ color: 'var(--brand)' }}>STREAM</span>X
-          </NextLink>
+          </span>
           {showBrandAlgorithm && (
             <span className="option-badge" title="Current Recommendation Engine">{activeEngine}</span>
           )}

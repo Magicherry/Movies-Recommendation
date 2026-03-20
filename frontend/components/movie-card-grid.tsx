@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback, memo, useState, useEffect } from "react";
+import { useCallback, memo, useState, useEffect } from "react";
 import NextLink from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import MovieCardContextMenu from "./movie-card-context-menu";
@@ -147,6 +147,15 @@ export default function MovieCardGrid({
   const [fadingItemId, setFadingItemId] = useState<number | null>(null);
   const [imageOverrides, setImageOverrides] = useState<Record<number, { poster_url: string; backdrop_url: string }>>({});
 
+  const openContextMenuAt = useCallback((movie: MovieCardItem, x: number, y: number) => {
+    setContextMenu({ x: Math.round(x), y: Math.round(y), movie });
+  }, []);
+
+  const openContextMenuFromTrigger = useCallback((movie: MovieCardItem, triggerEl: HTMLElement) => {
+    const rect = triggerEl.getBoundingClientRect();
+    openContextMenuAt(movie, rect.right - 6, rect.bottom + 6);
+  }, [openContextMenuAt]);
+
   const withImageOverrides = useCallback((movie: MovieCardItem): MovieCardItem => {
     const override = imageOverrides[movie.item_id];
     return override ? { ...movie, ...override } : movie;
@@ -217,6 +226,51 @@ export default function MovieCardGrid({
     return <p style={{ color: "var(--text-subtle)", padding: "0 4vw" }}>{emptyMessage}</p>;
   }
 
+  const renderCardWrapper = (movie: MovieCardItem) => {
+    const mergedMovie = withImageOverrides(movie);
+    const isMenuOpen = contextMenu?.movie.item_id === movie.item_id;
+    return (
+      <div
+        key={movie.item_id}
+        className={`movie-card-wrapper${isMenuOpen ? " movie-card-wrapper--menu-open" : ""}`}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openContextMenuAt(mergedMovie, e.clientX, e.clientY);
+        }}
+      >
+        <button
+          type="button"
+          className="movie-context-menu-trigger movie-context-menu-trigger--card"
+          aria-label={`Open actions for ${displayMovieName(mergedMovie)}`}
+          title="Movie actions"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (isMenuOpen) {
+              setContextMenu(null);
+              return;
+            }
+            openContextMenuFromTrigger(mergedMovie, e.currentTarget);
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="5" r="1" />
+            <circle cx="12" cy="12" r="1" />
+            <circle cx="12" cy="19" r="1" />
+          </svg>
+        </button>
+        <MovieCard
+          movie={mergedMovie}
+          scoreLabel={scoreLabel}
+          showScore={showCardScores && typeof movie.score === "number"}
+          isRefreshing={refreshingItemId === movie.item_id}
+          isFading={fadingItemId === movie.item_id}
+        />
+      </div>
+    );
+  };
+
   if (rowMode) {
     return (
       <>
@@ -232,29 +286,7 @@ export default function MovieCardGrid({
             ) : undefined
           }
         >
-          {items.map((movie) => {
-            const mergedMovie = withImageOverrides(movie);
-            return (
-              <div
-                key={movie.item_id}
-                className="movie-card-wrapper"
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setContextMenu({ x: e.clientX, y: e.clientY, movie: mergedMovie });
-                }}
-                style={{ position: "relative" }}
-              >
-                <MovieCard
-                  movie={mergedMovie}
-                  scoreLabel={scoreLabel}
-                  showScore={showCardScores && typeof movie.score === "number"}
-                  isRefreshing={refreshingItemId === movie.item_id}
-                  isFading={fadingItemId === movie.item_id}
-                />
-              </div>
-            );
-          })}
+          {items.map((movie) => renderCardWrapper(movie))}
         </ScrollableRow>
         {contextMenu && (
           <MovieCardContextMenu
@@ -288,28 +320,7 @@ export default function MovieCardGrid({
   return (
     <>
     <div className="card-grid">
-      {items.map((movie) => {
-        const mergedMovie = withImageOverrides(movie);
-        return (
-        <div
-          key={movie.item_id}
-          className="movie-card-wrapper"
-          onContextMenu={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setContextMenu({ x: e.clientX, y: e.clientY, movie: mergedMovie });
-          }}
-          style={{ position: "relative" }}
-        >
-          <MovieCard
-            movie={mergedMovie}
-            scoreLabel={scoreLabel}
-            showScore={showCardScores && typeof movie.score === "number"}
-            isRefreshing={refreshingItemId === movie.item_id}
-            isFading={fadingItemId === movie.item_id}
-          />
-        </div>
-      )})}
+      {items.map((movie) => renderCardWrapper(movie))}
     </div>
       {contextMenu && (
         <MovieCardContextMenu

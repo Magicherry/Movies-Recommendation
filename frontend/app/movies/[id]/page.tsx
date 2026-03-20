@@ -1,6 +1,5 @@
 import { getMovieDetail, displayMovieName } from "../../../lib/api";
 import CollectionLimitGrid from "../../../components/collection-limit-grid";
-import BackButton from "../../../components/back-button";
 import PredictionDisplay from "../../../components/prediction-display";
 import RefreshOnEngineChange from "../../../components/refresh-on-engine-change";
 import MovieDetailActions from "../../../components/movie-detail-actions";
@@ -21,7 +20,7 @@ function getGradient(id: number) {
 
 export default async function MovieDetailPage({ params }: MovieDetailPageProps) {
   const itemId = Number(params.id);
-  const data = await getMovieDetail(itemId);
+  const data = await getMovieDetail(itemId, 100);
 
   const cast = data.movie.cast || [];
   const directors = data.movie.directors || [];
@@ -29,7 +28,6 @@ export default async function MovieDetailPage({ params }: MovieDetailPageProps) 
   return (
     <div className="page-transition">
       <RefreshOnEngineChange />
-      <BackButton top="110px" />
       <MovieDetailActions movie={data.movie} />
       <div className="hero-banner">
         <div

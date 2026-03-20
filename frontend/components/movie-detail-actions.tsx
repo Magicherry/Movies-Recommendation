@@ -71,9 +71,9 @@ export default function MovieDetailActions({ movie }: MovieDetailActionsProps) {
           <div style={{ width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
         ) : (
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: 'none' }}>
+            <circle cx="12" cy="5" r="1" />
             <circle cx="12" cy="12" r="1" />
-            <circle cx="19" cy="12" r="1" />
-            <circle cx="5" cy="12" r="1" />
+            <circle cx="12" cy="19" r="1" />
           </svg>
         )}
       </button>

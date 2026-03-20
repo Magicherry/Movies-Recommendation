@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MovieCardGrid, { MovieCardItem } from "./movie-card-grid";
 
 const DEFAULT_COUNT = 15;
@@ -32,7 +32,18 @@ type CollectionLimitGridProps = {
 /** Renders a movie grid with items limited by the user's setting for this collection. */
 export default function CollectionLimitGrid(props: CollectionLimitGridProps) {
   const { settingKey, ...gridProps } = props;
-  const limit = useMemo(() => getLimit(settingKey), [settingKey]);
+  const [limit, setLimit] = useState<number>(() => getLimit(settingKey));
+
+  useEffect(() => {
+    setLimit(getLimit(settingKey));
+  }, [settingKey]);
+
+  useEffect(() => {
+    const handler = () => setLimit(getLimit(settingKey));
+    window.addEventListener("streamx-settings-changed", handler);
+    return () => window.removeEventListener("streamx-settings-changed", handler);
+  }, [settingKey]);
+
   const sliced = useMemo(() => props.items.slice(0, limit), [props.items, limit]);
   return (
     <MovieCardGrid

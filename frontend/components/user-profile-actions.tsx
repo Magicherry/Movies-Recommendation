@@ -9,13 +9,13 @@ export default function UserProfileActions({ profileUserId }: { profileUserId: n
   if (isCurrentUser) {
     return (
       <div style={{
-        background: "rgba(106, 225, 0, 0.1)",
-        color: "var(--brand)",
+        background: "var(--brand-default-soft)",
+        color: "var(--brand-default)",
         padding: "8px 16px",
         borderRadius: "99px",
         fontSize: "0.9rem",
         fontWeight: 600,
-        border: "1px solid rgba(106, 225, 0, 0.2)",
+        border: "1px solid var(--brand-default-border)",
         display: "flex",
         alignItems: "center",
         gap: "6px"

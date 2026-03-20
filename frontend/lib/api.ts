@@ -99,8 +99,9 @@ export async function getMovies(
   return { items, total: data.total ?? 0 };
 }
 
-export async function getMovieDetail(itemId: number): Promise<{ movie: Movie; similar: Recommendation[] }> {
-  const res = await devFetch(`${API_BASE}/movie/${itemId}`, { cache: "no-store" }, `/movie/${itemId}`);
+export async function getMovieDetail(itemId: number, similarLimit: number = 100): Promise<{ movie: Movie; similar: Recommendation[] }> {
+  const safeLimit = Number.isFinite(similarLimit) ? Math.max(1, Math.min(200, Math.floor(similarLimit))) : 100;
+  const res = await devFetch(`${API_BASE}/movie/${itemId}?n=${safeLimit}`, { cache: "no-store" }, `/movie/${itemId}`, { n: safeLimit });
   if (!res.ok) throw new Error("Failed to fetch movie detail.");
   const data = await res.json();
   if (data.movie) {
