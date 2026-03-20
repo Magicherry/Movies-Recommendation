@@ -132,7 +132,12 @@ export default async function MoviesPage({
               Prev
             </Link>
 
-            <form action="/movies" method="GET" style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}>
+            <form
+              key={page}
+              action="/movies"
+              method="GET"
+              style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}
+            >
               {q && <input type="hidden" name="q" value={q} />}
               {genre && <input type="hidden" name="genre" value={genre} />}
               {year && <input type="hidden" name="year" value={year} />}
@@ -165,7 +170,7 @@ export default async function MoviesPage({
       </div>
 
       <div>
-        <MovieCardGrid items={data.items} />
+        <MovieCardGrid key={page} items={data.items} />
       </div>
 
       {totalPages > 1 && (
@@ -181,7 +186,12 @@ export default async function MoviesPage({
             Prev
           </Link>
 
-          <form action="/movies" method="GET" style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}>
+          <form
+            key={page}
+            action="/movies"
+            method="GET"
+            style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}
+          >
             {q && <input type="hidden" name="q" value={q} />}
             {genre && <input type="hidden" name="genre" value={genre} />}
             {year && <input type="hidden" name="year" value={year} />}

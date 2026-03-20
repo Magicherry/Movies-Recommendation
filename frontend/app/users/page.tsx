@@ -42,7 +42,12 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
               </button>
             )}
             
-            <form action="/users" method="GET" style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}>
+            <form
+              key={currentPage}
+              action="/users"
+              method="GET"
+              style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}
+            >
               <span className="page-indicator">Page</span>
               <input 
                 type="number" 
@@ -110,7 +115,12 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
             </button>
           )}
           
-          <form action="/users" method="GET" style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}>
+          <form
+            key={currentPage}
+            action="/users"
+            method="GET"
+            style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}
+          >
             <span className="page-indicator">Page</span>
             <input 
               type="number" 
