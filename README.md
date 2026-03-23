@@ -16,7 +16,9 @@
 ## Features
 
 - **Robust Recommendation Engine**
-  - Custom Matrix Factorization model trained with Stochastic Gradient Descent (SGD).
+  - **Matrix Factorization**: Custom implementations trained with Stochastic Gradient Descent (SGD) and Alternating Least Squares (ALS).
+  - **Deep Neural CF**: Hybrid deep learning model with Text CNN for title feature extraction.
+  - **Matrix SVD**: Closed-form SVD latent factors calibrated with Ridge/Lasso regression.
 - **Automated Data Processing**
   - Per-user random 80/20 data split for reliable training and testing.
 - **Comprehensive Evaluation Metrics**
@@ -50,7 +52,7 @@
 dataset/          # Raw MovieLens data (e.g. ml-latest-small/, ml-latest/)
 backend/          # Django REST API
 frontend/         # Next.js web application
-models/           # ML model code and generated artifacts (option1, option2, splits)
+models/           # ML model code and generated artifacts (option1, option2, option3, option4, splits)
 scripts/          # Training, evaluation, enrichment, and report generation
 analysis/         # Final report (final_report.md), figures, and JSON/CSV artifacts
 ```
@@ -114,6 +116,16 @@ Train the improved Option 2 hybrid deep model (title + genre features):
 python -m scripts.train_and_evaluate --model-type option2 --dataset-dir dataset/ml-latest-small --n-factors 64 --epochs 30 --option2-lr 0.001 --batch-size 256
 ```
 
+Train the Matrix SVD with Ridge or Lasso Regression (Option 3):
+```bash
+python -m scripts.train_and_evaluate --model-type option3_ridge --n-factors 48 --option3-reg-alpha 0.1
+```
+
+Train the Matrix Factorization ALS model (Option 4):
+```bash
+python -m scripts.train_and_evaluate --model-type option4 --epochs 15 --n-factors 48 --reg 0.05 --option4-bias-reg 5.0
+```
+
 Useful Option 2 controls:
 - `--option2-dropout-rate`
 - `--option2-l2-reg`
@@ -121,7 +133,7 @@ Useful Option 2 controls:
 - `--option2-lr-plateau-patience`
 - `--option2-rating-weight-power`
 
-The script caches a shared train/test split in `models/artifacts/splits/` so Option 1 and Option 2 are evaluated on the same holdout split. Use `--force-resplit` to regenerate.
+The script caches a shared train/test split in `models/artifacts/splits/` so all models are evaluated on the same holdout split. Use `--force-resplit` to regenerate.
 
 ### 3. Fetch Movie Information (Optional but Recommended)
 
@@ -236,7 +248,7 @@ This generates:
 
 The report covers:
 - Data distribution and sparsity
-- Option 1 vs Option 2 performance comparison
+- Model performance comparison across variants
 - Training-curve analysis
 - Feature influence with bootstrap confidence intervals
 - Signal-vs-noise ablation checks

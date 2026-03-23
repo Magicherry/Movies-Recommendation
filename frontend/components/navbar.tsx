@@ -46,9 +46,17 @@ export default function AppNavbar() {
           const data = await res.json();
           if (disposed || seq !== engineFetchSeqRef.current) return;
           if (data.active_model === 'option1') {
-            setActiveEngine('MF');
+            setActiveEngine('MF-SGD');
           } else if (data.active_model === 'option2') {
             setActiveEngine('NCF');
+          } else if (data.active_model === 'option3_ridge') {
+            setActiveEngine('SVD-Ridge');
+          } else if (data.active_model === 'option3_lasso') {
+            setActiveEngine('SVD-Lasso');
+          } else if (data.active_model === 'option3') {
+            setActiveEngine('SVD');
+          } else if (data.active_model === 'option4') {
+            setActiveEngine('MF-ALS');
           } else {
             setActiveEngine(data.active_model);
           }

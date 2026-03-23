@@ -6,6 +6,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List
 
+import numpy as np
 import pandas as pd
 
 
@@ -344,6 +345,10 @@ class RecommenderService:
 
             model_option1_path = self.artifacts_dir / "option1" / "model.pkl"
             model_option2_path = self.artifacts_dir / "option2" / "model.pkl"
+            model_option3_path = self.artifacts_dir / "option3" / "model.pkl"
+            model_option3_ridge_path = self.artifacts_dir / "option3_ridge" / "model.pkl"
+            model_option3_lasso_path = self.artifacts_dir / "option3_lasso" / "model.pkl"
+            model_option4_path = self.artifacts_dir / "option4" / "model.pkl"
 
             if model_option1_path.exists():
                 with open(model_option1_path, "rb") as f:
@@ -352,11 +357,31 @@ class RecommenderService:
             if model_option2_path.exists():
                 with open(model_option2_path, "rb") as f:
                     self.models["option2"] = pickle.load(f)
+
+            if model_option3_path.exists():
+                with open(model_option3_path, "rb") as f:
+                    self.models["option3"] = pickle.load(f)
+
+            if model_option3_ridge_path.exists():
+                with open(model_option3_ridge_path, "rb") as f:
+                    self.models["option3_ridge"] = pickle.load(f)
+
+            if model_option3_lasso_path.exists():
+                with open(model_option3_lasso_path, "rb") as f:
+                    self.models["option3_lasso"] = pickle.load(f)
+
+            if model_option4_path.exists():
+                with open(model_option4_path, "rb") as f:
+                    self.models["option4"] = pickle.load(f)
             
             # Fallback to old model.pkl if specific ones don't exist
             old_model_path = self.artifacts_dir / "model.pkl"
             old_model_option1_path = self.artifacts_dir / "model_option1.pkl"
             old_model_option2_path = self.artifacts_dir / "model_option2.pkl"
+            old_model_option3_path = self.artifacts_dir / "model_option3.pkl"
+            old_model_option3_ridge_path = self.artifacts_dir / "model_option3_ridge.pkl"
+            old_model_option3_lasso_path = self.artifacts_dir / "model_option3_lasso.pkl"
+            old_model_option4_path = self.artifacts_dir / "model_option4.pkl"
             
             if "option1" not in self.models and old_model_option1_path.exists():
                 with open(old_model_option1_path, "rb") as f:
@@ -365,6 +390,22 @@ class RecommenderService:
             if "option2" not in self.models and old_model_option2_path.exists():
                 with open(old_model_option2_path, "rb") as f:
                     self.models["option2"] = pickle.load(f)
+
+            if "option3" not in self.models and old_model_option3_path.exists():
+                with open(old_model_option3_path, "rb") as f:
+                    self.models["option3"] = pickle.load(f)
+
+            if "option3_ridge" not in self.models and old_model_option3_ridge_path.exists():
+                with open(old_model_option3_ridge_path, "rb") as f:
+                    self.models["option3_ridge"] = pickle.load(f)
+
+            if "option3_lasso" not in self.models and old_model_option3_lasso_path.exists():
+                with open(old_model_option3_lasso_path, "rb") as f:
+                    self.models["option3_lasso"] = pickle.load(f)
+
+            if "option4" not in self.models and old_model_option4_path.exists():
+                with open(old_model_option4_path, "rb") as f:
+                    self.models["option4"] = pickle.load(f)
                     
             if not self.models and old_model_path.exists():
                 with open(old_model_path, "rb") as f:
@@ -726,12 +767,115 @@ class RecommenderService:
             "top_rated_movies": top_rated_movies
         }
 
+    @staticmethod
+    def _build_histogram(values: np.ndarray, bins: int = 10) -> List[Dict[str, Any]]:
+        if values.size == 0:
+            return []
+        finite_values = values[np.isfinite(values)]
+        if finite_values.size == 0:
+            return []
+
+        min_v = float(np.min(finite_values))
+        max_v = float(np.max(finite_values))
+        if min_v == max_v:
+            return [{"bin": f"{min_v:.3f}-{max_v:.3f}", "count": int(finite_values.size)}]
+
+        edges = np.linspace(min_v, max_v, num=max(2, int(bins)) + 1)
+        counts, _ = np.histogram(finite_values, bins=edges)
+        rows: List[Dict[str, Any]] = []
+        for i, count in enumerate(counts):
+            left = float(edges[i])
+            right = float(edges[i + 1])
+            rows.append({"bin": f"{left:.3f}-{right:.3f}", "count": int(count)})
+        return rows
+
+    def _build_option3_diagnostics(self) -> Dict[str, Any] | None:
+        if not self.active_model_name.startswith("option3"):
+            return None
+        model = self.models.get(self.active_model_name)
+        if model is None:
+            return None
+
+        user_factors = getattr(model, "user_factors", None)
+        item_factors = getattr(model, "item_factors", None)
+        if not isinstance(user_factors, np.ndarray) or not isinstance(item_factors, np.ndarray):
+            return None
+        if user_factors.ndim != 2 or item_factors.ndim != 2:
+            return None
+
+        rank = int(min(user_factors.shape[1], item_factors.shape[1]))
+        if rank <= 0:
+            return {
+                "svd_components": [],
+                "user_latent_norm_hist": [],
+                "item_latent_norm_hist": [],
+                "top_calibration_weights": [],
+            }
+
+        user_mat = user_factors[:, :rank].astype(np.float64, copy=False)
+        item_mat = item_factors[:, :rank].astype(np.float64, copy=False)
+
+        # For Option3 factors U*sqrt(S), V*sqrt(S), component magnitude is ||u_k|| * ||v_k|| ~= sigma_k.
+        singular_values = np.linalg.norm(user_mat, axis=0) * np.linalg.norm(item_mat, axis=0)
+        singular_values = np.maximum(singular_values, 0.0)
+        energy = np.square(singular_values)
+        total_energy = float(np.sum(energy))
+        energy_ratio = (
+            energy / total_energy
+            if total_energy > 0
+            else np.zeros_like(energy, dtype=np.float64)
+        )
+        cumulative_energy = np.cumsum(energy_ratio)
+
+        top_components = min(12, rank)
+        svd_components = [
+            {
+                "component": int(i + 1),
+                "singular_value": float(singular_values[i]),
+                "energy_ratio": float(energy_ratio[i]),
+                "cumulative_energy": float(cumulative_energy[i]),
+            }
+            for i in range(top_components)
+        ]
+
+        user_norms = np.linalg.norm(user_mat, axis=1)
+        item_norms = np.linalg.norm(item_mat, axis=1)
+        user_hist = self._build_histogram(user_norms, bins=10)
+        item_hist = self._build_histogram(item_norms, bins=10)
+
+        top_weights: List[Dict[str, Any]] = []
+        regression_coef = getattr(model, "regression_coef", None)
+        if isinstance(regression_coef, np.ndarray) and regression_coef.ndim == 1 and regression_coef.size > 0:
+            coef = regression_coef.astype(np.float64, copy=False)
+            labels = [f"latent_{i + 1}" for i in range(rank)]
+            if coef.size > rank:
+                labels.extend([f"feature_{i + 1}" for i in range(coef.size - rank)])
+            labels = labels[:coef.size]
+
+            sorted_idx = np.argsort(-np.abs(coef))
+            for idx in sorted_idx[: min(10, coef.size)]:
+                top_weights.append(
+                    {
+                        "feature": labels[int(idx)],
+                        "weight": float(coef[int(idx)]),
+                        "abs_weight": float(abs(coef[int(idx)])),
+                    }
+                )
+
+        return {
+            "svd_components": svd_components,
+            "user_latent_norm_hist": user_hist,
+            "item_latent_norm_hist": item_hist,
+            "top_calibration_weights": top_weights,
+        }
+
     def get_model_config(self) -> Dict[str, Any]:
         self._ensure_active_model_fresh()
         
         # Try to load metrics and history for the active model
         active_metrics = None
         active_history = None
+        diagnostics = None
         
         try:
             metrics_path = self.artifacts_dir / self.active_model_name / "metrics.json"
@@ -745,6 +889,7 @@ class RecommenderService:
                 import json
                 with open(history_path, "r", encoding="utf-8") as f:
                     active_history = json.load(f)
+            diagnostics = self._build_option3_diagnostics()
         except Exception:
             pass
 
@@ -752,7 +897,8 @@ class RecommenderService:
             "active_model": self.active_model_name,
             "available_models": list(self.models.keys()),
             "metrics": active_metrics,
-            "history": active_history
+            "history": active_history,
+            "diagnostics": diagnostics,
         }
     
     def set_active_model(self, model_name: str) -> bool:

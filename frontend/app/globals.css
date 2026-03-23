@@ -2566,6 +2566,18 @@ body {
   background: rgba(255, 255, 255, 0.02);
 }
 
+.variant-button {
+  transition: all 0.2s ease !important;
+}
+
+.variant-button:hover:not(:disabled) {
+  background: rgba(99,102,241,0.2) !important;
+  border-color: var(--brand) !important;
+  color: var(--text-main) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(99,102,241,0.15);
+}
+
 .model-option.active {
   border-color: var(--brand);
   background: rgba(255, 255, 255, 0.05);

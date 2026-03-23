@@ -170,6 +170,7 @@ export default function SettingsPage() {
                     <ul className="about-list">
                       <li><strong className="about-label">Option 1:</strong> Matrix Factorization trained with Stochastic Gradient Descent (SGD).</li>
                       <li><strong className="about-label">Option 2:</strong> Deep Neural Collaborative Filtering with Text CNN for movie titles and genre embeddings.</li>
+                      <li><strong className="about-label">Option 3:</strong> Matrix SVD with optional Ridge/Lasso calibration on latent interaction features.</li>
                     </ul>
                   </div>
                   <div className="about-section">

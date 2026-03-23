@@ -37,6 +37,14 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
             setActiveEngine('Matrix Factorization');
           } else if (modelData.active_model === 'option2') {
             setActiveEngine('Deep Neural CF');
+          } else if (modelData.active_model === 'option3_ridge') {
+            setActiveEngine('Matrix SVD + Ridge');
+          } else if (modelData.active_model === 'option3_lasso') {
+            setActiveEngine('Matrix SVD + Lasso');
+          } else if (modelData.active_model === 'option3') {
+            setActiveEngine('Matrix SVD + Regression');
+          } else if (modelData.active_model === 'option4') {
+            setActiveEngine('ALS Matrix Factorization');
           } else {
             setActiveEngine(modelData.active_model);
           }

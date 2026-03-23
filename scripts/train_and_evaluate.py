@@ -11,6 +11,8 @@ import pandas as pd
 
 from models.option1_recommender import Option1MatrixFactorizationSGD
 from models.option2_recommender import Option2DeepRecommender
+from models.option3_recommender import Option3SVDHybridRecommender
+from models.option4_recommender import Option4ALSRecommender
 from scripts.data_pipeline import DataSplit, load_movielens, split_train_test_by_user
 from scripts.evaluation import evaluate_rating_prediction, evaluate_top_n
 
@@ -21,8 +23,11 @@ def parse_args() -> argparse.Namespace:
         "--model-type",
         type=str,
         default="option1",
-        choices=["option1", "option2"],
-        help="Which model to train: option1 (MF SGD) or option2 (Deep NCF).",
+        choices=["option1", "option2", "option3", "option3_ridge", "option3_lasso", "option4"],
+        help=(
+            "Which model to train: option1 (MF SGD), option2 (Deep NCF), option3 (generic SVD+Ridge/Lasso), "
+            "option3_ridge (fixed Ridge), option3_lasso (fixed Lasso), or option4 (ALS)."
+        ),
     )
     parser.add_argument(
         "--dataset-dir",
@@ -50,7 +55,7 @@ def parse_args() -> argparse.Namespace:
         "--n-factors",
         type=int,
         default=48,
-        help="Latent size (option1 factors / option2 embedding dimension).",
+        help="Latent size (option1 factors / option2 embedding dimension / option4 factors).",
     )
     parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs.")
     parser.add_argument("--lr", type=float, default=0.01, help="Initial learning rate for SGD.")
@@ -153,6 +158,43 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=8,
         help="Genre embedding dimension for option2.",
+    )
+    parser.add_argument(
+        "--option3-regressor",
+        type=str,
+        default="ridge",
+        choices=["svd", "ridge", "lasso"],
+        help="Regression head for option3 over SVD latent features.",
+    )
+    parser.add_argument(
+        "--option3-reg-alpha",
+        type=float,
+        default=0.1,
+        help="Regularization strength used by option3 Ridge/Lasso.",
+    )
+    parser.add_argument(
+        "--option3-lasso-max-iter",
+        type=int,
+        default=200,
+        help="Maximum coordinate-descent iterations for option3 Lasso.",
+    )
+    parser.add_argument(
+        "--option3-lasso-tol",
+        type=float,
+        default=1e-4,
+        help="Convergence tolerance for option3 Lasso.",
+    )
+    parser.add_argument(
+        "--option3-bias-reg",
+        type=float,
+        default=10.0,
+        help="Shrinkage used when estimating option3 user/item biases.",
+    )
+    parser.add_argument(
+        "--option4-bias-reg",
+        type=float,
+        default=5.0,
+        help="Ridge penalty for the bias term in option4 ALS updates.",
     )
     parser.add_argument(
         "--artifacts-dir",
@@ -259,7 +301,14 @@ def main() -> None:
     artifacts_dir = Path(args.artifacts_dir)
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-    model_artifacts_dir = artifacts_dir / args.model_type
+    effective_model_type = str(args.model_type)
+    effective_option3_regressor = str(args.option3_regressor)
+    if effective_model_type == "option3_ridge":
+        effective_option3_regressor = "ridge"
+    elif effective_model_type == "option3_lasso":
+        effective_option3_regressor = "lasso"
+
+    model_artifacts_dir = artifacts_dir / effective_model_type
     model_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     ratings, movies = load_movielens(dataset_dir)
@@ -272,7 +321,7 @@ def main() -> None:
         force_resplit=args.force_resplit,
     )
 
-    if args.model_type == "option1":
+    if effective_model_type == "option1":
         model = Option1MatrixFactorizationSGD(
             n_factors=args.n_factors,
             epochs=args.epochs,
@@ -283,7 +332,7 @@ def main() -> None:
             early_stopping_patience=args.option1_early_stopping_patience,
             seed=args.seed,
         )
-    else:
+    elif effective_model_type == "option2":
         model = Option2DeepRecommender(
             embedding_dim=args.n_factors,
             epochs=args.epochs,
@@ -305,8 +354,26 @@ def main() -> None:
             rating_weight_power=args.option2_rating_weight_power,
             popularity_prior_count=args.option2_popularity_prior_count,
         )
+    elif effective_model_type == "option4":
+        model = Option4ALSRecommender(
+            n_factors=args.n_factors,
+            epochs=args.epochs,
+            reg=args.reg,
+            bias_reg=args.option4_bias_reg,
+            seed=args.seed,
+        )
+    else:
+        model = Option3SVDHybridRecommender(
+            n_factors=args.n_factors,
+            regressor=effective_option3_regressor,
+            reg_alpha=args.option3_reg_alpha,
+            lasso_max_iter=args.option3_lasso_max_iter,
+            lasso_tol=args.option3_lasso_tol,
+            bias_reg=args.option3_bias_reg,
+            seed=args.seed,
+        )
 
-    if args.model_type == "option2":
+    if effective_model_type == "option2":
         model.fit(split.train, movies=movies)
     else:
         model.fit(split.train)
@@ -321,7 +388,7 @@ def main() -> None:
         use_all_test_items=args.topn_relevance == "all_test",
     )
 
-    if args.model_type == "option1":
+    if effective_model_type == "option1":
         model_hparams = {
             "n_factors": int(args.n_factors),
             "epochs": int(args.epochs),
@@ -331,7 +398,7 @@ def main() -> None:
             "validation_split": float(args.option1_validation_split),
             "early_stopping_patience": int(args.option1_early_stopping_patience),
         }
-    else:
+    elif effective_model_type == "option2":
         model_hparams = {
             "embedding_dim": int(args.n_factors),
             "epochs": int(args.epochs),
@@ -352,6 +419,22 @@ def main() -> None:
             "rating_weight_power": float(args.option2_rating_weight_power),
             "popularity_prior_count": float(args.option2_popularity_prior_count),
         }
+    elif effective_model_type == "option4":
+        model_hparams = {
+            "n_factors": int(args.n_factors),
+            "epochs": int(args.epochs),
+            "reg": float(args.reg),
+            "bias_reg": float(args.option4_bias_reg),
+        }
+    else:
+        model_hparams = {
+            "n_factors": int(args.n_factors),
+            "regressor": str(effective_option3_regressor),
+            "reg_alpha": float(args.option3_reg_alpha),
+            "lasso_max_iter": int(args.option3_lasso_max_iter),
+            "lasso_tol": float(args.option3_lasso_tol),
+            "bias_reg": float(args.option3_bias_reg),
+        }
 
     metrics = {
         "dataset_dir": str(dataset_dir),
@@ -363,7 +446,7 @@ def main() -> None:
         "test_size": int(len(split.test)),
         "users_train": int(split.train["user_id"].nunique()),
         "items_train": int(split.train["item_id"].nunique()),
-        "model": args.model_type,
+        "model": effective_model_type,
         "top_k": int(args.top_k),
         "topn_relevance": args.topn_relevance,
         "min_relevant_rating": float(args.min_relevant_rating),
