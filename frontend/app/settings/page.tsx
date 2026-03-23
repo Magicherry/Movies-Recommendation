@@ -136,8 +136,11 @@ export default function SettingsPage() {
           {activeTab === "advanced" && <AdvancedSettings />}
           {activeTab === "about" && (
             <section className="settings-card about-card">
-              <h2 className="about-title">
-                About <span className="about-brand">Stream</span><span className="about-brand-alt">X</span>
+              <h2 className="about-title" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "24px" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <img src="/icon.png" alt="StreamX Logo" style={{ width: "32px", height: "32px", borderRadius: "6px" }} />
+                  <span><span className="about-brand">Stream</span><span className="about-brand-alt">X</span></span>
+                </span>
               </h2>
               <div className="about-content">
                 <p className="about-intro">
@@ -168,9 +171,9 @@ export default function SettingsPage() {
                   <div className="about-section">
                     <h3 className="about-section-title">Recommendation Engines</h3>
                     <ul className="about-list">
-                      <li><strong className="about-label">Option 1:</strong> Matrix Factorization trained with Stochastic Gradient Descent (SGD).</li>
-                      <li><strong className="about-label">Option 2:</strong> Deep Neural Collaborative Filtering with Text CNN for movie titles and genre embeddings.</li>
-                      <li><strong className="about-label">Option 3:</strong> Matrix SVD with optional Ridge/Lasso calibration on latent interaction features.</li>
+                      <li><strong className="about-label">Matrix Factorization:</strong> Custom implementations trained with Stochastic Gradient Descent (SGD) and Alternating Least Squares (ALS).</li>
+                      <li><strong className="about-label">Deep Neural CF:</strong> Hybrid deep learning model with Text CNN for title feature extraction.</li>
+                      <li><strong className="about-label">Matrix SVD:</strong> Closed-form SVD latent factors calibrated with Ridge/Lasso regression.</li>
                     </ul>
                   </div>
                   <div className="about-section">
