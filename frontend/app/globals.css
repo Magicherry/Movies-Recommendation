@@ -2558,7 +2558,7 @@ body {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-panel);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+  transition: box-shadow 0.2s cubic-bezier(0.25, 1, 0.5, 1), transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
   box-shadow: var(--shadow-card);
 }
 
@@ -2567,7 +2567,7 @@ body {
 }
 
 .variant-button {
-  transition: all 0.2s ease !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
 }
 
 .variant-button:hover:not(:disabled) {

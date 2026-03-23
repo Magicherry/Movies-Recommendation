@@ -22,6 +22,15 @@ export default function SettingsPage() {
     if (t && VALID_TABS.includes(t)) {
       setActiveTab(t);
       setIsDetailView(true);
+      localStorage.setItem("streamx-settings-last-tab", t);
+    } else if (!t) {
+      const savedTab = localStorage.getItem("streamx-settings-last-tab");
+      if (savedTab && VALID_TABS.includes(savedTab)) {
+        setActiveTab(savedTab);
+        const url = new URL(window.location.href);
+        url.searchParams.set("tab", savedTab);
+        window.history.replaceState({}, "", url.pathname + "?" + url.searchParams.toString());
+      }
     }
   }, [searchParams]);
 
@@ -33,6 +42,7 @@ export default function SettingsPage() {
   const handleTabClick = (tab: string) => {
     setActiveTab(tab);
     setIsDetailView(true);
+    localStorage.setItem("streamx-settings-last-tab", tab);
     const url = new URL(window.location.href);
     url.searchParams.set("tab", tab);
     window.history.replaceState({}, "", url.pathname + "?" + url.searchParams.toString());
