@@ -197,6 +197,18 @@ def parse_args() -> argparse.Namespace:
         help="Ridge penalty for the bias term in option4 ALS updates.",
     )
     parser.add_argument(
+        "--option4-validation-split",
+        type=float,
+        default=0.1,
+        help="Validation split ratio for option4 ALS.",
+    )
+    parser.add_argument(
+        "--option4-early-stopping-patience",
+        type=int,
+        default=5,
+        help="Early stopping patience for option4 ALS (0 disables).",
+    )
+    parser.add_argument(
         "--artifacts-dir",
         type=str,
         default="models/artifacts",
@@ -360,6 +372,8 @@ def main() -> None:
             epochs=args.epochs,
             reg=args.reg,
             bias_reg=args.option4_bias_reg,
+            validation_split=args.option4_validation_split,
+            early_stopping_patience=args.option4_early_stopping_patience,
             seed=args.seed,
         )
     else:
@@ -425,6 +439,8 @@ def main() -> None:
             "epochs": int(args.epochs),
             "reg": float(args.reg),
             "bias_reg": float(args.option4_bias_reg),
+            "validation_split": float(args.option4_validation_split),
+            "early_stopping_patience": int(args.option4_early_stopping_patience),
         }
     else:
         model_hparams = {

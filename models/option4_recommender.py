@@ -24,6 +24,8 @@ class Option4ALSRecommender:
         epochs: int = 20,
         reg: float = 0.1,
         bias_reg: float = 5.0,
+        validation_split: float = 0.1,
+        early_stopping_patience: int = 5,
         seed: int = 42,
         min_rating: float = 0.5,
         max_rating: float = 5.0,
@@ -32,6 +34,8 @@ class Option4ALSRecommender:
         self.epochs = max(1, int(epochs))
         self.reg = max(float(reg), 1e-8)
         self.bias_reg = max(float(bias_reg), 1e-8)
+        self.validation_split = float(validation_split)
+        self.early_stopping_patience = int(early_stopping_patience)
         self.seed = int(seed)
         self.min_rating = float(min_rating)
         self.max_rating = float(max_rating)
@@ -94,9 +98,9 @@ class Option4ALSRecommender:
             self.training_history = {"train_mae": [0.0], "train_rmse": [0.0]}
             return self
 
-        user_idx = train_ratings["user_id"].astype(int).map(self.user_to_idx).to_numpy(dtype=np.int32)
-        item_idx = train_ratings["item_id"].astype(int).map(self.item_to_idx).to_numpy(dtype=np.int32)
-        ratings = train_ratings["rating"].astype(float).to_numpy(dtype=np.float32)
+        all_user_idx = train_ratings["user_id"].astype(int).map(self.user_to_idx).to_numpy(dtype=np.int32)
+        all_item_idx = train_ratings["item_id"].astype(int).map(self.item_to_idx).to_numpy(dtype=np.int32)
+        all_ratings = train_ratings["rating"].astype(float).to_numpy(dtype=np.float32)
 
         self.user_seen_items = {}
         for row in train_ratings.itertuples(index=False):
@@ -106,7 +110,7 @@ class Option4ALSRecommender:
 
         item_sum = np.zeros(n_items, dtype=np.float32)
         item_cnt = np.zeros(n_items, dtype=np.float32)
-        for i_idx, rating in zip(item_idx, ratings):
+        for i_idx, rating in zip(all_item_idx, all_ratings):
             item_sum[i_idx] += rating
             item_cnt[i_idx] += 1.0
         self.item_popularity_score = np.divide(
@@ -115,24 +119,46 @@ class Option4ALSRecommender:
             out=np.full_like(item_sum, self.global_mean, dtype=np.float32),
         )
 
+        rng = np.random.default_rng(self.seed)
+        indices = np.arange(len(all_ratings), dtype=np.int32)
+        rng.shuffle(indices)
+
+        val_size = 0
+        if self.validation_split > 0 and len(indices) >= 20:
+            val_size = int(round(len(indices) * self.validation_split))
+            val_size = min(max(val_size, 1), len(indices) - 1)
+
+        val_indices = indices[:val_size]
+        train_indices = indices[val_size:] if val_size > 0 else indices
+        if val_size > 0:
+            self.training_history["val_mae"] = []
+            self.training_history["val_rmse"] = []
+
+        user_idx = all_user_idx[train_indices]
+        item_idx = all_item_idx[train_indices]
+        ratings = all_ratings[train_indices]
+
         user_item_indices: List[List[int]] = [[] for _ in range(n_users)]
         user_item_ratings: List[List[float]] = [[] for _ in range(n_users)]
         item_user_indices: List[List[int]] = [[] for _ in range(n_items)]
         item_user_ratings: List[List[float]] = [[] for _ in range(n_items)]
-        for u_idx, i_idx, rating in zip(user_idx, item_idx, ratings):
-            user_item_indices[int(u_idx)].append(int(i_idx))
-            user_item_ratings[int(u_idx)].append(float(rating))
-            item_user_indices[int(i_idx)].append(int(u_idx))
-            item_user_ratings[int(i_idx)].append(float(rating))
+        for u_idx_val, i_idx_val, rating in zip(user_idx, item_idx, ratings):
+            user_item_indices[int(u_idx_val)].append(int(i_idx_val))
+            user_item_ratings[int(u_idx_val)].append(float(rating))
+            item_user_indices[int(i_idx_val)].append(int(u_idx_val))
+            item_user_ratings[int(i_idx_val)].append(float(rating))
 
         user_item_indices_np = [np.asarray(v, dtype=np.int32) for v in user_item_indices]
         user_item_ratings_np = [np.asarray(v, dtype=np.float64) for v in user_item_ratings]
         item_user_indices_np = [np.asarray(v, dtype=np.int32) for v in item_user_indices]
         item_user_ratings_np = [np.asarray(v, dtype=np.float64) for v in item_user_ratings]
 
-        rng = np.random.default_rng(self.seed)
         self.user_factors = rng.normal(0.0, 0.1, size=(n_users, self.n_factors)).astype(np.float32)
         self.item_factors = rng.normal(0.0, 0.1, size=(n_items, self.n_factors)).astype(np.float32)
+
+        best_val_rmse = np.inf
+        best_state: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None
+        stale_epochs = 0
 
         for _ in range(self.epochs):
             for u in range(n_users):
@@ -163,6 +189,36 @@ class Option4ALSRecommender:
             errors = preds - ratings
             self.training_history["train_mae"].append(float(np.mean(np.abs(errors))))
             self.training_history["train_rmse"].append(float(np.sqrt(np.mean(np.square(errors)))))
+
+            if val_size > 0:
+                v_u = all_user_idx[val_indices]
+                v_i = all_item_idx[val_indices]
+                v_r = all_ratings[val_indices]
+                v_dot = np.sum(self.user_factors[v_u] * self.item_factors[v_i], axis=1)
+                v_preds = self.global_mean + self.user_bias[v_u] + self.item_bias[v_i] + v_dot
+                v_preds = np.clip(v_preds, self.min_rating, self.max_rating)
+                v_errors = v_preds - v_r
+                val_mae = float(np.mean(np.abs(v_errors)))
+                val_rmse = float(np.sqrt(np.mean(np.square(v_errors))))
+                self.training_history["val_mae"].append(val_mae)
+                self.training_history["val_rmse"].append(val_rmse)
+
+                if val_rmse < best_val_rmse - 1e-6:
+                    best_val_rmse = val_rmse
+                    stale_epochs = 0
+                    best_state = (
+                        self.user_bias.copy(),
+                        self.item_bias.copy(),
+                        self.user_factors.copy(),
+                        self.item_factors.copy(),
+                    )
+                else:
+                    stale_epochs += 1
+                    if self.early_stopping_patience > 0 and stale_epochs >= self.early_stopping_patience:
+                        break
+
+        if best_state is not None:
+            self.user_bias, self.item_bias, self.user_factors, self.item_factors = best_state
 
         item_norms = np.linalg.norm(self.item_factors, axis=1, keepdims=True)
         self.normalized_item_factors = np.divide(
