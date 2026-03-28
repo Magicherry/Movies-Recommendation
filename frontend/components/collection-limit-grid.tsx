@@ -11,9 +11,17 @@ const STORAGE_KEYS: Record<string, string> = {
   "more-like-this": "streamx-more-like-this-count",
 };
 
+function resolveStorageKey(settingKey: string): string {
+  if (settingKey.startsWith("person-")) {
+    // Person detail collections use a dedicated display-count setting.
+    return "streamx-person-movies-count";
+  }
+  return STORAGE_KEYS[settingKey] || settingKey;
+}
+
 function getLimit(storageKey: string): number {
   if (typeof window === "undefined") return DEFAULT_COUNT;
-  const key = STORAGE_KEYS[storageKey] || storageKey;
+  const key = resolveStorageKey(storageKey);
   const saved = localStorage.getItem(key);
   const val = saved ? parseInt(saved, 10) : DEFAULT_COUNT;
   return Math.min(MAX_COL, Math.max(MIN_COL, isNaN(val) ? DEFAULT_COUNT : val));

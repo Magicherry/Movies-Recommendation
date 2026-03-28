@@ -52,6 +52,7 @@ const APPEARANCE_DEFAULTS: Record<string, string> = {
   "streamx-watch-again-count": "15",
   "streamx-trending-count": "15",
   "streamx-more-like-this-count": "15",
+  "streamx-person-movies-count": "15",
   "streamx-carousel-count": "5",
   "streamx-carousel-interval-seconds": "30",
   "streamx-show-card-scores": "true",
@@ -93,6 +94,7 @@ export default function AppearanceSettings() {
   const [watchAgainCount, setWatchAgainCount] = useState(15);
   const [trendingCount, setTrendingCount] = useState(15);
   const [moreLikeThisCount, setMoreLikeThisCount] = useState(15);
+  const [personMoviesCount, setPersonMoviesCount] = useState(15);
   const [carouselCount, setCarouselCount] = useState(5);
   const [carouselIntervalSeconds, setCarouselIntervalSeconds] = useState(30);
   const [countsExpanded, setCountsExpanded] = useState(false);
@@ -100,7 +102,8 @@ export default function AppearanceSettings() {
   const allCountsEqual =
     recCount === watchAgainCount &&
     watchAgainCount === trendingCount &&
-    trendingCount === moreLikeThisCount;
+    trendingCount === moreLikeThisCount &&
+    moreLikeThisCount === personMoviesCount;
 
   useEffect(() => {
     const savedColor = localStorage.getItem("streamx-theme-color");
@@ -123,6 +126,7 @@ export default function AppearanceSettings() {
     setWatchAgainCount(parseStoredNumber("streamx-watch-again-count", 15, MIN_COL, MAX_COL));
     setTrendingCount(parseStoredNumber("streamx-trending-count", 15, MIN_COL, MAX_COL));
     setMoreLikeThisCount(parseStoredNumber("streamx-more-like-this-count", 15, MIN_COL, MAX_COL));
+    setPersonMoviesCount(parseStoredNumber("streamx-person-movies-count", 15, MIN_COL, MAX_COL));
     setCarouselCount(parseStoredNumber("streamx-carousel-count", 5, MIN_CAROUSEL_COUNT, MAX_CAROUSEL_COUNT));
     setCarouselIntervalSeconds(
       parseStoredNumber("streamx-carousel-interval-seconds", 30, MIN_CAROUSEL_SECONDS, MAX_CAROUSEL_SECONDS)
@@ -179,6 +183,10 @@ export default function AppearanceSettings() {
     () => makeCountHandlers(setMoreLikeThisCount, "streamx-more-like-this-count", MIN_COL, MAX_COL),
     [makeCountHandlers]
   );
+  const personMoviesHandlers = useMemo(
+    () => makeCountHandlers(setPersonMoviesCount, "streamx-person-movies-count", MIN_COL, MAX_COL),
+    [makeCountHandlers]
+  );
   const carouselCountHandlers = useMemo(
     () => makeCountHandlers(setCarouselCount, "streamx-carousel-count", MIN_CAROUSEL_COUNT, MAX_CAROUSEL_COUNT),
     [makeCountHandlers]
@@ -201,10 +209,12 @@ export default function AppearanceSettings() {
     setWatchAgainCount(clamped);
     setTrendingCount(clamped);
     setMoreLikeThisCount(clamped);
+    setPersonMoviesCount(clamped);
     localStorage.setItem("streamx-rec-count", clamped.toString());
     localStorage.setItem("streamx-watch-again-count", clamped.toString());
     localStorage.setItem("streamx-trending-count", clamped.toString());
     localStorage.setItem("streamx-more-like-this-count", clamped.toString());
+    localStorage.setItem("streamx-person-movies-count", clamped.toString());
   };
 
   const handleUnifiedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -461,8 +471,8 @@ export default function AppearanceSettings() {
             <h3>Set All Counts</h3>
             <p>
               {countsExpanded
-                ? "Use one value for Recommendation, Watch It Again, Trending Now, and More Like This."
-                : `Rec ${recCount} · Watch again ${watchAgainCount} · Trending ${trendingCount} · More ${moreLikeThisCount}. Expand to edit individually.`}
+                ? "Use one value for Recommendation, Watch It Again, Trending Now, More Like This, and Person Movies."
+                : `Rec ${recCount} · Watch again ${watchAgainCount} · Trending ${trendingCount} · More ${moreLikeThisCount} · Person ${personMoviesCount}. Expand to edit individually.`}
             </p>
           </div>
           <div className="setting-row-expand-controls">
@@ -625,6 +635,36 @@ export default function AppearanceSettings() {
               className="settings-number-input"
               style={{ width: "72px", flexShrink: 0 }}
               aria-label="More Like This count"
+            />
+          </div>
+        </div>
+
+        <div className="setting-row">
+          <div className="setting-row-info">
+            <h3>Person Movies</h3>
+            <p>Max items in the Movies with [Person] row on person detail pages.</p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "nowrap" }}>
+            <input
+              type="range"
+              min={MIN_COL}
+              max={MAX_COL}
+              step={STEP_COL}
+              value={personMoviesCount}
+              onChange={personMoviesHandlers.onChange}
+              className="range-slider"
+              style={{ "--slider-progress": `${((personMoviesCount - MIN_COL) / (MAX_COL - MIN_COL)) * 100}%` } as React.CSSProperties}
+            />
+            <input
+              type="number"
+              min={MIN_COL}
+              max={MAX_COL}
+              value={personMoviesCount}
+              onChange={personMoviesHandlers.onInputChange}
+              onBlur={(e) => personMoviesHandlers.onBlur(e, personMoviesCount)}
+              className="settings-number-input"
+              style={{ width: "72px", flexShrink: 0 }}
+              aria-label="Person Movies count"
             />
           </div>
         </div>
