@@ -484,7 +484,7 @@ class Option2DeepRecommender:
             pred += float(np.dot(self.user_vectors[u_idx], self.item_vectors[i_idx]))
         return float(np.clip(pred, self.min_rating, self.max_rating))
 
-    def recommend_top_n(self, user_id: int, n: int = 10, exclude_seen: bool = True) -> List[Recommendation]:
+    def recommend_top_n(self, user_id: int, n: int = 10, exclude_seen: bool = True, seen_items: set[int] | None = None) -> List[Recommendation]:
         if (
             self.user_vectors is None
             or self.item_vectors is None

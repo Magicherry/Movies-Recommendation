@@ -335,7 +335,7 @@ class Option4ALSRecommender:
             pred += float(self.item_bias[self.item_to_idx[item_id]])
         return float(np.clip(pred, self.min_rating, self.max_rating))
 
-    def recommend_top_n(self, user_id: int, n: int = 10, exclude_seen: bool = True) -> List[Recommendation]:
+    def recommend_top_n(self, user_id: int, n: int = 10, exclude_seen: bool = True, seen_items: set[int] | None = None) -> List[Recommendation]:
         if (
             self.user_bias is None
             or self.item_bias is None
@@ -365,7 +365,8 @@ class Option4ALSRecommender:
 
         if exclude_seen:
             preds = preds.copy()
-            seen_items = self.user_seen_items.get(user_id, set())
+            if seen_items is None:
+                seen_items = self.user_seen_items.get(user_id, set())
             for seen_item in seen_items:
                 seen_idx = self.item_to_idx.get(seen_item)
                 if seen_idx is not None:

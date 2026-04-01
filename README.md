@@ -167,6 +167,22 @@ cd backend
 python manage.py runserver 8001
 ```
 
+> **⚡ Performance Architecture — Lazy Loading:**
+> The backend uses a **lazy model loading** strategy optimized for the full MovieLens 27M dataset. On startup, the server only scans which model files exist on disk (instant) rather than loading all 6 model pickle files into memory (which would take 30+ seconds).
+>
+> - **First request after startup:** The active model (~100–200 MB) is loaded on-demand when the first API request arrives. Expect a **~15–25 second** wait on the very first request (or when switching to a new model via Settings).
+> - **All subsequent requests:** Served from memory in **< 5 ms**. Models stay cached until the server restarts.
+> - **Switching models:** When you switch the active model in the frontend Settings page, the newly selected model is loaded on-demand. This takes ~15–25 seconds for the first request with that model, then all subsequent requests are instant.
+>
+> User history and rating statistics are computed dynamically via Pandas DataFrames rather than pre-built Python dictionaries, reducing memory usage from ~5 GB to ~500 MB for the full dataset.
+
+**Warnings you can safely ignore** (they do not affect functionality):
+```
+Pandas requires version '2.10.2' or newer of 'numexpr' ...
+nopython is set for njit and is ignored ...
+You have 2 unapplied migration(s) ...
+```
+
 **Key Endpoints:**
 - `GET /api/health` — API health check
 - `GET /api/movies` — Paginated movies with search and genre filters

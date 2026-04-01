@@ -176,7 +176,12 @@ class RecommenderService:
         if train_ratings_path is None or not train_ratings_path.exists():
             raise FileNotFoundError("Model-specific train_ratings.csv not found.")
 
+        # Optimization: Skip slow 800MB csv reloading if path is identical
+        if getattr(self, "_last_ratings_path", None) == train_ratings_path and hasattr(self, "ratings_df"):
+            return
+
         ratings = pd.read_csv(train_ratings_path)
+        self._last_ratings_path = train_ratings_path
         self.users = sorted(ratings["user_id"].astype(int).unique().tolist())
 
         behavior_stats = ratings.groupby("item_id").agg(
@@ -193,42 +198,23 @@ class RecommenderService:
         behavior_stats["item_id"] = behavior_stats["item_id"].astype(int)
         self.movie_behavior_stats = behavior_stats
 
-        self.user_history = {}
-        for row in ratings.itertuples(index=False):
-            uid = int(row.user_id)
-            iid = int(row.item_id)
-            if uid not in self.user_history:
-                self.user_history[uid] = []
-
-            meta = self.movie_lookup.get(
-                iid,
-                {
-                    "item_id": iid,
-                    "title": "Unknown",
-                    "scraped_title": "",
-                    "genres": "",
-                    "poster_url": "",
-                    "backdrop_url": "",
-                    "overview": "",
-                    "tmdb_id": "",
-                },
-            )
-            self.user_history[uid].append(
-                {
-                    "item_id": iid,
-                    "title": meta["title"],
-                    "scraped_title": meta.get("scraped_title", ""),
-                    "genres": meta["genres"],
-                    "poster_url": meta["poster_url"],
-                    "backdrop_url": meta["backdrop_url"],
-                    "overview": meta["overview"],
-                    "tmdb_id": meta.get("tmdb_id", ""),
-                    "rating": float(row.rating),
-                }
-            )
-
-        for uid in self.user_history:
-            self.user_history[uid].sort(key=lambda x: x["rating"], reverse=True)
+        self.ratings_df = ratings[["user_id", "item_id", "rating"]].copy()
+        self.user_rating_counts = ratings["user_id"].value_counts().to_dict()
+        
+        # Precompute db stats to avoid iterating over dataframe on the fly
+        self.total_ratings = len(ratings)
+        if self.total_ratings > 0:
+            self.average_rating = float(ratings["rating"].mean())
+        else:
+            self.average_rating = 0.0
+            
+        self.movie_rating_counts = ratings["item_id"].value_counts().to_dict()
+        
+        rating_dist = {}
+        for r, cnt in ratings["rating"].value_counts().items():
+            r_rounded = round(float(r) * 2) / 2
+            rating_dist[r_rounded] = rating_dist.get(r_rounded, 0) + cnt
+        self.rating_distribution = [{"rating": str(k), "count": int(v)} for k, v in sorted(rating_dist.items())]
 
     def _load_active_model_data(self) -> None:
         paths = self._resolve_model_data_paths(self.active_model_name)
@@ -343,81 +329,32 @@ class RecommenderService:
             if self._loaded:
                 return
 
-            model_option1_path = self.artifacts_dir / "option1" / "model.pkl"
-            model_option2_path = self.artifacts_dir / "option2" / "model.pkl"
-            model_option3_path = self.artifacts_dir / "option3" / "model.pkl"
-            model_option3_ridge_path = self.artifacts_dir / "option3_ridge" / "model.pkl"
-            model_option3_lasso_path = self.artifacts_dir / "option3_lasso" / "model.pkl"
-            model_option4_path = self.artifacts_dir / "option4" / "model.pkl"
-
-            if model_option1_path.exists():
-                with open(model_option1_path, "rb") as f:
-                    self.models["option1"] = pickle.load(f)
+            self._available_model_names = set()
             
-            if model_option2_path.exists():
-                with open(model_option2_path, "rb") as f:
-                    self.models["option2"] = pickle.load(f)
-
-            if model_option3_path.exists():
-                with open(model_option3_path, "rb") as f:
-                    self.models["option3"] = pickle.load(f)
-
-            if model_option3_ridge_path.exists():
-                with open(model_option3_ridge_path, "rb") as f:
-                    self.models["option3_ridge"] = pickle.load(f)
-
-            if model_option3_lasso_path.exists():
-                with open(model_option3_lasso_path, "rb") as f:
-                    self.models["option3_lasso"] = pickle.load(f)
-
-            if model_option4_path.exists():
-                with open(model_option4_path, "rb") as f:
-                    self.models["option4"] = pickle.load(f)
+            # Scan available models without loading them into memory (save 30s)
+            for path in [(self.artifacts_dir / "option1" / "model.pkl", "option1"),
+                         (self.artifacts_dir / "option2" / "model.pkl", "option2"),
+                         (self.artifacts_dir / "option3" / "model.pkl", "option3"),
+                         (self.artifacts_dir / "option3_ridge" / "model.pkl", "option3_ridge"),
+                         (self.artifacts_dir / "option3_lasso" / "model.pkl", "option3_lasso"),
+                         (self.artifacts_dir / "option4" / "model.pkl", "option4"),
+                         (self.artifacts_dir / "model_option1.pkl", "option1"),
+                         (self.artifacts_dir / "model_option2.pkl", "option2"),
+                         (self.artifacts_dir / "model_option3.pkl", "option3"),
+                         (self.artifacts_dir / "model_option3_ridge.pkl", "option3_ridge"),
+                         (self.artifacts_dir / "model_option3_lasso.pkl", "option3_lasso"),
+                         (self.artifacts_dir / "model_option4.pkl", "option4"),
+                         (self.artifacts_dir / "model.pkl", "option1")]:
+                if path[0].exists():
+                    self._available_model_names.add(path[1])
             
-            # Fallback to old model.pkl if specific ones don't exist
-            old_model_path = self.artifacts_dir / "model.pkl"
-            old_model_option1_path = self.artifacts_dir / "model_option1.pkl"
-            old_model_option2_path = self.artifacts_dir / "model_option2.pkl"
-            old_model_option3_path = self.artifacts_dir / "model_option3.pkl"
-            old_model_option3_ridge_path = self.artifacts_dir / "model_option3_ridge.pkl"
-            old_model_option3_lasso_path = self.artifacts_dir / "model_option3_lasso.pkl"
-            old_model_option4_path = self.artifacts_dir / "model_option4.pkl"
-            
-            if "option1" not in self.models and old_model_option1_path.exists():
-                with open(old_model_option1_path, "rb") as f:
-                    self.models["option1"] = pickle.load(f)
-                    
-            if "option2" not in self.models and old_model_option2_path.exists():
-                with open(old_model_option2_path, "rb") as f:
-                    self.models["option2"] = pickle.load(f)
-
-            if "option3" not in self.models and old_model_option3_path.exists():
-                with open(old_model_option3_path, "rb") as f:
-                    self.models["option3"] = pickle.load(f)
-
-            if "option3_ridge" not in self.models and old_model_option3_ridge_path.exists():
-                with open(old_model_option3_ridge_path, "rb") as f:
-                    self.models["option3_ridge"] = pickle.load(f)
-
-            if "option3_lasso" not in self.models and old_model_option3_lasso_path.exists():
-                with open(old_model_option3_lasso_path, "rb") as f:
-                    self.models["option3_lasso"] = pickle.load(f)
-
-            if "option4" not in self.models and old_model_option4_path.exists():
-                with open(old_model_option4_path, "rb") as f:
-                    self.models["option4"] = pickle.load(f)
-                    
-            if not self.models and old_model_path.exists():
-                with open(old_model_path, "rb") as f:
-                    self.models["option1"] = pickle.load(f)
-            
-            if not self.models:
+            if not getattr(self, '_available_model_names', None):
                 raise FileNotFoundError("No models found. Run training script.")
             
             # Resolve and persist active model so it survives reloads and cross-process requests.
             self._load_active_model_from_disk()
-            if self.active_model_name not in self.models:
-                self.active_model_name = list(self.models.keys())[0]
+            if self.active_model_name not in getattr(self, '_available_model_names', set()):
+                self.active_model_name = list(getattr(self, '_available_model_names', {'option1'}))[0]
             self._persist_active_model_to_disk()
 
             self._load_active_model_data()
@@ -603,7 +540,10 @@ class RecommenderService:
     def predict_rating(self, user_id: int, item_id: int) -> Dict[str, Any]:
         self._ensure_active_model_fresh()
         try:
-            model = self.models[self.active_model_name]
+            model = self.models.get(self.active_model_name)
+            if model is None:
+                self._lazy_load_model(self.active_model_name)
+                model = self.models.get(self.active_model_name)
             score = model.predict(user_id=user_id, item_id=item_id)
             return {"user_id": user_id, "item_id": item_id, "predicted_rating": score}
         except RuntimeError:
@@ -614,8 +554,16 @@ class RecommenderService:
         self._ensure_active_model_fresh()
         if user_id not in self.users:
             raise ValueError(f"User ID {user_id} not found.")
-        model = self.models[self.active_model_name]
-        recs = model.recommend_top_n(user_id=user_id, n=n, exclude_seen=True)
+        model = self.models.get(self.active_model_name)
+        if model is None:
+            self._lazy_load_model(self.active_model_name)
+            model = self.models.get(self.active_model_name)
+            
+        # Dynamically inject seen items to bypass massive pickle overhead
+        user_rows = self.ratings_df[self.ratings_df["user_id"] == user_id]
+        seen = set(user_rows["item_id"])
+        
+        recs = model.recommend_top_n(user_id=user_id, n=n, exclude_seen=True, seen_items=seen)
         enriched = []
         for rec in recs:
             meta = self.movie_lookup.get(
@@ -649,7 +597,10 @@ class RecommenderService:
     def similar_for_item(self, item_id: int, n: int = 10) -> List[Dict[str, Any]]:
         self._ensure_movie_data_fresh()
         self._ensure_active_model_fresh()
-        model = self.models[self.active_model_name]
+        model = self.models.get(self.active_model_name)
+        if model is None:
+            self._lazy_load_model(self.active_model_name)
+            model = self.models.get(self.active_model_name)
         recs = model.similar_items(item_id=item_id, n=n)
         enriched = []
         for rec in recs:
@@ -686,11 +637,40 @@ class RecommenderService:
         self._ensure_movie_data_fresh()
         if user_id not in self.users:
             raise ValueError(f"User ID {user_id} not found.")
-        history = self.user_history.get(user_id, [])
-        # We can return all history here if limit=0, or let the API caller decide.
-        if limit == 0:
-            return history
-        return history[:limit]
+            
+        # Dynamically build history to save memory
+        user_rows = self.ratings_df[self.ratings_df["user_id"] == user_id]
+        user_rows = user_rows.sort_values(by="rating", ascending=False)
+        if limit > 0:
+            user_rows = user_rows.head(limit)
+            
+        history = []
+        for iid, rating in zip(user_rows["item_id"], user_rows["rating"]):
+            meta = self.movie_lookup.get(
+                iid,
+                {
+                    "item_id": iid,
+                    "title": "Unknown",
+                    "scraped_title": "",
+                    "genres": "",
+                    "poster_url": "",
+                    "backdrop_url": "",
+                    "overview": "",
+                    "tmdb_id": "",
+                },
+            )
+            history.append({
+                "item_id": int(iid),
+                "title": meta["title"],
+                "scraped_title": meta.get("scraped_title", ""),
+                "genres": meta["genres"],
+                "poster_url": meta.get("poster_url", ""),
+                "backdrop_url": meta.get("backdrop_url", ""),
+                "overview": meta.get("overview", ""),
+                "tmdb_id": meta.get("tmdb_id", ""),
+                "rating": float(rating),
+            })
+        return history
 
     def list_users(self, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
         self._ensure_active_model_fresh()
@@ -698,33 +678,13 @@ class RecommenderService:
         users_page = self.users[offset:offset+limit]
         return {
             "total": total,
-            "items": [{"user_id": u, "history_count": len(self.user_history.get(u, []))} for u in users_page]
+            "items": [{"user_id": u, "history_count": self.user_rating_counts.get(u, 0)} for u in users_page]
         }
 
     def get_db_stats(self) -> Dict[str, Any]:
         self._ensure_movie_data_fresh()
         total_movies = len(self.movies) if self.movies is not None else 0
         total_users = len(self.users)
-        
-        all_ratings = []
-        movie_rating_counts = {}
-        for hist in self.user_history.values():
-            for item in hist:
-                all_ratings.append(item["rating"])
-                iid = item["item_id"]
-                movie_rating_counts[iid] = movie_rating_counts.get(iid, 0) + 1
-                
-        total_ratings = len(all_ratings)
-        average_rating = sum(all_ratings) / total_ratings if total_ratings > 0 else 0
-        
-        # Rating distribution (0.5 to 5.0)
-        rating_dist = {}
-        for r in all_ratings:
-            # Round to nearest 0.5
-            r_rounded = round(r * 2) / 2
-            rating_dist[r_rounded] = rating_dist.get(r_rounded, 0) + 1
-        
-        rating_distribution = [{"rating": str(k), "count": v} for k, v in sorted(rating_dist.items())]
         
         # Calculate some genre stats for charts
         genre_counts = {}
@@ -751,7 +711,7 @@ class RecommenderService:
         
         # Top rated movies (most ratings)
         top_rated_movies = []
-        for iid, count in sorted(movie_rating_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
+        for iid, count in sorted(self.movie_rating_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
             meta = self.movie_lookup.get(iid, {"title": "Unknown", "scraped_title": ""})
             display_title = meta.get("scraped_title") or meta.get("title", "Unknown")
             top_rated_movies.append({"title": display_title, "count": count})
@@ -759,10 +719,10 @@ class RecommenderService:
         return {
             "total_movies": total_movies,
             "total_users": total_users,
-            "total_ratings": total_ratings,
-            "average_rating": round(average_rating, 2),
+            "total_ratings": getattr(self, "total_ratings", 0),
+            "average_rating": round(getattr(self, "average_rating", 0.0), 2),
             "top_genres": [{"name": g[0], "count": g[1]} for g in top_genres],
-            "rating_distribution": rating_distribution,
+            "rating_distribution": getattr(self, "rating_distribution", []),
             "movies_by_year": movies_by_year,
             "top_rated_movies": top_rated_movies
         }
@@ -895,15 +855,28 @@ class RecommenderService:
 
         return {
             "active_model": self.active_model_name,
-            "available_models": list(self.models.keys()),
+            "available_models": list(getattr(self, '_available_model_names', set(self.models.keys()))),
             "metrics": active_metrics,
             "history": active_history,
             "diagnostics": diagnostics,
         }
-    
+    def _lazy_load_model(self, name: str) -> None:
+        import pickle
+        candidates = [
+            self.artifacts_dir / name / "model.pkl",
+            self.artifacts_dir / f"model_{name}.pkl",
+            self.artifacts_dir / "model.pkl"
+        ]
+        for p in candidates:
+            if p.exists():
+                with open(p, "rb") as f:
+                    self.models[name] = pickle.load(f)
+                return
+        raise FileNotFoundError(f"Model {name} not found on disk.")
+
     def set_active_model(self, model_name: str) -> bool:
         self._ensure_loaded()
-        if model_name not in self.models:
+        if model_name not in getattr(self, '_available_model_names', set()):
             return False
         with self._lock:
             if model_name == self.active_model_name:

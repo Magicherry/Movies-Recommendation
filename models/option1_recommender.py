@@ -255,7 +255,7 @@ class Option1MatrixFactorizationSGD:
             pred += float(np.dot(self.user_factors[u_idx], self.item_factors[i_idx]))
         return float(np.clip(pred, self.min_rating, self.max_rating))
 
-    def recommend_top_n(self, user_id: int, n: int = 10, exclude_seen: bool = True) -> List[Recommendation]:
+    def recommend_top_n(self, user_id: int, n: int = 10, exclude_seen: bool = True, seen_items: set[int] | None = None) -> List[Recommendation]:
         if (
             self.user_bias is None
             or self.item_bias is None
