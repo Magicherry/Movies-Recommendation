@@ -401,6 +401,15 @@ class Option2DeepRecommender:
                         verbose=0,
                     )
                 )
+            callbacks.append(
+                tf.keras.callbacks.EarlyStopping(
+                    monitor="val_loss",
+                    patience=max(1, self.lr_plateau_patience + 1),
+                    verbose=1,
+                    min_delta=1e-4,
+                    restore_best_weights=False,
+                )
+            )
 
         fit_kwargs = {
             "x": train_x,

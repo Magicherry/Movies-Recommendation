@@ -16,7 +16,7 @@
 ## Features
 
 - **Robust Recommendation Engine**
-  - **Matrix Factorization**: Custom implementations trained with Stochastic Gradient Descent (SGD) and Alternating Least Squares (ALS).
+  - **Matrix Factorization**: Custom implementations trained with Numba-accelerated Stochastic Gradient Descent (SGD, Option 1) and Sparse CSR-block Alternating Least Squares (ALS, Option 4). Both feature massive loop parallelization and dynamic Early Stopping for millisecond-scale processing on 27M+ ratings.
   - **Deep Neural CF**: Hybrid deep learning model with Text CNN for title feature extraction.
   - **Matrix SVD**: Closed-form SVD latent factors calibrated with Ridge/Lasso regression.
 - **Automated Data Processing**
@@ -49,7 +49,7 @@
 ## Project Structure
 
 ```text
-dataset/          # Raw MovieLens data (e.g. ml-latest-small/, ml-latest/)
+dataset/          # Raw MovieLens data (e.g. ml-latest/)
 backend/          # Django REST API
 frontend/         # Next.js web application
 models/           # ML model code and generated artifacts (option1, option2, option3, option4, splits)
@@ -93,10 +93,10 @@ pip install -r requirements-train.txt
 
 ### 2. Train the Model
 
-Train the recommender model using the provided dataset. Place MovieLens data under `dataset/ml-latest-small/` (or pass `--dataset-dir`). Model files and train/test splits are saved under `models/artifacts/<model-type>/` (e.g. `models/artifacts/option1/`); metadata is shared in `models/artifacts/`.
+Train the recommender model using the provided dataset. Place MovieLens data under `dataset/ml-latest/` (or pass `--dataset-dir`). Model files and train/test splits are saved under `models/artifacts/<model-type>/` (e.g. `models/artifacts/option1/`); metadata is shared in `models/artifacts/`.
 
 ```bash
-python -m scripts.train_and_evaluate --dataset-dir dataset/ml-latest-small --top-k 10
+python -m scripts.train_and_evaluate --dataset-dir dataset/ml-latest --top-k 10
 ```
 
 Top-K relevance threshold can be configured (default: `rating >= 4.0`):
@@ -108,17 +108,27 @@ By default, Top-K evaluation follows the CS550 holdout definition (`--topn-relev
 
 *(Optional)* Tune Matrix Factorization hyperparameters:
 ```bash
-python -m scripts.train_and_evaluate --dataset-dir dataset/ml-latest-small --n-factors 48 --epochs 30 --lr 0.01 --reg 0.05
+python -m scripts.train_and_evaluate --dataset-dir dataset/ml-latest --n-factors 48 --epochs 30 --lr 0.01 --reg 0.05
 ```
 
 Train the improved Option 2 hybrid deep model (title + genre features):
 ```bash
-python -m scripts.train_and_evaluate --model-type option2 --dataset-dir dataset/ml-latest-small --n-factors 64 --epochs 30 --option2-lr 0.001 --batch-size 256
+python -m scripts.train_and_evaluate --model-type option2 --dataset-dir dataset/ml-latest --n-factors 16 --epochs 10 --batch-size 4096
 ```
+> **Note for Apple Silicon (M1/M2/M3) Mac users:** Option 2 uses TensorFlow which natively supports GPU acceleration on Macs. To enable it and speed up training by up to 5-10x, create a specialized conda environment:
+> ```bash
+> conda create -n tf-metal python=3.11 -y
+> conda activate tf-metal
+> pip install tensorflow==2.16.2 tensorflow-metal==1.2.0 pandas numpy scikit-learn tqdm numba scipy
+> ```
 
-Train the Matrix SVD with Ridge or Lasso Regression (Option 3):
+Train the chunked Matrix SVD with Covariance Ridge or Lasso Regression (Option 3):
 ```bash
+# Option 3 - Ridge Regression
 python -m scripts.train_and_evaluate --model-type option3_ridge --n-factors 48 --option3-reg-alpha 0.1
+
+# Option 3 - Sparse Lasso Regression
+python -m scripts.train_and_evaluate --model-type option3_lasso --n-factors 48 --option3-reg-alpha 0.1
 ```
 
 Train the Matrix Factorization ALS model (Option 4):

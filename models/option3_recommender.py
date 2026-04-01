@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import pickle
 from dataclasses import dataclass
-from typing import Dict, List, Literal
+from typing import Dict, List, Literal, Optional
 
+import numba
 import numpy as np
 import pandas as pd
+from scipy.sparse import coo_matrix
+from scipy.sparse.linalg import svds
 
 RegressorType = Literal["svd", "ridge", "lasso"]
 
@@ -13,6 +17,59 @@ RegressorType = Literal["svd", "ridge", "lasso"]
 class Recommendation:
     item_id: int
     score: float
+
+
+@numba.njit(nopython=True)
+def _fit_lasso_numba(
+    x_std: np.ndarray,
+    y_centered: np.ndarray,
+    alpha_scaled: float,
+    lasso_max_iter: int,
+    lasso_tol: float
+) -> np.ndarray:
+    n_samples, n_features = x_std.shape
+    weights = np.zeros(n_features, dtype=np.float64)
+    residual = y_centered.copy()
+    
+    denom = np.zeros(n_features, dtype=np.float64)
+    for j in range(n_features):
+        sum_sq = 0.0
+        for i in range(n_samples):
+            sum_sq += x_std[i, j] * x_std[i, j]
+        denom[j] = sum_sq + 1e-12
+
+    for _ in range(max(1, lasso_max_iter)):
+        max_delta = 0.0
+        for j in range(n_features):
+            old_weight = weights[j]
+            
+            for i in range(n_samples):
+                residual[i] += x_std[i, j] * old_weight
+                
+            rho = 0.0
+            for i in range(n_samples):
+                rho += x_std[i, j] * residual[i]
+                
+            if rho > alpha_scaled:
+                new_weight = (rho - alpha_scaled) / denom[j]
+            elif rho < -alpha_scaled:
+                new_weight = (rho + alpha_scaled) / denom[j]
+            else:
+                new_weight = 0.0
+                
+            weights[j] = new_weight
+            
+            for i in range(n_samples):
+                residual[i] -= x_std[i, j] * new_weight
+                
+            delta = abs(new_weight - old_weight)
+            if delta > max_delta:
+                max_delta = delta
+                
+        if max_delta < lasso_tol:
+            break
+            
+    return weights
 
 
 class Option3SVDHybridRecommender:
@@ -66,34 +123,17 @@ class Option3SVDHybridRecommender:
 
         self.training_history: Dict[str, List[float]] = {}
 
-    @staticmethod
-    def _soft_threshold(value: float, threshold: float) -> float:
-        if value > threshold:
-            return value - threshold
-        if value < -threshold:
-            return value + threshold
-        return 0.0
-
     def _fit_lasso(self, x_std: np.ndarray, y_centered: np.ndarray) -> np.ndarray:
-        n_samples, n_features = x_std.shape
-        weights = np.zeros(n_features, dtype=np.float64)
-        residual = y_centered.copy()
-        denom = np.sum(x_std * x_std, axis=0) + 1e-12
+        n_samples = x_std.shape[0]
         alpha_scaled = float(self.reg_alpha) * float(n_samples)
-
-        for _ in range(max(1, int(self.lasso_max_iter))):
-            max_delta = 0.0
-            for j in range(n_features):
-                old_weight = weights[j]
-                residual += x_std[:, j] * old_weight
-                rho = float(np.dot(x_std[:, j], residual))
-                new_weight = self._soft_threshold(rho, alpha_scaled) / float(denom[j])
-                weights[j] = new_weight
-                residual -= x_std[:, j] * new_weight
-                max_delta = max(max_delta, abs(new_weight - old_weight))
-            if max_delta < float(self.lasso_tol):
-                break
-        return weights
+        print("Running Numba-accelerated Lasso...")
+        return _fit_lasso_numba(
+            x_std=x_std.astype(np.float64),
+            y_centered=y_centered.astype(np.float64),
+            alpha_scaled=alpha_scaled,
+            lasso_max_iter=int(self.lasso_max_iter),
+            lasso_tol=float(self.lasso_tol)
+        )
 
     def _build_feature_matrix(self, user_idx: np.ndarray, item_idx: np.ndarray) -> np.ndarray:
         if (
@@ -204,25 +244,28 @@ class Option3SVDHybridRecommender:
             out=np.full_like(item_sum, self.global_mean, dtype=np.float32),
         )
 
-        residual_sum_matrix = np.zeros((n_users, n_items), dtype=np.float32)
-        residual_count_matrix = np.zeros((n_users, n_items), dtype=np.float32)
         centered_ratings = ratings - self.global_mean
-        np.add.at(residual_sum_matrix, (user_idx, item_idx), centered_ratings)
-        np.add.at(residual_count_matrix, (user_idx, item_idx), 1.0)
-        interaction_matrix = np.divide(
-            residual_sum_matrix,
-            np.maximum(residual_count_matrix, 1.0),
-            out=np.zeros_like(residual_sum_matrix),
-            where=residual_count_matrix > 0,
+        
+        # Use sparse matrix to avoid allocating 315GB of RAM for 330k users and 80k items
+        interaction_matrix = coo_matrix(
+            (centered_ratings, (user_idx, item_idx)),
+            shape=(n_users, n_items),
+            dtype=np.float32
         )
 
-        effective_rank = max(0, min(int(self.n_factors), n_users, n_items))
-        if effective_rank > 0 and np.any(interaction_matrix):
-            u_mat, singular_vals, vt_mat = np.linalg.svd(interaction_matrix, full_matrices=False)
-            singular_vals = singular_vals[:effective_rank]
+        effective_rank = max(1, min(int(self.n_factors), min(n_users, n_items) - 1))
+        if effective_rank > 0 and interaction_matrix.nnz > 0:
+            u_mat, singular_vals, vt_mat = svds(interaction_matrix.tocsr(), k=effective_rank)
+            
+            # svds returns them sorted in ascending order, we reverse it
+            order = np.argsort(singular_vals)[::-1]
+            u_mat = u_mat[:, order]
+            singular_vals = singular_vals[order]
+            vt_mat = vt_mat[order, :]
+            
             sqrt_s = np.sqrt(np.maximum(singular_vals, 0.0))
-            self.user_factors = (u_mat[:, :effective_rank] * sqrt_s).astype(np.float32)
-            self.item_factors = (vt_mat[:effective_rank, :].T * sqrt_s).astype(np.float32)
+            self.user_factors = (u_mat * sqrt_s).astype(np.float32)
+            self.item_factors = (vt_mat.T * sqrt_s).astype(np.float32)
         else:
             self.user_factors = np.zeros((n_users, effective_rank), dtype=np.float32)
             self.item_factors = np.zeros((n_items, effective_rank), dtype=np.float32)

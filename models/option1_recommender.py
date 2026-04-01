@@ -5,12 +5,43 @@ from typing import Dict, List
 
 import numpy as np
 import pandas as pd
-
+import numba
+from numba import njit
 
 @dataclass
 class Recommendation:
     item_id: int
     score: float
+
+@numba.njit(nopython=True)
+def _sgd_epoch_numba(
+    indices,
+    user_ids,
+    item_ids,
+    values,
+    global_mean,
+    user_bias,
+    item_bias,
+    user_factors,
+    item_factors,
+    lr,
+    reg,
+):
+    for idx in indices:
+        u = user_ids[idx]
+        i = item_ids[idx]
+        rating = values[idx]
+
+        pred = global_mean + user_bias[u] + item_bias[i] + np.dot(user_factors[u], item_factors[i])
+        err = pred - rating
+
+        user_bias[u] -= lr * (err + reg * user_bias[u])
+        item_bias[i] -= lr * (err + reg * item_bias[i])
+
+        u_f = user_factors[u]
+        i_f = item_factors[i]
+        user_factors[u] -= lr * (err * i_f + reg * u_f)
+        item_factors[i] -= lr * (err * u_f + reg * i_f)
 
 
 class Option1MatrixFactorizationSGD:
@@ -117,25 +148,21 @@ class Option1MatrixFactorizationSGD:
         best_state: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None
         stale_epochs = 0
 
-        for _ in range(self.epochs):
-            rng.shuffle(train_indices)
-            for idx in train_indices:
-                u = user_ids[idx]
-                i = item_ids[idx]
-                r_ui = values[idx]
-
-                pred = self.global_mean + self.user_bias[u] + self.item_bias[i] + float(
-                    np.dot(self.user_factors[u], self.item_factors[i])
-                )
-                err = r_ui - pred
-
-                self.user_bias[u] += current_lr * (err - self.reg * self.user_bias[u])
-                self.item_bias[i] += current_lr * (err - self.reg * self.item_bias[i])
-
-                pu = self.user_factors[u].copy()
-                qi = self.item_factors[i].copy()
-                self.user_factors[u] += current_lr * (err * qi - self.reg * pu)
-                self.item_factors[i] += current_lr * (err * pu - self.reg * qi)
+        from tqdm import tqdm
+        for epoch_idx in tqdm(range(self.epochs), desc="SGD Epochs"):
+            _sgd_epoch_numba(
+                train_indices,
+                user_ids,
+                item_ids,
+                values,
+                self.global_mean,
+                self.user_bias,
+                self.item_bias,
+                self.user_factors,
+                self.item_factors,
+                current_lr,
+                float(self.reg)
+            )
 
             train_preds = (
                 self.global_mean
@@ -179,6 +206,7 @@ class Option1MatrixFactorizationSGD:
                 else:
                     stale_epochs += 1
                     if self.early_stopping_patience > 0 and stale_epochs >= self.early_stopping_patience:
+                        print(f"\n🌟 [Early Stopping] Validation RMSE stopped improving! Terminating SGD training early at Epoch {epoch_idx+1}.")
                         break
 
             current_lr *= self.lr_decay
@@ -194,6 +222,17 @@ class Option1MatrixFactorizationSGD:
             where=item_norms > 1e-12,
         )
         return self
+
+    
+    def predict_batch(self, user_ids: np.ndarray, item_ids: np.ndarray) -> np.ndarray:
+        u_max = self.user_factors.shape[0] - 1
+        i_max = self.item_factors.shape[0] - 1
+        u_idx = np.clip(user_ids, 0, u_max)
+        i_idx = np.clip(item_ids, 0, i_max)
+        
+        dots = np.sum(self.user_factors[u_idx] * self.item_factors[i_idx], axis=1)
+        preds = self.global_mean + self.user_bias[u_idx] + self.item_bias[i_idx] + dots
+        return np.clip(preds, self.min_rating, self.max_rating)
 
     def predict(self, user_id: int, item_id: int) -> float:
         if (

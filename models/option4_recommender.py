@@ -13,6 +13,78 @@ class Recommendation:
     score: float
 
 
+import numba
+
+def _create_csr(n_elements, list_indices, list_data):
+    indptr = np.zeros(n_elements + 1, dtype=np.int32)
+    total_len = sum(len(x) for x in list_indices)
+    indices = np.zeros(total_len, dtype=np.int32)
+    data = np.zeros(total_len, dtype=np.float32)
+    
+    pos = 0
+    for i in range(n_elements):
+        indptr[i] = pos
+        n = len(list_indices[i])
+        if n > 0:
+            indices[pos:pos+n] = list_indices[i]
+            data[pos:pos+n] = list_data[i]
+            pos += n
+    indptr[n_elements] = pos
+    return indptr, indices, data
+
+@numba.njit(nopython=True)
+def _als_update_numba(
+    n_entities: int,
+    indptr: np.ndarray,
+    indices: np.ndarray,
+    data: np.ndarray,
+    global_mean: float,
+    context_factors: np.ndarray,
+    context_bias: np.ndarray,
+    target_factors: np.ndarray,
+    target_bias: np.ndarray,
+    reg: float,
+    n_factors: int
+):
+    for e in range(n_entities):
+        start = indptr[e]
+        end = indptr[e+1]
+        
+        if start == end:
+            continue
+            
+        N = end - start
+        obs_context = indices[start:end]
+        
+        y = np.empty(N, dtype=np.float32)
+        for i in range(N):
+            y[i] = data[start + i] - global_mean - context_bias[obs_context[i]]
+            
+        if n_factors > 0:
+            D = np.empty((N, n_factors + 1), dtype=np.float32)
+            for i in range(N):
+                c_idx = obs_context[i]
+                for k in range(n_factors):
+                    D[i, k] = context_factors[c_idx, k]
+                D[i, n_factors] = 1.0
+
+            DTD = np.dot(D.T, D)
+            for k in range(n_factors + 1):
+                DTD[k, k] += reg
+                
+            DTy = np.dot(D.T, y)
+            solution = np.linalg.solve(DTD, DTy)
+            
+            for k in range(n_factors):
+                target_factors[e, k] = solution[k]
+            target_bias[e] = solution[n_factors]
+        else:
+            D = np.ones((N, 1), dtype=np.float32)
+            DTD = np.dot(D.T, D)
+            DTD[0, 0] += reg
+            DTy = np.dot(D.T, y)
+            target_bias[e] = DTy[0] / DTD[0, 0]
+
 class Option4ALSRecommender:
     """
     Explicit-feedback matrix factorization trained with Alternating Least Squares.
@@ -149,40 +221,32 @@ class Option4ALSRecommender:
             item_user_ratings[int(i_idx_val)].append(float(rating))
 
         user_item_indices_np = [np.asarray(v, dtype=np.int32) for v in user_item_indices]
-        user_item_ratings_np = [np.asarray(v, dtype=np.float64) for v in user_item_ratings]
-        item_user_indices_np = [np.asarray(v, dtype=np.int32) for v in item_user_indices]
-        item_user_ratings_np = [np.asarray(v, dtype=np.float64) for v in item_user_ratings]
-
         self.user_factors = rng.normal(0.0, 0.1, size=(n_users, self.n_factors)).astype(np.float32)
         self.item_factors = rng.normal(0.0, 0.1, size=(n_items, self.n_factors)).astype(np.float32)
+        user_indptr, user_indices, user_data = _create_csr(n_users, user_item_indices, user_item_ratings)
+        item_indptr, item_indices, item_data = _create_csr(n_items, item_user_indices, item_user_ratings)
 
-        best_val_rmse = np.inf
+        best_val_rmse = float("inf")
         best_state: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None
         stale_epochs = 0
 
-        for _ in range(self.epochs):
-            for u in range(n_users):
-                obs_items = user_item_indices_np[u]
-                if obs_items.size == 0:
-                    continue
-                q = self.item_factors[obs_items]
-                y = user_item_ratings_np[u] - self.global_mean - self.item_bias[obs_items].astype(np.float64)
-                solution = self._solve_latent_with_bias(design=q, target=y)
-                if self.n_factors > 0:
-                    self.user_factors[u] = solution[:-1].astype(np.float32)
-                self.user_bias[u] = np.float32(solution[-1])
+        from tqdm import tqdm
+        for epoch_idx in tqdm(range(self.epochs), desc="ALS Epochs"):
+            # Update Users
+            _als_update_numba(
+                n_users, user_indptr, user_indices, user_data,
+                self.global_mean, self.item_factors, self.item_bias,
+                self.user_factors, self.user_bias, float(self.reg), self.n_factors
+            )
+            
+            # Update Items
+            _als_update_numba(
+                n_items, item_indptr, item_indices, item_data,
+                self.global_mean, self.user_factors, self.user_bias,
+                self.item_factors, self.item_bias, float(self.reg), self.n_factors
+            )
 
-            for i in range(n_items):
-                obs_users = item_user_indices_np[i]
-                if obs_users.size == 0:
-                    continue
-                p = self.user_factors[obs_users]
-                y = item_user_ratings_np[i] - self.global_mean - self.user_bias[obs_users].astype(np.float64)
-                solution = self._solve_latent_with_bias(design=p, target=y)
-                if self.n_factors > 0:
-                    self.item_factors[i] = solution[:-1].astype(np.float32)
-                self.item_bias[i] = np.float32(solution[-1])
-
+            # Evaluate training iteration
             dot_scores = np.sum(self.user_factors[user_idx] * self.item_factors[item_idx], axis=1)
             preds = self.global_mean + self.user_bias[user_idx] + self.item_bias[item_idx] + dot_scores
             preds = np.clip(preds, self.min_rating, self.max_rating)
@@ -215,6 +279,7 @@ class Option4ALSRecommender:
                 else:
                     stale_epochs += 1
                     if self.early_stopping_patience > 0 and stale_epochs >= self.early_stopping_patience:
+                        print(f"\n🌟 [Early Stopping] Validation RMSE stopped improving! Terminating ALS training early at Epoch {epoch_idx+1}.")
                         break
 
         if best_state is not None:
@@ -228,6 +293,17 @@ class Option4ALSRecommender:
             where=item_norms > 1e-12,
         )
         return self
+
+    
+    def predict_batch(self, user_ids: np.ndarray, item_ids: np.ndarray) -> np.ndarray:
+        u_max = self.user_factors.shape[0] - 1
+        i_max = self.item_factors.shape[0] - 1
+        u_idx = np.clip(user_ids, 0, u_max)
+        i_idx = np.clip(item_ids, 0, i_max)
+        
+        dots = np.sum(self.user_factors[u_idx] * self.item_factors[i_idx], axis=1)
+        preds = self.global_mean + self.user_bias[u_idx] + self.item_bias[i_idx] + dots
+        return np.clip(preds, self.min_rating, self.max_rating)
 
     def predict(self, user_id: int, item_id: int) -> float:
         if (
