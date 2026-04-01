@@ -24,7 +24,7 @@ export default function AppNavbar() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { userId, setUserId } = useUser();
+  const { userId, maxUserId, setUserId } = useUser();
   const [inputId, setInputId] = useState(userId.toString());
   const [activeEngine, setActiveEngine] = useState<string>("Demo");
   const engineFetchSeqRef = useRef(0);
@@ -131,7 +131,7 @@ export default function AppNavbar() {
   const handleUserChange = (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = parseInt(inputId, 10);
-    if (!isNaN(parsed) && parsed > 0 && parsed <= 610) {
+    if (!isNaN(parsed) && parsed > 0 && parsed <= maxUserId) {
       if (parsed !== userId) setUserId(parsed);
       setIsMenuOpen(false);
     } else {
@@ -241,7 +241,7 @@ export default function AppNavbar() {
                   onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
                   className="user-id-input"
                   min="1"
-                  max="610"
+                  max={maxUserId.toString()}
                 />
                 <button type="submit" style={{ display: 'none' }}>Set</button>
               </form>

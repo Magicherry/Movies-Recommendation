@@ -4,17 +4,18 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 
 type UserContextType = {
   userId: number;
+  maxUserId: number;
   setUserId: (id: number) => void;
 };
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 const USER_ID_MIN = 1;
-const USER_ID_MAX = 610;
+const DEFAULT_USER_ID_MAX = 999999;
 
 function parseValidUserId(raw: string | null): number | null {
   if (!raw) return null;
   const parsed = parseInt(raw, 10);
-  if (!Number.isInteger(parsed) || parsed < USER_ID_MIN || parsed > USER_ID_MAX) {
+  if (!Number.isInteger(parsed) || parsed < USER_ID_MIN || parsed > DEFAULT_USER_ID_MAX) {
     return null;
   }
   return parsed;
@@ -22,6 +23,28 @@ function parseValidUserId(raw: string | null): number | null {
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [userId, setUserIdState] = useState<number | null>(null);
+  const [maxUserId, setMaxUserId] = useState<number>(DEFAULT_USER_ID_MAX);
+
+  useEffect(() => {
+    // Fetch actual max user ID from the backend
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
+    fetch(`${API_BASE}/users?limit=1&offset=0`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.total && data.total > 0 && data.items && data.items.length > 0) {
+          // Fetch last page to find the actual max user ID
+          fetch(`${API_BASE}/users?limit=1&offset=${data.total - 1}`)
+            .then(res2 => res2.json())
+            .then(data2 => {
+              if (data2.items && data2.items.length > 0) {
+                setMaxUserId(data2.items[0].user_id);
+              }
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     // Load user ID before rendering app content to avoid race/flicker.
@@ -43,7 +66,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         { name: "Pink", color: "#ec4899", hover: "#db2777" },
         { name: "Orange", color: "#f97316", hover: "#ea580c" },
         { name: "Red", color: "#ef4444", hover: "#dc2626" },
-        { name: "Mercedes Petronas", color: "#0ad8b7", hover: "#09b89a" },
+        { name: "Mercedes Petronas", color: "#0ad8b5", hover: "#09b89a" },
         { name: "Ferrari Red", color: "#EF1A2D", hover: "#cc1626" },
         { name: "McLaren Papaya", color: "#FF8000", hover: "#e67300" },
         { name: "Aston Martin Racing Green", color: "#00665E", hover: "#004d47" },
@@ -90,7 +113,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setUserId = (id: number) => {
-    if (!Number.isInteger(id) || id < USER_ID_MIN || id > USER_ID_MAX) return;
+    if (!Number.isInteger(id) || id < USER_ID_MIN || id > maxUserId) return;
     setUserIdState(id);
     localStorage.setItem("streamx_user_id", id.toString());
   };
@@ -100,7 +123,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <UserContext.Provider value={{ userId, setUserId }}>
+    <UserContext.Provider value={{ userId, maxUserId, setUserId }}>
       {children}
     </UserContext.Provider>
   );
