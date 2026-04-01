@@ -113,9 +113,8 @@ def resolve_links_path(
 
     candidates = [
         movies_path.parent / "links.csv",
-        PROJECT_ROOT / "dataset" / "ml-latest-small" / "links.csv",
         PROJECT_ROOT / "dataset" / "ml-latest" / "links.csv",
-        PROJECT_ROOT / "frontend" / "ml-latest-small" / "ml-latest-small" / "links.csv",
+        PROJECT_ROOT / "frontend" / "ml-latest" / "ml-latest" / "links.csv",
     ]
     return _first_existing_path(candidates)
 

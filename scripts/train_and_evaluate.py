@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset-dir",
         type=str,
-        default="dataset/ml-latest-small",
+        default="dataset/ml-latest",
         help="Path to MovieLens dataset directory.",
     )
     parser.add_argument("--test-ratio", type=float, default=0.2, help="Per-user holdout ratio.")

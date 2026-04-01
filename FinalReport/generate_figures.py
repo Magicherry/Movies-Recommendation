@@ -47,8 +47,8 @@ hist1 = load_json(os.path.join(ARTIFACTS, "option1", "training_history.json"))
 hist2 = load_json(os.path.join(ARTIFACTS, "option2", "training_history.json"))
 hist4 = load_json(os.path.join(ARTIFACTS, "option4", "training_history.json"))
 
-ratings_path = os.path.join(PROJECT, "dataset", "ml-latest-small", "ratings.csv")
-movies_path = os.path.join(PROJECT, "dataset", "ml-latest-small", "movies.csv")
+ratings_path = os.path.join(PROJECT, "dataset", "ml-latest", "ratings.csv")
+movies_path = os.path.join(PROJECT, "dataset", "ml-latest", "movies.csv")
 ratings_df = pd.read_csv(ratings_path)
 movies_df = pd.read_csv(movies_path)
 
