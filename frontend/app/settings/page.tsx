@@ -9,12 +9,26 @@ import AccountSettings from "./components/AccountSettings";
 import AdvancedSettings from "./components/AdvancedSettings";
 
 const VALID_TABS = ["ui", "db", "model", "account", "advanced", "about"];
+const DEFAULT_TAB = "ui";
+
+function resolveInitialTab(tabFromUrl: string | null): string {
+  if (tabFromUrl && VALID_TABS.includes(tabFromUrl)) {
+    return tabFromUrl;
+  }
+  if (typeof window !== "undefined") {
+    const savedTab = localStorage.getItem("streamx-settings-last-tab");
+    if (savedTab && VALID_TABS.includes(savedTab)) {
+      return savedTab;
+    }
+  }
+  return DEFAULT_TAB;
+}
 
 export default function SettingsPage() {
   const searchParams = useSearchParams();
   const tabFromUrl = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState(VALID_TABS.includes(tabFromUrl ?? "") ? tabFromUrl! : "ui");
-  const [isDetailView, setIsDetailView] = useState(false);
+  const [activeTab, setActiveTab] = useState(() => resolveInitialTab(tabFromUrl));
+  const [isDetailView, setIsDetailView] = useState(() => resolveInitialTab(tabFromUrl) !== DEFAULT_TAB);
 
   // Sync URL tab to state when URL changes (e.g. back/forward)
   useEffect(() => {
@@ -27,9 +41,13 @@ export default function SettingsPage() {
       const savedTab = localStorage.getItem("streamx-settings-last-tab");
       if (savedTab && VALID_TABS.includes(savedTab)) {
         setActiveTab(savedTab);
+        setIsDetailView(savedTab !== DEFAULT_TAB);
         const url = new URL(window.location.href);
         url.searchParams.set("tab", savedTab);
         window.history.replaceState({}, "", url.pathname + "?" + url.searchParams.toString());
+      } else {
+        setActiveTab(DEFAULT_TAB);
+        setIsDetailView(false);
       }
     }
   }, [searchParams]);
@@ -190,7 +208,7 @@ export default function SettingsPage() {
                     <h3 className="about-section-title">Data Sources</h3>
                     <p className="about-text">
                       Core ratings and movie metadata are from the{" "}
-                      <a href="https://grouplens.org/datasets/movielens/" target="_blank" rel="noopener noreferrer" className="about-link">MovieLens dataset</a>.
+                      <a href="https://grouplens.org/datasets/movielens/" target="_blank" rel="noopener noreferrer" className="about-link">MovieLens Latest dataset (ml-latest)</a>.
                       High-quality posters and backdrops are dynamically fetched via the{" "}
                       <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer" className="about-link">TMDB API</a>.
                     </p>

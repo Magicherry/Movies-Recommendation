@@ -5,6 +5,7 @@ import csv
 import hashlib
 import json
 import pickle
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -23,10 +24,10 @@ def parse_args() -> argparse.Namespace:
         "--model-type",
         type=str,
         default="option1",
-        choices=["option1", "option2", "option3", "option3_ridge", "option3_lasso", "option4"],
+        choices=["option1", "option2", "option3_ridge", "option3_lasso", "option4"],
         help=(
-            "Which model to train: option1 (MF SGD), option2 (Deep NCF), option3 (generic SVD+Ridge/Lasso), "
-            "option3_ridge (fixed Ridge), option3_lasso (fixed Lasso), or option4 (ALS)."
+            "Which model to train: option1 (MF SGD), option2 (Deep NCF), "
+            "option3_ridge (SVD + Ridge), option3_lasso (SVD + Lasso), or option4 (ALS)."
         ),
     )
     parser.add_argument(
@@ -73,7 +74,13 @@ def parse_args() -> argparse.Namespace:
         default=3,
         help="Early stopping patience for option1 (0 disables).",
     )
-    parser.add_argument("--batch-size", type=int, default=256, help="Mini-batch size used by deep model.")
+    parser.add_argument(
+        "--option1-batch-size",
+        type=int,
+        default=16384,
+        help="Mini-batch size for option1 PyTorch training.",
+    )
+    parser.add_argument("--batch-size", type=int, default=256, help="Mini-batch size used by option2 deep model.")
     parser.add_argument(
         "--option2-lr",
         type=float,
@@ -163,32 +170,32 @@ def parse_args() -> argparse.Namespace:
         "--option3-regressor",
         type=str,
         default="ridge",
-        choices=["svd", "ridge", "lasso"],
-        help="Regression head for option3 over SVD latent features.",
+        choices=["ridge", "lasso"],
+        help="Regression head for option3 variants over SVD latent features.",
     )
     parser.add_argument(
         "--option3-reg-alpha",
         type=float,
         default=0.1,
-        help="Regularization strength used by option3 Ridge/Lasso.",
+        help="Regularization strength used by option3 variants.",
     )
     parser.add_argument(
         "--option3-lasso-max-iter",
         type=int,
         default=200,
-        help="Maximum coordinate-descent iterations for option3 Lasso.",
+        help="Maximum coordinate-descent iterations for option3_lasso.",
     )
     parser.add_argument(
         "--option3-lasso-tol",
         type=float,
         default=1e-4,
-        help="Convergence tolerance for option3 Lasso.",
+        help="Convergence tolerance for option3_lasso.",
     )
     parser.add_argument(
         "--option3-bias-reg",
         type=float,
         default=10.0,
-        help="Shrinkage used when estimating option3 user/item biases.",
+        help="Shrinkage used when estimating option3 variant user/item biases.",
     )
     parser.add_argument(
         "--option4-bias-reg",
@@ -220,6 +227,130 @@ def parse_args() -> argparse.Namespace:
         help="Force regeneration of shared train/test split under artifacts/splits.",
     )
     return parser.parse_args()
+
+
+def _flag_was_provided(flag: str) -> bool:
+    return any(arg == flag or arg.startswith(f"{flag}=") for arg in sys.argv[1:])
+
+
+def _detect_cuda_total_memory_gb() -> float | None:
+    try:
+        import torch  # pyright: ignore[reportMissingImports]
+    except Exception:
+        return None
+
+    if not torch.cuda.is_available() or torch.cuda.device_count() <= 0:
+        return None
+    props = torch.cuda.get_device_properties(0)
+    return float(props.total_memory) / float(1024**3)
+
+
+def _auto_tune_model_hparams(args: argparse.Namespace) -> list[str]:
+    notes: list[str] = []
+    model_type = str(args.model_type)
+    cuda_mem_gb = _detect_cuda_total_memory_gb()
+    has_cuda = cuda_mem_gb is not None
+
+    if model_type == "option1":
+        if not _flag_was_provided("--n-factors"):
+            args.n_factors = 96
+            notes.append("option1 n_factors -> 96")
+        if not _flag_was_provided("--epochs"):
+            args.epochs = 40
+            notes.append("option1 epochs -> 40")
+        if not _flag_was_provided("--lr"):
+            args.lr = 0.008
+            notes.append("option1 lr -> 0.008")
+        if not _flag_was_provided("--reg"):
+            args.reg = 0.03
+            notes.append("option1 reg -> 0.03")
+        if not _flag_was_provided("--lr-decay"):
+            args.lr_decay = 0.985
+            notes.append("option1 lr_decay -> 0.985")
+        if not _flag_was_provided("--option1-early-stopping-patience"):
+            args.option1_early_stopping_patience = 6
+            notes.append("option1 early_stopping_patience -> 6")
+        if not _flag_was_provided("--option1-batch-size"):
+            if has_cuda:
+                if cuda_mem_gb >= 20:
+                    args.option1_batch_size = 65536
+                elif cuda_mem_gb >= 12:
+                    args.option1_batch_size = 32768
+                else:
+                    args.option1_batch_size = 16384
+                notes.append(f"option1 batch_size -> {args.option1_batch_size} (auto from GPU memory)")
+            else:
+                args.option1_batch_size = 8192
+                notes.append("option1 batch_size -> 8192 (CPU fallback)")
+
+    elif model_type == "option2":
+        if not _flag_was_provided("--n-factors"):
+            args.n_factors = 64
+            notes.append("option2 n_factors -> 64")
+        if not _flag_was_provided("--epochs"):
+            args.epochs = 24
+            notes.append("option2 epochs -> 24")
+        if not _flag_was_provided("--option2-lr"):
+            args.option2_lr = 7e-4
+            notes.append("option2 lr -> 7e-4")
+        if not _flag_was_provided("--option2-dropout-rate"):
+            args.option2_dropout_rate = 0.10
+            notes.append("option2 dropout -> 0.10")
+        if not _flag_was_provided("--option2-l2-reg"):
+            args.option2_l2_reg = 3e-6
+            notes.append("option2 l2_reg -> 3e-6")
+        if not _flag_was_provided("--option2-validation-split"):
+            args.option2_validation_split = 0.12
+            notes.append("option2 validation_split -> 0.12")
+        if not _flag_was_provided("--option2-lr-plateau-patience"):
+            args.option2_lr_plateau_patience = 3
+            notes.append("option2 lr_plateau_patience -> 3")
+        if not _flag_was_provided("--title-embedding-dim"):
+            args.title_embedding_dim = 48
+            notes.append("option2 title_embedding_dim -> 48")
+        if not _flag_was_provided("--title-num-filters"):
+            args.title_num_filters = 64
+            notes.append("option2 title_num_filters -> 64")
+        if not _flag_was_provided("--batch-size"):
+            if has_cuda:
+                if cuda_mem_gb >= 20:
+                    args.batch_size = 32768
+                elif cuda_mem_gb >= 12:
+                    args.batch_size = 16384
+                else:
+                    args.batch_size = 8192
+                notes.append(f"option2 batch_size -> {args.batch_size} (auto from GPU memory)")
+            else:
+                args.batch_size = 4096
+                notes.append("option2 batch_size -> 4096 (CPU fallback)")
+
+    elif model_type in {"option3_ridge", "option3_lasso"}:
+        if not _flag_was_provided("--n-factors"):
+            args.n_factors = 96
+            notes.append("option3 n_factors -> 96")
+        if not _flag_was_provided("--option3-bias-reg"):
+            args.option3_bias_reg = 8.0
+            notes.append("option3 bias_reg -> 8.0")
+
+        if model_type == "option3_ridge":
+            if not _flag_was_provided("--option3-reg-alpha"):
+                args.option3_reg_alpha = 0.05
+                notes.append("option3_ridge reg_alpha -> 0.05")
+        else:
+            if not _flag_was_provided("--option3-reg-alpha"):
+                args.option3_reg_alpha = 0.02
+                notes.append("option3_lasso reg_alpha -> 0.02")
+            if not _flag_was_provided("--option3-lasso-max-iter"):
+                args.option3_lasso_max_iter = 600
+                notes.append("option3_lasso max_iter -> 600")
+            if not _flag_was_provided("--option3-lasso-tol"):
+                args.option3_lasso_tol = 5e-5
+                notes.append("option3_lasso tol -> 5e-5")
+
+        if has_cuda:
+            notes.append("option3 uses CUDA sparse randomized SVD when available")
+
+    return notes
 
 
 def _normalize_split_frame(frame: pd.DataFrame) -> pd.DataFrame:
@@ -309,6 +440,12 @@ def _load_or_create_shared_split(
 
 def main() -> None:
     args = parse_args()
+    tuned_notes = _auto_tune_model_hparams(args)
+    if tuned_notes:
+        print("[AutoTune] Applied model/hardware-aware defaults:")
+        for line in tuned_notes:
+            print(f"  - {line}")
+
     dataset_dir = Path(args.dataset_dir)
     artifacts_dir = Path(args.artifacts_dir)
     artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -340,6 +477,7 @@ def main() -> None:
             lr=args.lr,
             reg=args.reg,
             lr_decay=args.lr_decay,
+            batch_size=args.option1_batch_size,
             validation_split=args.option1_validation_split,
             early_stopping_patience=args.option1_early_stopping_patience,
             seed=args.seed,
@@ -376,7 +514,7 @@ def main() -> None:
             early_stopping_patience=args.option4_early_stopping_patience,
             seed=args.seed,
         )
-    else:
+    elif effective_model_type in {"option3_ridge", "option3_lasso"}:
         model = Option3SVDHybridRecommender(
             n_factors=args.n_factors,
             regressor=effective_option3_regressor,
@@ -386,6 +524,8 @@ def main() -> None:
             bias_reg=args.option3_bias_reg,
             seed=args.seed,
         )
+    else:
+        raise ValueError(f"Unsupported model type: {effective_model_type}")
 
     if effective_model_type == "option2":
         model.fit(split.train, movies=movies)
@@ -409,6 +549,7 @@ def main() -> None:
             "lr": float(args.lr),
             "reg": float(args.reg),
             "lr_decay": float(args.lr_decay),
+            "batch_size": int(args.option1_batch_size),
             "validation_split": float(args.option1_validation_split),
             "early_stopping_patience": int(args.option1_early_stopping_patience),
         }
@@ -442,7 +583,7 @@ def main() -> None:
             "validation_split": float(args.option4_validation_split),
             "early_stopping_patience": int(args.option4_early_stopping_patience),
         }
-    else:
+    elif effective_model_type in {"option3_ridge", "option3_lasso"}:
         model_hparams = {
             "n_factors": int(args.n_factors),
             "regressor": str(effective_option3_regressor),
@@ -451,6 +592,8 @@ def main() -> None:
             "lasso_tol": float(args.option3_lasso_tol),
             "bias_reg": float(args.option3_bias_reg),
         }
+    else:
+        raise ValueError(f"Unsupported model type: {effective_model_type}")
 
     metrics = {
         "dataset_dir": str(dataset_dir),

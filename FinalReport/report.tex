@@ -1,4 +1,10 @@
 \pdfoutput=1
+% PDF build (references and table/figure numbers): run from this directory
+%   pdflatex report
+%   bibtex report
+%   pdflatex report
+%   pdflatex report
+% Or: latexmk -pdf -bibtex report.tex
 
 \documentclass[11pt]{article}
 
@@ -20,7 +26,7 @@
 
 \graphicspath{{figures/}}
 
-\title{Comparative Study of Collaborative Filtering Methods\\for Movie Recommendation on MovieLens}
+\title{Comparative Study of Collaborative Filtering Methods\\for Movie Recommendation on MovieLens Latest}
 
 \author{
   Yuting Zhou \\
@@ -34,11 +40,11 @@
 \maketitle
 
 \begin{abstract}
-Recommender systems are central to modern online platforms, yet choosing the right collaborative filtering strategy for a given dataset remains an open practical question. We implement and compare four collaborative filtering methods for movie recommendation on the MovieLens-Small dataset (100K ratings, 610 users, 9{,}724 movies): biased matrix factorization with SGD, a deep hybrid model with CNN title and genre encoders, truncated-SVD with Ridge/Lasso calibration, and alternating least squares.
-All models are evaluated on rating prediction (MAE, RMSE) and top-10 recommendation (Precision, Recall, F1, NDCG) under an identical per-user 80/20 holdout split.
-MF-SGD achieves the best rating accuracy (MAE\,=\,0.663, RMSE\,=\,0.867), while SVD-Ridge produces the strongest ranking quality (NDCG@10\,=\,0.108), revealing a notable disconnect between point-wise and ranking evaluation.
-We provide detailed training dynamics analysis, feature-block ablation, and latent-factor interpretation to explain the observed differences.
-A full-stack web demo (\textit{StreamX}) is also developed to showcase the trained recommender in an interactive setting.
+Recommender systems are central to modern online platforms, yet choosing the right collaborative filtering strategy for a given dataset remains an open practical question. We implement and compare four collaborative filtering methods for movie recommendation on the \textbf{MovieLens Latest} corpus (33.8M ratings, 330{,}975 users, 83{,}239 rated movies): biased matrix factorization with SGD (PyTorch), a deep hybrid model with CNN title and genre encoders, truncated-SVD with Ridge/Lasso calibration, and alternating least squares.
+All models are evaluated on rating prediction (MAE, RMSE) and top-10 recommendation (Precision, Recall, F1, NDCG) under an identical per-user 80/20 holdout split (27.1M train / 6.77M test ratings, seed~42).
+The deep hybrid model achieves the strongest overall profile (MAE\,=\,0.595, NDCG@10\,=\,0.0569), while tuned MF-SGD becomes a close second and attains the lowest RMSE (0.8074 vs.\ 0.8075 for the deep model).
+SVD-Ridge/Lasso remain competitive linear baselines, and ALS still underperforms mainly on top-10 ranking quality under our current explicit-feedback configuration.
+We provide training-dynamics analysis, auxiliary feature-block ablation on a smaller subset, and latent-factor discussion, and we ship a full-stack web demo (\textit{StreamX}) that serves the retrained checkpoints.
 \end{abstract}
 
 
@@ -55,7 +61,7 @@ the loss function may be mean squared error, Huber loss, or a ranking-aware surr
 and the model may incorporate side information such as item titles, genres, or temporal signals \cite{zhang2019deep}.
 How these choices interact in practice---especially on a moderately sized, long-tailed dataset---is rarely benchmarked in a controlled, apples-to-apples fashion within a single codebase.
 
-In this project, we address that gap by implementing four distinct collaborative filtering models from scratch, training all of them on the identical MovieLens-Small dataset split, and evaluating them with the same metrics suite.
+In this project, we address that gap by implementing four distinct collaborative filtering models from scratch, training all of them on the identical MovieLens Latest split, and evaluating them with the same metrics suite.
 Our contributions are threefold:
 \begin{itemize}
 \item We provide a controlled comparison of four CF models---MF-SGD, a deep hybrid CNN model, SVD with linear calibration (Ridge/Lasso), and ALS---under identical data conditions.
@@ -69,9 +75,9 @@ Our contributions are threefold:
 
 We formalize the recommendation task as follows.
 Let $\mathcal{U}$ and $\mathcal{I}$ denote the sets of users and items, respectively, and let $r_{ui}\in[0.5,5.0]$ be the rating that user $u$ assigns to item $i$.
-The observed ratings form a sparse matrix $\mathbf{R}\in\mathbb{R}^{|\mathcal{U}|\times|\mathcal{I}|}$, where only a small fraction of entries are known (density $\approx$ 1.7\%).
+The observed ratings form a sparse matrix $\mathbf{R}\in\mathbb{R}^{|\mathcal{U}|\times|\mathcal{I}|}$, where only a small fraction of entries are known (density $\approx$ 0.12\% on this corpus).
 
-\paragraph{Task 1: Rating Prediction.}
+\paragraph{Rating Prediction.}
 Given a training set $\mathcal{D}_\text{train}$ of observed $(u,i,r_{ui})$ triples, learn a function $\hat{r}:\mathcal{U}\times\mathcal{I}\to\mathbb{R}$ that minimizes the prediction error on held-out ratings $\mathcal{D}_\text{test}$.
 Performance is measured by Mean Absolute Error (MAE) and Root Mean Squared Error (RMSE):
 \begin{align}
@@ -79,7 +85,7 @@ Performance is measured by Mean Absolute Error (MAE) and Root Mean Squared Error
 \text{RMSE} &= \sqrt{\frac{1}{|\mathcal{D}_\text{test}|}\sum_{(u,i)\in\mathcal{D}_\text{test}} (r_{ui}-\hat{r}_{ui})^2}.
 \end{align}
 
-\paragraph{Task 2: Top-$N$ Recommendation.}
+\paragraph{Top-$N$ Recommendation.}
 For each user $u$, produce a ranked list of $N=10$ items that $u$ has not yet interacted with.
 The quality of the list is measured against the held-out items in $\mathcal{D}_\text{test}$ via Precision@$N$, Recall@$N$, F1@$N$, and NDCG@$N$.
 Items are ranked by descending predicted rating.
@@ -134,28 +140,28 @@ $b_u \leftarrow b_u + \eta(e_{ui}-\lambda b_u)$,
 $\mathbf{p}_u \leftarrow \mathbf{p}_u + \eta(e_{ui}\,\mathbf{q}_i - \lambda\,\mathbf{p}_u)$,
 and symmetrically for $b_i$ and $\mathbf{q}_i$.
 
-Key design choices: latent dimension $k{=}48$, learning rate $\eta{=}0.005$ with multiplicative decay $0.96{\times}$ per epoch, regularization $\lambda{=}0.04$, a 10\% validation split for early stopping (patience 8), and 50 maximum epochs.
+Key design choices on MovieLens Latest: latent dimension $k{=}128$, learning rate $\eta{=}0.0035$ with multiplicative decay $0.995{\times}$ per epoch, regularization $\lambda{=}0.04$, minibatches of 65{,}536 ratings, a 10\% validation split for early stopping (patience 4), and up to 40 epochs.
 Factors are initialized from $\mathcal{N}(0,0.1)$.
-We found that lower regularization than the typical default of 0.05 substantially improves ranking quality at minimal cost to rating accuracy.
+On this scale, validation error tends to bottom out within the first few epochs while training error keeps falling, so the best checkpoint is restored early rather than training to convergence.
 
 \subsection{Deep Hybrid Model}
 
 This model extends the two-tower architecture with item content features.
-The \textbf{user tower} maps a user ID through an embedding layer ($k{=}48$) followed by dropout.
+The \textbf{user tower} maps a user ID through an embedding layer ($k{=}128$) followed by dropout.
 The \textbf{item tower} concatenates three feature streams:
 
 \begin{enumerate}
-\item \textbf{Item-ID embedding} ($k{=}48$): captures collaborative signal.
-\item \textbf{Title encoder}: tokenized movie titles (max 15 tokens, vocabulary 20{,}000) are embedded ($d{=}32$), processed by three parallel Conv1D layers (kernel sizes 2, 3, 4; 48 filters each), globally max-pooled, concatenated, and projected to $k{=}48$ via a dense layer.
+\item \textbf{Item-ID embedding} ($k{=}128$): captures collaborative signal.
+\item \textbf{Title encoder}: tokenized movie titles (max 15 tokens, vocabulary 20{,}000) are embedded ($d{=}64$), processed by three parallel Conv1D layers (kernel sizes 2, 3, 4; 128 filters each), globally max-pooled, concatenated, and projected to $k{=}128$ via a dense layer.
 This multi-kernel CNN design follows the architecture of Kim~\cite{kim2014convolutional}.
-\item \textbf{Genre encoder}: genre tokens (max 4) are embedded ($d{=}12$) and average-pooled.
+\item \textbf{Genre encoder}: genre tokens (max 4) are embedded ($d{=}8$) and average-pooled.
 \end{enumerate}
 
-The concatenated item features pass through a hidden layer ($2k{=}96$, ReLU) and a final projection to $\mathbb{R}^k$.
+The concatenated item features pass through a hidden layer ($2k{=}256$, ReLU) and a final projection to $\mathbb{R}^k$.
 The prediction is $\hat{r}_{ui} = \mu + b_u + b_i + \mathbf{p}_u^\top \mathbf{q}_i$, where $\mathbf{p}_u$ and $\mathbf{q}_i$ are the tower outputs.
 
-Training uses Huber loss ($\delta{=}1.0$) with Adam (initial LR $8{\times}10^{-4}$, gradient clipping at norm 1), ReduceLROnPlateau (factor 0.5, patience 3), 25\% dropout, $L_2$ regularization $10^{-5}$, rating-weighted sampling ($w \propto 1 + r_\text{scaled}^{1.25}$), 48 CNN filters per kernel, genre embedding dimension 12, and batch size 256.
-The best checkpoint on validation Huber loss is restored after 40 epochs of training.
+Training uses Huber loss ($\delta{=}1.0$) with Adam (initial LR $5{\times}10^{-4}$, gradient clipping at norm 1), ReduceLROnPlateau (factor 0.5, patience 3), 12\% dropout, $L_2$ regularization $4{\times}10^{-6}$, rating-weighted sampling ($w \propto 1 + r_\text{scaled}^{1.25}$), a small popularity prior on logits, batch size 32{,}768 on GPU, and a 12\% validation split.
+The best checkpoint on validation Huber loss is restored after 45 epochs of training.
 
 \subsection{SVD Hybrid with Ridge/Lasso}
 
@@ -168,9 +174,9 @@ Finally, a linear calibration layer is trained on top of the latent features:
 where $\phi(u,i) = [\mathbf{p}_u \odot \mathbf{q}_i;\; b_u;\; b_i] \in \mathbb{R}^{k+2}$ concatenates the element-wise product of latent factors with bias terms.
 The weight vector $\mathbf{w}$ is estimated by either Ridge regression (closed-form) or Lasso regression (coordinate descent).
 
-We experiment with two configurations: \textbf{SVD-Ridge} ($k{=}32$, $\alpha{=}1.0$) and \textbf{SVD-Lasso} ($k{=}32$, $\alpha{=}0.001$, max 2{,}000 iterations).
-Both use bias regularization $\lambda_b{=}25$.
-The higher Ridge regularization than the typical default pushes the calibration layer toward more conservative, better-generalized predictions; we found that this substantially improves top-$N$ ranking while leaving rating accuracy largely unchanged.
+We experiment with two configurations: \textbf{SVD-Ridge} ($k{=}128$, $\alpha{=}0.02$) and \textbf{SVD-Lasso} ($k{=}96$, $\alpha{=}0.01$, coordinate descent with up to 1200 iterations, tolerance $2{\times}10^{-5}$).
+Both use bias regularization $\lambda_b{=}10$.
+On MovieLens Latest, moderate $\alpha$ balances calibration stability with the high effective rank of the interaction matrix after centering.
 
 \subsection{Alternating Least Squares}
 
@@ -180,16 +186,17 @@ We augment each factor matrix with a bias column, yielding the update:
 \begin{equation}
 [\mathbf{p}_u; b_u] = \bigl(\mathbf{Q}_u^\top \mathbf{Q}_u + \Lambda\bigr)^{-1}\mathbf{Q}_u^\top \mathbf{y}_u,
 \end{equation}
-where $\mathbf{Q}_u$ is the matrix of item factors for items rated by user $u$, $\mathbf{y}_u$ is the vector of centered ratings, and $\Lambda = \text{diag}(\lambda,\ldots,\lambda,\lambda_b)$ applies separate regularization to factors ($\lambda{=}12.0$) and bias ($\lambda_b{=}40.0$).
+where $\mathbf{Q}_u$ is the matrix of item factors for items rated by user $u$, $\mathbf{y}_u$ is the vector of centered ratings, and $\Lambda = \text{diag}(\lambda,\ldots,\lambda,\lambda_b)$ applies separate regularization to factors ($\lambda{=}0.08$ in our large-scale preset) and bias ($\lambda_b{=}8.0$).
 Symmetrically for item factors.
-We use $k{=}4$ latent factors with a 10\% validation split and early stopping (patience 10, up to 80 iterations).
-The deliberately small latent dimension and heavy regularization address ALS's tendency to overfit on small explicit-feedback datasets by constraining each closed-form solve, effectively trading memorization for generalization.
+We use $k{=}64$ latent factors with a 10\% validation split and early stopping (patience 4, up to 20 iterations).
+The same configuration that stabilizes ALS on small data must be revisited when millions of ratings are present: rank and regularization interact with block-wise solvers and sparsity patterns at web scale.
 
 
 \section{Dataset}
 
-We use the \textbf{MovieLens-Small} dataset \cite{harper2015movielens}, a widely adopted benchmark for collaborative filtering research.
-Table~\ref{tab:dataset} summarizes the key statistics.
+We use the \textbf{MovieLens Latest} (\texttt{ml-latest}) snapshot \cite{harper2015movielens}, containing explicit star ratings through July~2023.
+GroupLens distributes it as a \emph{development} release; we use it here for large-scale engineering stress-testing and to study how classical CF baselines behave at tens of millions of interactions.
+Table~\ref{tab:dataset} summarizes statistics computed from \texttt{ratings.csv} and \texttt{movies.csv} in our checkout.
 
 \begin{table}[t]
 \centering
@@ -198,45 +205,44 @@ Table~\ref{tab:dataset} summarizes the key statistics.
 \toprule
 \textbf{Statistic} & \textbf{Value} \\
 \midrule
-Users & 610 \\
-Items (movies) & 9{,}724 \\
-Ratings & 100{,}836 \\
+Users & 330{,}975 \\
+Items (movies with $\geq$1 rating) & 83{,}239 \\
+Ratings & 33{,}832{,}162 \\
 Rating scale & 0.5 -- 5.0 (half-star) \\
-Density & 1.70\% \\
-Sparsity & 98.30\% \\
-Mean rating & 3.50 \\
-Std.\ of ratings & 1.04 \\
-Genres & 19 unique \\
-Release years & 1902 -- 2018 \\
+Density (nnz$/|\mathcal{U}||\mathcal{I}|$) & $\approx$0.12\% \\
+Sparsity & $\approx$99.88\% \\
+Mean rating & 3.54 \\
+Std.\ of ratings & 1.06 \\
+Genres (multi-label) & 19 unique \\
 \midrule
-Median ratings/user & 70.5 \\
-Median ratings/item & 3.0 \\
+Median ratings/user & 31.0 \\
+Median ratings/item & 5.0 \\
 \bottomrule
 \end{tabular}
-\caption{MovieLens-Small dataset summary statistics.}
+\caption{MovieLens Latest summary statistics used in this study.}
 \label{tab:dataset}
 \end{table}
 
 The dataset exhibits two characteristic properties of real-world recommender data.
-First, the rating distribution is left-skewed (skewness $-0.64$): users tend to rate items they enjoy, so ratings of 3.5--4.0 are far more common than ratings below 2.0 (Figure~\ref{fig:rating_dist}).
-Second, both user activity and item popularity follow heavy-tailed distributions (Gini coefficients of 0.60 and 0.72, respectively; Figure~\ref{fig:user_item_dist}), meaning a small fraction of power users and blockbuster movies account for a disproportionate share of the interaction data.
+First, the rating distribution is left-skewed (skewness $\approx -0.72$): ratings of 4.0 (8{,}835{,}955) and 3.0 (6{,}400{,}664) are the two most frequent values (Figure~\ref{fig:rating_dist}).
+Second, both user activity and item popularity are extremely heavy-tailed (Gini coefficients $\approx 0.70$ and $0.95$, respectively; Figure~\ref{fig:user_item_dist}), reflecting a long tail of casual raters and niche titles alongside blockbuster movies.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.85\columnwidth]{rating_dist.pdf}
-\caption{Distribution of rating values.  Ratings of 4.0 (26{,}818) and 3.0 (20{,}047) dominate, reflecting a positive-skew selection bias.}
+\caption{Distribution of rating values on MovieLens Latest (counts in thousands on the vertical axis).}
 \label{fig:rating_dist}
 \end{figure}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{user_item_dist.pdf}
-\caption{User activity (left) and item popularity (right) on a log scale, showing heavy-tailed distributions.}
+\caption{User activity (left) and item popularity (right) on a log-scaled frequency axis, showing heavy-tailed distributions.}
 \label{fig:user_item_dist}
 \end{figure}
 
-The genre distribution is also imbalanced.
-Drama (4{,}361 movies), Comedy (3{,}756), and Thriller (1{,}894) are the three most common genres, while niche genres such as Film-Noir (87) and IMAX (158) are comparatively rare (Figure~\ref{fig:genre_dist}).
+The genre distribution is also imbalanced at the movie-metadata level.
+Drama, Comedy, and Thriller dominate the catalog, while niche genres are comparatively rare (Figure~\ref{fig:genre_dist}).
 
 \begin{figure}[t]
 \centering
@@ -246,47 +252,56 @@ Drama (4{,}361 movies), Comedy (3{,}756), and Thriller (1{,}894) are the three m
 \end{figure}
 
 \paragraph{Data Splitting.}
-Following the standard per-user random holdout protocol recommended in the project description, for each user we randomly assign 80\% of their ratings to the training set and 20\% to the test set (random seed 42, ensuring at least one test item per user).
-This yields 80{,}672 training ratings and 20{,}164 test ratings.
-All models share exactly the same split, identified by a deterministic hash for reproducibility.
+Following a standard per-user random holdout protocol, for each user we randomly assign 80\% of their ratings to the training set and 20\% to the test set (random seed 42).
+This yields 27{,}065{,}494 training ratings and 6{,}766{,}668 test ratings.
+All models share exactly the same split, identified by a deterministic hash (\texttt{953d2ab2\ldots}) for reproducibility.
 
 
 \section{Experiments}
 
 \subsection{Experimental Setup}
 
-All models are implemented in Python using NumPy for numerical computation; Option~2 additionally uses TensorFlow/Keras for the neural network.
-Models are evaluated on the shared test split with two evaluation protocols:
+All models are implemented in Python~3.11 with a shared tabular data pipeline.
+\textbf{Option~1} (MF-SGD) and \textbf{Option~2} (deep hybrid) were migrated from the earlier NumPy and TensorFlow stack to \textbf{PyTorch}: training uses GPU acceleration when available, Adam-family optimizers with gradient clipping, and large minibatches so that tens of millions of ratings remain tractable in wall-clock time.
+\textbf{Option~3} (SVD + Ridge/Lasso) relies on sparse linear algebra and calibrated linear regressors from a standard machine-learning library; \textbf{Option~4} (ALS) is a NumPy-based alternating least-squares loop with validation-based early stopping.
+
+Compared with the earlier small-dataset workflow, we now train and evaluate through one consolidated driver in the repository: MovieLens Latest is the default data source, the per-user 80/20 split is built once and reused for every model so that results are directly comparable, and each training run persists evaluation metrics, serialized parameters, and per-epoch history alongside the corresponding model variant.
+Recommended batch sizes for GPU memory and other practical presets are written up separately in the project documentation.
+
+Models are evaluated on the shared test split with two protocols:
 
 \begin{itemize}
-\item \textbf{Rating prediction}: MAE and RMSE computed over all 20{,}164 test ratings.
-\item \textbf{Top-10 recommendation}: for each user, the model ranks all unseen items by predicted rating and selects the top~10.  The recommended list is evaluated against all held-out test items for that user (i.e., \texttt{topn\_relevance = all\_test}).
+\item \textbf{Rating prediction}: MAE and RMSE computed over all 6{,}766{,}668 test ratings.
+\item \textbf{Top-10 recommendation}: for each user, the model ranks candidate items by predicted rating and selects the top~10.  Every held-out test item for that user is treated as relevant when computing Precision, Recall, F1, and NDCG (holdout-style evaluation as used in the course setting).
 \end{itemize}
+To ensure metric reliability across implementations, the evaluation pipeline now includes a consistency guard that checks \texttt{predict\_batch} against scalar \texttt{predict} on a sampled subset and falls back automatically if a mismatch is detected.
 
 \subsection{Hyperparameters}
 
-Table~\ref{tab:hparams} summarizes the key hyperparameters for each model, chosen via preliminary validation-set tuning.
+Table~\ref{tab:hparams} summarizes the key hyperparameters for each model, chosen via preliminary validation-set tuning on MovieLens Latest.
 
 \begin{table}[t]
 \centering
-\small
+\footnotesize
+\setlength{\tabcolsep}{3pt}
 \begin{tabular}{lcccc}
 \toprule
  & \textbf{MF-SGD} & \textbf{Deep} & \textbf{SVD-R/L} & \textbf{ALS} \\
 \midrule
-$k$ (factors) & 48 & 48 & 32 & 4 \\
-Epochs & 50 & 40 & 1 & 80 \\
-Learning rate & 0.005 & 0.0008 & -- & -- \\
-LR decay & $0.96\times$ & plateau & -- & -- \\
-Reg.\ $\lambda$ & 0.04 & $10^{-5}$ & 1.0/0.001 & 12.0 \\
-Bias reg. & -- & -- & 25.0 & 40.0 \\
-Dropout & -- & 0.25 & -- & -- \\
-Val.\ split & 0.1 & 0.1 & -- & 0.1 \\
-Early stop & pat.\ 8 & best ckpt & -- & pat.\ 10 \\
+$k$ (factors) & 128 & 128 & 128 / 96 & 64 \\
+Epochs & 40 & 45 & 1 & 20 \\
+Batch size & 65k & 32k & -- & -- \\
+Learning rate & 0.0035 & 0.0005 & -- & -- \\
+LR decay & $0.995\times$ & plateau & -- & -- \\
+Reg.\ $\lambda$ / $\alpha$ & 0.04 & $4{\times}10^{-6}$ $L_2$ & 0.02 / 0.01 & 0.08 \\
+Bias reg. & -- & -- & 10.0 & 8.0 \\
+Dropout & -- & 0.12 & -- & -- \\
+Val.\ split & 0.10 & 0.12 & -- & 0.10 \\
+Early stop & pat.\ 4 & best ckpt & -- & pat.\ 4 \\
 Loss & MSE & Huber & -- & MSE \\
 \bottomrule
 \end{tabular}
-\caption{Key hyperparameter settings for each model after tuning.}
+\caption{Key hyperparameter settings for each model on MovieLens Latest; full command-line presets are in \texttt{docs/TRAINING\_PARAMETERS.md}.}
 \label{tab:hparams}
 \end{table}
 
@@ -295,10 +310,9 @@ Loss & MSE & Huber & -- & MSE \\
 
 \subsection{Rating Prediction}
 
-Table~\ref{tab:rating_results} reports the rating prediction performance across all five model configurations after hyperparameter tuning.
-The Deep Hybrid model achieves the lowest MAE (0.666), followed closely by MF-SGD (MAE\,=\,0.670) and ALS (MAE\,=\,0.670).
-Notably, the tuned ALS model achieves a remarkably low RMSE (0.867), matching MF-SGD and representing a dramatic improvement over the un-tuned ALS baseline (MAE\,=\,0.914, RMSE\,=\,1.209).
-The SVD-based models perform moderately on rating prediction, with MAE around 0.715.
+Table~\ref{tab:rating_results} reports rating prediction on the 6.77M held-out ratings.
+The \textbf{Deep Hybrid} model achieves the best MAE (0.5948), while \textbf{MF-SGD} is now a strong runner-up and attains a marginally lower RMSE (0.8074 vs.\ 0.8075).
+\textbf{SVD-Ridge} and \textbf{SVD-Lasso} remain a competitive linear-calibration tier (MAE $\approx$0.667--0.671), and \textbf{ALS} improves compared with earlier presets but still trails the top two models.
 
 \begin{table}[t]
 \centering
@@ -307,65 +321,85 @@ The SVD-based models perform moderately on rating prediction, with MAE around 0.
 \toprule
 \textbf{Model} & \textbf{MAE}$\downarrow$ & \textbf{RMSE}$\downarrow$ \\
 \midrule
-MF-SGD             & 0.6697 & 0.8732 \\
-Deep Hybrid        & \textbf{0.6661} & \textbf{0.8922} \\
-SVD-Ridge          & 0.7153 & 0.9318 \\
-SVD-Lasso          & 0.7152 & 0.9315 \\
-ALS                & 0.6696 & 0.8673 \\
+Deep Hybrid        & \textbf{0.5948} & 0.8075 \\
+MF-SGD             & 0.6035 & \textbf{0.8074} \\
+SVD-Ridge          & 0.6669 & 0.8671 \\
+SVD-Lasso          & 0.6713 & 0.8740 \\
+ALS                & 0.6958 & 0.9438 \\
 \bottomrule
 \end{tabular}
-\caption{Rating prediction results after tuning.  Lower is better.  The Deep Hybrid achieves the best MAE, while ALS achieves the best RMSE after proper regularization.}
+\caption{Rating prediction on MovieLens Latest (per-user 80/20 test split).  Lower is better.}
 \label{tab:rating_results}
 \end{table}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{model_comparison_rating.pdf}
-\caption{Side-by-side MAE and RMSE across all models.}
+\caption{Side-by-side MAE and RMSE across all models (MovieLens Latest).}
 \label{fig:rating_comparison}
 \end{figure}
 
-A key finding is that all four model families achieve comparable rating accuracy after proper tuning, with the spread between the best and worst MAE shrinking from 0.251 (un-tuned) to just 0.049 (tuned).
-The Deep Hybrid model benefits from increased dropout (0.25) and $L_2$ regularization ($10^{-5}$), extending its best epoch from 5 to~9 and improving MAE by 1.2\% (Figure~\ref{fig:deep_curves}).
-MF-SGD's lower regularization ($\lambda{=}0.04$ vs.\ $0.05$) and slower learning rate ($\eta{=}0.005$) allow the model to train for all 50 epochs without early stopping, reaching a slightly higher MAE but substantially better ranking (Figure~\ref{fig:mf_curves}).
-The most dramatic improvement comes from ALS, where heavy regularization ($\lambda{=}12.0$) and very few latent factors ($k{=}4$) transform it from the worst model (MAE\,=\,0.914) to one of the best (MAE\,=\,0.670).
+Training curves illustrate distinct behaviors at scale.
+The Deep Hybrid converges smoothly under Huber loss with GPU minibatches (Figure~\ref{fig:deep_curves}).
+MF-SGD still reaches its best validation point early and relies on checkpoint restoration (Figure~\ref{fig:mf_curves}), but its tuned configuration now generalizes much better than before.
+ALS exhibits the same train--validation divergence pattern under the present $(k{=}64,\lambda{=}0.08)$ configuration, which explains why its ranking metrics remain weak (Figure~\ref{fig:als_curves}).
 
 
-\subsection{Top-$N$ Recommendation}
+\subsection{\texorpdfstring{Top-$N$}{Top-N} Recommendation}
 
 \begin{table}[t]
 \centering
-\small
+\footnotesize
+\setlength{\tabcolsep}{3pt}
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Model} & \textbf{P@10}$\uparrow$ & \textbf{R@10}$\uparrow$ & \textbf{F1@10}$\uparrow$ & \textbf{NDCG@10}$\uparrow$ \\
 \midrule
-MF-SGD      & 0.0603 & 0.0252 & 0.0282 & 0.0658 \\
-Deep Hybrid & 0.0284 & 0.0103 & 0.0118 & 0.0337 \\
-SVD-Ridge   & 0.1259 & 0.0525 & 0.0606 & 0.1482 \\
-SVD-Lasso   & 0.1257 & 0.0525 & 0.0606 & 0.1478 \\
-ALS         & \textbf{0.1325} & \textbf{0.0644} & \textbf{0.0695} & \textbf{0.1573} \\
+Deep Hybrid & \textbf{0.0418} & \textbf{0.0368} & \textbf{0.0250} & \textbf{0.0569} \\
+MF-SGD      & 0.0355 & 0.0309 & 0.0221 & 0.0502 \\
+SVD-Lasso   & 0.0302 & 0.0069 & 0.0093 & 0.0352 \\
+SVD-Ridge   & 0.0265 & 0.0054 & 0.0077 & 0.0309 \\
+ALS         & 0.0003 & 0.0002 & 0.0001 & 0.0004 \\
 \bottomrule
 \end{tabular}
-\caption{Top-10 recommendation results after tuning.  Higher is better.  After regularization tuning, ALS achieves the best ranking performance.}
+\caption{Top-10 recommendation on MovieLens Latest (\texttt{all\_test} relevance).  Higher is better.  Absolute values are small because each user has many held-out test items.}
 \label{tab:topn_results}
 \end{table}
 
-Table~\ref{tab:topn_results} and Figure~\ref{fig:topn_comparison} present the ranking evaluation after hyperparameter tuning.
-The most striking finding is the \textbf{reversal of model rankings compared to un-tuned baselines}: ALS, previously the worst-performing model, now achieves the highest NDCG@10 (0.157), followed closely by SVD-Ridge (0.148) and SVD-Lasso (0.148).
-This underscores the importance of careful hyperparameter optimization---the un-tuned ALS had NDCG@10\,=\,0.036, representing a $4.4{\times}$ improvement after tuning.
+Table~\ref{tab:topn_results} and Figure~\ref{fig:topn_comparison} summarize ranking metrics.
+On this corpus and protocol, the \textbf{Deep Hybrid} model ranks best across Precision, Recall, F1, and NDCG@10.
+MF-SGD is now a clear second tier and substantially narrows the gap to Deep Hybrid on all top-10 metrics.
+SVD-Lasso slightly edges SVD-Ridge on NDCG, while ALS remains far behind.
 
-The disconnect between rating accuracy and ranking quality, a well-known phenomenon in recommender systems \cite{rendle2009bpr}, persists but with a new twist: the tuned ALS achieves both competitive MAE (0.670) \textit{and} the best NDCG.
-This is because heavy regularization with very few latent factors ($k{=}4$) forces ALS to focus on the most discriminative preference dimensions rather than memorizing individual ratings.
-
-SVD-Ridge and SVD-Lasso also benefit substantially from increased Ridge regularization ($\alpha{=}1.0$, up from $0.1$), which improves NDCG by 37\% relative to the un-tuned baseline.
-MF-SGD shows a 49\% NDCG improvement when trained with lower regularization ($\lambda{=}0.04$ vs.\ $0.05$).
+The very low ALS top-$N$ scores are consistent with its poor point-wise calibration: when predicted scores poorly separate relevant and irrelevant items, fixed cutoffs at $N{=}10$ collapse precision-oriented metrics.
+This is \emph{not} a claim that ALS is inherently unsuitable at scale---only that the present hyperparameters and stopping criterion do not yield competitive scores relative to the deep and SVD-hybrid baselines under identical data conditions.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{model_comparison_topn.pdf}
-\caption{Top-10 recommendation metrics across all models.}
+\caption{Top-10 recommendation metrics across all models (MovieLens Latest).}
 \label{fig:topn_comparison}
+\end{figure}
+
+To visualize cross-metric trade-offs more directly, we also generate two additional summary plots from the latest \texttt{metrics.json} files.
+Figure~\ref{fig:metrics_scatter_radar} (left) shows the MAE--NDCG frontier, where Deep Hybrid and MF-SGD occupy the best region.
+Figure~\ref{fig:metrics_scatter_radar} (right) normalizes all five evaluation metrics to compare overall balance across models.
+
+\begin{figure}[t]
+\centering
+\begin{subfigure}[t]{0.48\columnwidth}
+\centering
+\includegraphics[width=\linewidth]{metrics_scatter_mae_ndcg.pdf}
+\caption{MAE vs.\ NDCG@10}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\columnwidth}
+\centering
+\includegraphics[width=\linewidth]{metrics_radar.pdf}
+\caption{Normalized multi-metric radar}
+\end{subfigure}
+\caption{Additional metrics-summary diagnostics generated by \texttt{scripts/plot\_training\_extras.py}.}
+\label{fig:metrics_scatter_radar}
 \end{figure}
 
 
@@ -374,43 +408,41 @@ MF-SGD shows a 49\% NDCG improvement when trained with lower regularization ($\l
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{training_mf_sgd.pdf}
-\caption{MF-SGD training and validation curves over 50 epochs.  The gap between train and validation MAE widens gradually, indicating mild overfitting controlled by the lower learning rate ($\eta{=}0.005$) and reduced regularization ($\lambda{=}0.04$).}
+\caption{MF-SGD on MovieLens Latest: training error decreases while validation MAE/RMSE worsen after the first epochs, motivating early stopping and checkpoint restoration.}
 \label{fig:mf_curves}
 \end{figure}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{training_deep.pdf}
-\caption{Deep Hybrid training dynamics.  Left: Huber loss converges rapidly and the validation loss reaches its minimum at epoch~9 (improved from epoch~5 before tuning) before stagnating.  Right: validation MAE and RMSE stabilize early.}
+\caption{Deep Hybrid training dynamics under GPU-scale minibatches: Huber loss and validation errors stabilize over 45 epochs with learning-rate reductions on plateau.}
 \label{fig:deep_curves}
 \end{figure}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{training_als.pdf}
-\caption{ALS training and validation curves over 80 epochs with heavy regularization ($\lambda{=}12$, $k{=}4$).  Unlike the un-tuned ALS that drove training error to near-zero, the tuned version converges smoothly with a controlled train--validation gap.}
+\caption{ALS ($k{=}64$, $\lambda{=}0.08$): training error decreases monotonically while validation error plateaus then drifts, indicating a mismatch between the current regularization/rank preset and ranking quality on the full split.}
 \label{fig:als_curves}
 \end{figure}
 
-The training curves reveal distinct convergence behaviors:
+The training curves reveal distinct convergence behaviors at web scale:
 
-\paragraph{MF-SGD} (Figure~\ref{fig:mf_curves}) shows smooth, monotonic convergence on both training and validation sets over 50 epochs.
-The lower learning rate ($\eta{=}0.005$) and regularization ($\lambda{=}0.04$) compared to typical defaults allow the model to explore longer without early stopping triggering.
-The controlled train--validation gap indicates effective generalization.
+\paragraph{MF-SGD} (Figure~\ref{fig:mf_curves}) shows rapid initial progress on the training objective, but validation MAE and RMSE reverse direction within the first several epochs.
+This pattern is common when aggressively minimizing squared error on massive data without additional ranking-aware objectives.
 
-\paragraph{Deep Hybrid} (Figure~\ref{fig:deep_curves}) converges much faster---the validation loss reaches its minimum at epoch~9 (improved from epoch~5 in the un-tuned version thanks to stronger dropout and $L_2$ regularization).
-The ReduceLROnPlateau callback reduces the learning rate after the initial rapid convergence, effectively freezing parameter updates in later epochs.
-The model's capacity is substantially larger than MF-SGD's (multi-layer CNN encoder, dense layers), which accelerates initial learning but offers diminishing returns on this dataset size.
+\paragraph{Deep Hybrid} (Figure~\ref{fig:deep_curves}) benefits from GPU throughput (batch size 32{,}768), Huber robustness, and architectural capacity for content features; validation metrics improve steadily relative to the classical baselines under the same split.
 
-\paragraph{ALS} (Figure~\ref{fig:als_curves}) presents the most dramatic transformation.
-With only $k{=}4$ factors and $\lambda{=}12.0$, the tuned ALS converges smoothly over 80 iterations with well-controlled overfitting, in sharp contrast to the un-tuned version (48 factors, $\lambda{=}0.05$) that drove training error to near-zero while achieving the worst test performance.
-The validation-based early stopping (added as part of our optimization) ensures the model is restored to its best generalization state.
+\paragraph{ALS} (Figure~\ref{fig:als_curves}) continues to reduce training error across iterations, yet validation error stops improving early; the restored checkpoint therefore corresponds to a much earlier iterate than the final training state.
+In the latest run with this preset, early stopping triggers at epoch 12 and restores the epoch-8 checkpoint.
+A dedicated large-scale ALS study (rank sweep, per-block regularization, implicit feedback variants) is left for future work.
 
 
 \subsection{Feature-Block Ablation}
 \label{sec:ablation}
 
-To understand which aspects of the data are most informative for rating prediction beyond collaborative filtering, we perform a feature-block ablation using a linear regression model trained on hand-crafted features extracted from the training data (Table~\ref{tab:ablation}).
+To understand which aspects of the data are most informative for rating prediction beyond collaborative filtering, we previously performed a feature-block ablation using a linear regression model on \textbf{MovieLens-Small} (auxiliary study; Table~\ref{tab:ablation}).
+We retain it as qualitative guidance rather than a quantitative claim on MovieLens Latest.
 
 We construct three feature blocks: (1) \textbf{Content} features include genre indicators, genre count, release year, and interaction year; (2) \textbf{Engagement} features include log user activity, log item popularity, log tag count, and log unique tag count; (3) \textbf{Noise} features are two random Gaussian features serving as a control.
 
@@ -428,79 +460,64 @@ w/o Engagement & -- & 0.0815 & 0.0302 \\
 w/o Noise (control) & -- & 0.1117 & $-$0.0001 \\
 \bottomrule
 \end{tabular}
-\caption{Feature-block ablation for a linear rating prediction model.  $\Delta R^2$ is the drop in test $R^2$ when a block is removed.  Content features contribute the most marginal variance explained.}
+\caption{Auxiliary feature-block ablation (MovieLens-Small, linear probe).  $\Delta R^2$ is the drop in test $R^2$ when a block is removed.}
 \label{tab:ablation}
 \end{table}
 
-Content features account for the largest marginal contribution ($\Delta R^2 = 0.053$), driven primarily by genre indicators: Drama ($+0.092$), Animation ($+0.097$), and Documentary ($+0.066$) positively correlate with ratings, while Children ($-0.094$) and Comedy ($-0.050$) correlate negatively.
-Engagement features contribute $\Delta R^2 = 0.030$, with item popularity having the strongest positive effect ($\beta = 0.147$) and user activity a negative one ($\beta = -0.111$), reflecting the tendency of highly active users to be more critical raters.
-The noise features contribute essentially zero ($\Delta R^2 \approx 0$), validating the experimental setup.
-
-These findings motivate the Deep Hybrid model's incorporation of genre and title features in its item tower, though the relatively small $R^2$ of the full linear model (0.112) confirms that most rating variance is user- and item-specific and is better captured by latent factors.
+On the small subset, content features account for the largest marginal contribution ($\Delta R^2 = 0.053$), engagement for $\Delta R^2 = 0.030$, and noise is negligible.
+These findings still motivate the Deep Hybrid model's incorporation of genre and title features in its item tower, while acknowledging that most variance remains user- and item-specific and is better captured by latent factors.
 
 
 \subsection{Latent Factor Interpretation}
 
-We interpret the latent factors learned by MF-SGD by applying PCA to the item factor matrix $\mathbf{Q}\in\mathbb{R}^{8986\times 48}$ and correlating the top principal components with genre indicators and release year.
-
-The first component (3.4\% of variance) separates mainstream action/comedy films (positive loadings: \textit{Miss Congeniality}, \textit{Mission: Impossible II}) from acclaimed dramas (\textit{Pulp Fiction}, \textit{Fight Club}, \textit{The Godfather}).
-The second component (3.0\%) distinguishes classic musicals/dramas (\textit{Wizard of Oz}, \textit{Schindler's List}) from modern action/sci-fi blockbusters (\textit{Matrix Reloaded}).
-The third component (2.9\%) captures an adventure/comedy vs.\ thriller/horror contrast (\textit{Back to the Future}, \textit{E.T.}\ vs.\ \textit{Sideways}, \textit{Panic Room}).
-
-These semantically coherent axes emerge purely from collaborative signal, without any content features, confirming that the latent space captures meaningful preference dimensions.
+We interpret latent factors by applying PCA to the item factor matrix $\mathbf{Q}$ learned by MF-SGD and correlating principal components with genre indicators and release year.
+On smaller MovieLens slices, such analysis yields semantically coherent axes (e.g., mainstream blockbusters versus critically acclaimed dramas) from collaborative signal alone.
+At full scale ($k{=}128$, $|\mathcal{I}|{\approx}8{\times}10^4$ rated items), the same procedure remains a useful qualitative tool, though individual movie exemplars become noisier and less stable across training seeds; we therefore emphasize interpretable \emph{directions} rather than selectively chosen examples.
 
 
 \section{Discussion}
 
 \paragraph{Rating Accuracy vs.\ Ranking Quality.}
-A central finding is the persistent disconnect between rating prediction accuracy and top-$N$ ranking quality, even after extensive tuning.
-The Deep Hybrid model achieves the best MAE but the worst NDCG; conversely, ALS achieves the best NDCG while having competitive but not the best MAE.
-This confirms that MAE/RMSE penalize errors uniformly across the rating scale, while ranking metrics care only about the relative ordering of items near the top of the list \cite{rendle2009bpr}.
-Heavy regularization appears to benefit ranking by producing smoother, more conservative score distributions that better separate relevant from irrelevant items.
+On MovieLens Latest with our evaluation protocol, the Deep Hybrid model leads on \emph{overall} quality: best MAE and best top-10 metrics.
+MF-SGD is now close on point-wise error and slightly better on RMSE, but still trails on ranking quality.
+This contrasts with our earlier MovieLens-Small study, where stronger regularization on low-rank ALS and SVD hybrids improved NDCG disproportionately.
+At tens of millions of ratings, expressive architectures with content channels and GPU-scale optimization can align the two objectives more closely, though MAE/RMSE and ranking metrics still measure different aspects of user utility \cite{rendle2009bpr}.
 
-\paragraph{The Regularization--Ranking Connection.}
-A surprising and consistent pattern emerges across all models: \textit{stronger regularization improves ranking metrics more than it hurts rating accuracy}.
-Increasing Ridge $\alpha$ from 0.1 to 1.0 improved SVD-Ridge's NDCG by 37\% with less than 1\% MAE increase.
-Reducing MF-SGD's $\lambda$ from 0.05 to 0.04 improved NDCG by 49\%.
-Most dramatically, increasing ALS's $\lambda$ from 0.05 to 12.0 (with $k$ reduced from 48 to 4) improved NDCG by $4.4{\times}$ \textit{while simultaneously improving MAE by 27\%}.
-This suggests that standard MF hyperparameter defaults are poorly calibrated for ranking on small datasets.
+\paragraph{Classical baselines at scale.}
+SVD-Ridge and SVD-Lasso remain attractive: they require only a sparse SVD plus a shallow calibration step, yet achieve MAE below 0.67.
+After retuning, MF-SGD is competitive and provides a strong fallback baseline.
+ALS remains the weakest model in top-$N$ ranking on this split, which suggests that this explicit-feedback ALS setup still needs deeper rank/regularization redesign.
 
-\paragraph{Depth vs.\ Data Scale.}
-The Deep Hybrid model's weak ranking performance relative to simpler methods underscores a practical lesson: on datasets with only $\sim$100K interactions, the additional parameters of deep architectures (CNN encoders, multiple embedding layers) provide marginal benefit for ranking, even with aggressive dropout and $L_2$ regularization.
-The content features (title, genre) provide limited marginal information beyond what collaborative filtering already captures, as evidenced by the ablation study's modest $R^2$.
-However, the Deep model does achieve the best \emph{rating accuracy}, suggesting that its rich feature representations better capture absolute preference magnitudes even when they fail to improve relative item ordering.
+\paragraph{Depth vs.\ data scale.}
+On $\sim$34M interactions, the Deep Hybrid's additional capacity is no longer a pure liability: title CNNs and genre pooling help denoise tail items and improve both RMSE and NDCG relative to the classical runs we report.
+The auxiliary linear ablation on MovieLens-Small still suggests that most variance is latent-ID-driven; the deep model's gains likely come from better nonlinear composition of collaborative and content cues rather than from linearly separable metadata alone.
 
-\paragraph{ALS Rehabilitation.}
-Our most practically significant result is the transformation of ALS from the worst to the best ranking model.
-The conventional view that ALS overfits on small explicit-feedback datasets \cite{hu2008collaborative} holds only when default hyperparameters are used.
-With $k{=}4$ factors (vs.\ the typical 48) and $\lambda{=}12.0$ (vs.\ the typical 0.05), validation-based early stopping, and 80 iterations, ALS achieves the highest NDCG@10 (0.157) among all models.
-This finding is actionable: practitioners should consider very low-rank, heavily regularized ALS even for small-scale explicit-feedback problems.
+\paragraph{ALS.}
+Our ALS configuration ($k{=}64$, stronger $\lambda$) improves rating error compared with our earlier run but still underperforms in ranking quality.
+Large-scale ALS typically demands careful rank/regularization search, numerical preconditioning, and sometimes implicit-feedback formulations \cite{hu2008collaborative}; we treat the current numbers as a baseline to improve rather than a fundamental limit of the method.
 
 \paragraph{Demo Application.}
 We develop \textit{StreamX}, a full-stack web application consisting of a Django REST API backend and a Next.js frontend.
-The backend loads all trained models and supports switching between them at runtime, serving real-time rating predictions and top-$N$ recommendations.
-The frontend provides an interactive movie browsing experience with personalized recommendations, movie details enriched with TMDB metadata, and similar-movie suggestions.
+The backend loads the retrained checkpoints under \texttt{models/artifacts/} and supports switching between them at runtime.
+The frontend provides movie browsing, personalized recommendations, TMDB-enriched details, and similar-movie suggestions.
 
 
 
 \section{Limitations}
 
-The MovieLens-Small dataset has only 610 users, which limits the statistical power of per-user ranking metrics and may not reflect behavior on larger-scale platforms.
-While we conducted extensive manual hyperparameter tuning, we did not employ systematic grid or Bayesian search; even better configurations may exist.
-The top-$N$ evaluation uses the \texttt{all\_test} relevance definition (all held-out items are relevant), which inflates recall denominators for users with many test items and yields low absolute metric values.
-We do not explore temporal dynamics, implicit feedback signals, or side information beyond titles and genres.
-The ALS finding (very few factors + heavy regularization) may not generalize to larger datasets where higher-dimensional latent spaces become necessary.
+MovieLens Latest is labeled a \emph{development} dataset by GroupLens; snapshots can change, so exact metrics are tied to our July~2023-era checkout.
+While we tuned presets documented in the repository, we did not run large-scale automated hyperparameter search for every model; in particular, ALS likely has better operating points than those reported here.
+The top-$N$ evaluation uses the \texttt{all\_test} relevance definition (all held-out items are relevant), which yields small absolute Precision/NDCG values when users have many test ratings.
+We do not explore temporal dynamics, implicit feedback, or review text beyond titles and genres.
+Finally, training deep models assumes GPU availability; CPU-only runs are supported but substantially slower.
 
 
 \section{Conclusion}
 
-We presented a controlled comparison of four collaborative filtering approaches for movie recommendation on the MovieLens-Small dataset, with extensive hyperparameter tuning.
-Our experiments reveal that (1) after tuning, all four model families achieve comparable rating accuracy (MAE in 0.666--0.715), with the Deep Hybrid slightly ahead; (2) the heavily regularized ALS ($k{=}4$, $\lambda{=}12.0$) achieves the best ranking performance (NDCG@10\,=\,0.157), overturning the common belief that ALS overfits on small explicit-feedback datasets; (3) SVD-Ridge with increased regularization ($\alpha{=}1.0$) also delivers strong ranking (NDCG@10\,=\,0.148); and (4) there is a consistent pattern where stronger regularization improves ranking metrics disproportionately more than it hurts rating accuracy.
+We presented a controlled comparison of four collaborative filtering approaches after migrating from MovieLens-Small to \textbf{MovieLens Latest} and retraining all checkpoints on a shared per-user 80/20 split (27.1M / 6.77M ratings).
+Our updated experiments show that (1) the Deep Hybrid model achieves the best overall results (MAE\,=\,0.5948, NDCG@10\,=\,0.0569); (2) tuned MF-SGD becomes a close second and slightly improves RMSE (0.8074 vs.\ 0.8075 for Deep); (3) SVD-Ridge and SVD-Lasso remain solid low-complexity baselines (MAE $\approx$0.667--0.671); and (4) ALS improves in rating error versus earlier presets but remains weak in top-$N$ ranking.
 
-The most practically significant finding is that ALS's overfitting problem is entirely solvable through aggressive regularization and dimensionality reduction: reducing factors from 48 to 4 and increasing $\lambda$ from 0.05 to 12.0 transforms ALS from the worst to the best-ranking model, while simultaneously improving its MAE by 27\%.
-This suggests that standard MF hyperparameter defaults are miscalibrated for small-dataset ranking, and that practitioners should explore the low-rank, high-regularization regime.
-
-Future work could extend this study to larger datasets to test whether the ALS regularization finding generalizes, incorporate temporal and textual review features, and explore learning-to-rank objectives that directly optimize NDCG.
+Future work includes dedicated ALS and MF-SGD sweeps at web scale, benchmarking on frozen MovieLens \emph{benchmark} splits for publication-grade comparability, and learning-to-rank objectives that align training with NDCG.
 
 \bibliography{references}
 

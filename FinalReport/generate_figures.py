@@ -38,7 +38,7 @@ def load_json(path):
 
 # ── Load all metrics ───────────────────────────────────────────────────
 metrics = {}
-for variant in ["option1", "option2", "option3", "option3_lasso", "option4"]:
+for variant in ["option1", "option2", "option3_ridge", "option3_lasso", "option4"]:
     p = os.path.join(ARTIFACTS, variant, "metrics.json")
     if os.path.exists(p):
         metrics[variant] = load_json(p)
@@ -177,7 +177,7 @@ print("  training_als.pdf")
 # Figure 6: Model comparison – Rating Prediction (MAE + RMSE)
 # ═══════════════════════════════════════════════════════════════════════
 model_names = ["MF-SGD", "Deep Hybrid", "SVD-Ridge", "SVD-Lasso", "ALS"]
-model_keys = ["option1", "option2", "option3", "option3_lasso", "option4"]
+model_keys = ["option1", "option2", "option3_ridge", "option3_lasso", "option4"]
 mae_vals = [metrics[k]["mae"] for k in model_keys]
 rmse_vals = [metrics[k]["rmse"] for k in model_keys]
 

@@ -1,8 +1,0 @@
-{
-  "dataset_dir": "D:\\Projects\\School\\Rutgers\\MDM_Final_Project\\dataset\\ml-latest-small",
-  "seed": 42,
-  "test_ratio": 0.2,
-  "split_hash": "b304b43e63d88277254f8d4c8e80af6b7482de6826bbe351e6024091e8297af0",
-  "train_size": 80672,
-  "test_size": 20164
-}

@@ -19,7 +19,7 @@ class Recommendation:
     score: float
 
 
-@numba.njit(nopython=True)
+@numba.njit
 def _fit_lasso_numba(
     x_std: np.ndarray,
     y_centered: np.ndarray,
@@ -86,6 +86,10 @@ class Option3SVDHybridRecommender:
         lasso_max_iter: int = 200,
         lasso_tol: float = 1e-4,
         bias_reg: float = 10.0,
+        svd_power_iters: int = 2,
+        regression_batch_size: int = 65536,
+        ridge_epochs: int = 8,
+        lasso_epochs: int = 14,
         seed: int = 42,
         min_rating: float = 0.5,
         max_rating: float = 5.0,
@@ -98,6 +102,10 @@ class Option3SVDHybridRecommender:
         self.lasso_max_iter = lasso_max_iter
         self.lasso_tol = lasso_tol
         self.bias_reg = bias_reg
+        self.svd_power_iters = svd_power_iters
+        self.regression_batch_size = regression_batch_size
+        self.ridge_epochs = ridge_epochs
+        self.lasso_epochs = lasso_epochs
         self.seed = seed
         self.min_rating = min_rating
         self.max_rating = max_rating
@@ -120,8 +128,112 @@ class Option3SVDHybridRecommender:
         self.feature_scale: np.ndarray | None = None
         self.regression_coef: np.ndarray | None = None
         self.regression_intercept: float = 0.0
+        self.regression_uses_standardization: bool = True
 
         self.training_history: Dict[str, List[float]] = {}
+
+    @staticmethod
+    def _select_torch_device():
+        import torch  # pyright: ignore[reportMissingImports]
+
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+
+    def _fit_factors_scipy(
+        self,
+        centered_ratings: np.ndarray,
+        user_idx: np.ndarray,
+        item_idx: np.ndarray,
+        n_users: int,
+        n_items: int,
+        effective_rank: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        interaction_matrix = coo_matrix(
+            (centered_ratings, (user_idx, item_idx)),
+            shape=(n_users, n_items),
+            dtype=np.float32,
+        )
+        if effective_rank > 0 and interaction_matrix.nnz > 0:
+            u_mat, singular_vals, vt_mat = svds(interaction_matrix.tocsr(), k=effective_rank)
+            order = np.argsort(singular_vals)[::-1]
+            u_mat = u_mat[:, order]
+            singular_vals = singular_vals[order]
+            vt_mat = vt_mat[order, :]
+            sqrt_s = np.sqrt(np.maximum(singular_vals, 0.0))
+            return (u_mat * sqrt_s).astype(np.float32), (vt_mat.T * sqrt_s).astype(np.float32)
+        return (
+            np.zeros((n_users, effective_rank), dtype=np.float32),
+            np.zeros((n_items, effective_rank), dtype=np.float32),
+        )
+
+    def _fit_factors_torch(
+        self,
+        centered_ratings: np.ndarray,
+        user_idx: np.ndarray,
+        item_idx: np.ndarray,
+        n_users: int,
+        n_items: int,
+        effective_rank: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        import torch  # pyright: ignore[reportMissingImports]
+
+        if effective_rank <= 0 or centered_ratings.size == 0:
+            return (
+                np.zeros((n_users, effective_rank), dtype=np.float32),
+                np.zeros((n_items, effective_rank), dtype=np.float32),
+            )
+
+        device = self._select_torch_device()
+        # Sparse CUDA path is the main acceleration target; other devices use SciPy fallback.
+        if device.type != "cuda":
+            return self._fit_factors_scipy(
+                centered_ratings=centered_ratings,
+                user_idx=user_idx,
+                item_idx=item_idx,
+                n_users=n_users,
+                n_items=n_items,
+                effective_rank=effective_rank,
+            )
+
+        torch.manual_seed(self.seed)
+        torch.cuda.manual_seed_all(self.seed)
+
+        row = torch.from_numpy(user_idx.astype(np.int64)).to(device)
+        col = torch.from_numpy(item_idx.astype(np.int64)).to(device)
+        val = torch.from_numpy(centered_ratings.astype(np.float32)).to(device)
+        indices = torch.stack([row, col], dim=0)
+        interaction = torch.sparse_coo_tensor(
+            indices,
+            val,
+            size=(n_users, n_items),
+            device=device,
+            dtype=torch.float32,
+        ).coalesce()
+        interaction_t = interaction.transpose(0, 1).coalesce()
+
+        q = torch.randn((n_items, effective_rank), device=device, dtype=torch.float32)
+        q = torch.linalg.qr(q, mode="reduced").Q
+
+        for _ in range(max(1, int(self.svd_power_iters))):
+            z = torch.sparse.mm(interaction, q)
+            z = torch.linalg.qr(z, mode="reduced").Q
+            q = torch.sparse.mm(interaction_t, z)
+            q = torch.linalg.qr(q, mode="reduced").Q
+
+        b = torch.sparse.mm(interaction, q)
+        u_hat, singular_vals, vh = torch.linalg.svd(b, full_matrices=False)
+        k = min(effective_rank, singular_vals.shape[0], vh.shape[0])
+        u = u_hat[:, :k]
+        s = singular_vals[:k]
+        v = q @ vh[:k, :].transpose(0, 1)
+
+        sqrt_s = torch.sqrt(torch.clamp(s, min=0.0))
+        user_factors = (u * sqrt_s).detach().cpu().numpy().astype(np.float32)
+        item_factors = (v * sqrt_s).detach().cpu().numpy().astype(np.float32)
+        return user_factors, item_factors
 
     def _fit_lasso(self, x_std: np.ndarray, y_centered: np.ndarray) -> np.ndarray:
         n_samples = x_std.shape[0]
@@ -172,6 +284,81 @@ class Option3SVDHybridRecommender:
         self.feature_scale = x_scale.astype(np.float32)
         self.regression_coef = weights.astype(np.float32)
         self.regression_intercept = float(intercept)
+        self.regression_uses_standardization = True
+
+    def _fit_regressor_torch(
+        self,
+        user_idx: np.ndarray,
+        item_idx: np.ndarray,
+        y_true: np.ndarray,
+    ) -> None:
+        import torch  # pyright: ignore[reportMissingImports]
+
+        if (
+            self.user_factors is None
+            or self.item_factors is None
+            or self.user_bias is None
+            or self.item_bias is None
+        ):
+            raise RuntimeError("Model is not fitted.")
+
+        if self.regressor not in {"ridge", "lasso"}:
+            self.feature_mean = None
+            self.feature_scale = None
+            self.regression_coef = None
+            self.regression_intercept = 0.0
+            self.regression_uses_standardization = True
+            return
+
+        device = self._select_torch_device()
+        torch.manual_seed(self.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(self.seed)
+
+        user_f = torch.from_numpy(self.user_factors.astype(np.float32)).to(device)
+        item_f = torch.from_numpy(self.item_factors.astype(np.float32)).to(device)
+        user_b = torch.from_numpy(self.user_bias.astype(np.float32)).to(device)
+        item_b = torch.from_numpy(self.item_bias.astype(np.float32)).to(device)
+
+        user_idx_t = torch.from_numpy(user_idx.astype(np.int64)).to(device)
+        item_idx_t = torch.from_numpy(item_idx.astype(np.int64)).to(device)
+        y_t = torch.from_numpy(y_true.astype(np.float32)).to(device)
+
+        feat_dim = user_f.shape[1] + 2
+        coef = torch.zeros(feat_dim, device=device, dtype=torch.float32, requires_grad=True)
+        intercept = torch.tensor(float(y_t.mean().item()), device=device, dtype=torch.float32, requires_grad=True)
+        optimizer = torch.optim.Adam([coef, intercept], lr=0.05)
+
+        epochs = int(self.ridge_epochs if self.regressor == "ridge" else self.lasso_epochs)
+        alpha = max(float(self.reg_alpha), 0.0)
+
+        for _ in range(max(1, epochs)):
+            perm = torch.randperm(user_idx_t.shape[0], device=device)
+            for start in range(0, perm.shape[0], max(1, int(self.regression_batch_size))):
+                batch_idx = perm[start : start + max(1, int(self.regression_batch_size))]
+                u = user_idx_t[batch_idx]
+                i = item_idx_t[batch_idx]
+                y = y_t[batch_idx]
+
+                x_latent = user_f[u] * item_f[i]
+                x = torch.cat([x_latent, user_b[u].unsqueeze(1), item_b[i].unsqueeze(1)], dim=1)
+                preds = x @ coef + intercept
+                mse = torch.mean(torch.square(preds - y))
+                if self.regressor == "ridge":
+                    penalty = alpha * torch.mean(torch.square(coef))
+                else:
+                    penalty = alpha * torch.mean(torch.abs(coef))
+                loss = mse + penalty
+
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                optimizer.step()
+
+        self.feature_mean = None
+        self.feature_scale = None
+        self.regression_coef = coef.detach().cpu().numpy().astype(np.float32)
+        self.regression_intercept = float(intercept.detach().cpu().item())
+        self.regression_uses_standardization = False
 
     def _predict_known_pairs(self, user_idx: np.ndarray, item_idx: np.ndarray) -> np.ndarray:
         if (
@@ -185,17 +372,15 @@ class Option3SVDHybridRecommender:
         dot_scores = np.sum(self.user_factors[user_idx] * self.item_factors[item_idx], axis=1)
         baseline = self.global_mean + self.user_bias[user_idx] + self.item_bias[item_idx] + dot_scores
 
-        if (
-            self.regression_coef is None
-            or self.feature_mean is None
-            or self.feature_scale is None
-            or self.regressor == "svd"
-        ):
+        if self.regression_coef is None or self.regressor == "svd":
             return baseline.astype(np.float32)
 
         x_raw = self._build_feature_matrix(user_idx, item_idx)
-        x_std = (x_raw - self.feature_mean) / self.feature_scale
-        preds = self.regression_intercept + x_std @ self.regression_coef
+        if self.regression_uses_standardization and self.feature_mean is not None and self.feature_scale is not None:
+            x_features = (x_raw - self.feature_mean) / self.feature_scale
+        else:
+            x_features = x_raw
+        preds = self.regression_intercept + x_features @ self.regression_coef
         return preds.astype(np.float32)
 
     def fit(self, train_ratings: pd.DataFrame) -> "Option3SVDHybridRecommender":
@@ -245,30 +430,15 @@ class Option3SVDHybridRecommender:
         )
 
         centered_ratings = ratings - self.global_mean
-        
-        # Use sparse matrix to avoid allocating 315GB of RAM for 330k users and 80k items
-        interaction_matrix = coo_matrix(
-            (centered_ratings, (user_idx, item_idx)),
-            shape=(n_users, n_items),
-            dtype=np.float32
-        )
-
         effective_rank = max(1, min(int(self.n_factors), min(n_users, n_items) - 1))
-        if effective_rank > 0 and interaction_matrix.nnz > 0:
-            u_mat, singular_vals, vt_mat = svds(interaction_matrix.tocsr(), k=effective_rank)
-            
-            # svds returns them sorted in ascending order, we reverse it
-            order = np.argsort(singular_vals)[::-1]
-            u_mat = u_mat[:, order]
-            singular_vals = singular_vals[order]
-            vt_mat = vt_mat[order, :]
-            
-            sqrt_s = np.sqrt(np.maximum(singular_vals, 0.0))
-            self.user_factors = (u_mat * sqrt_s).astype(np.float32)
-            self.item_factors = (vt_mat.T * sqrt_s).astype(np.float32)
-        else:
-            self.user_factors = np.zeros((n_users, effective_rank), dtype=np.float32)
-            self.item_factors = np.zeros((n_items, effective_rank), dtype=np.float32)
+        self.user_factors, self.item_factors = self._fit_factors_torch(
+            centered_ratings=centered_ratings,
+            user_idx=user_idx,
+            item_idx=item_idx,
+            n_users=n_users,
+            n_items=n_items,
+            effective_rank=effective_rank,
+        )
 
         dot_scores = np.sum(self.user_factors[user_idx] * self.item_factors[item_idx], axis=1)
         residual_after_dot = ratings - self.global_mean - dot_scores
@@ -288,13 +458,17 @@ class Option3SVDHybridRecommender:
         self.item_bias = (item_sum_bias / (item_cnt_bias + bias_reg)).astype(np.float32)
 
         if self.regressor in {"ridge", "lasso"} and self.user_factors.shape[1] > 0:
-            x_raw = self._build_feature_matrix(user_idx, item_idx)
-            self._fit_regressor(x_raw=x_raw, y_true=ratings.astype(np.float64))
+            self._fit_regressor_torch(
+                user_idx=user_idx,
+                item_idx=item_idx,
+                y_true=ratings.astype(np.float32),
+            )
         else:
             self.feature_mean = None
             self.feature_scale = None
             self.regression_coef = None
             self.regression_intercept = 0.0
+            self.regression_uses_standardization = True
 
         item_norms = np.linalg.norm(self.item_factors, axis=1, keepdims=True)
         self.normalized_item_factors = np.divide(
@@ -359,17 +533,15 @@ class Option3SVDHybridRecommender:
         u_idx = self.user_to_idx[user_id]
         n_items = len(self.item_factors)
 
-        if (
-            self.regressor in {"ridge", "lasso"}
-            and self.regression_coef is not None
-            and self.feature_mean is not None
-            and self.feature_scale is not None
-        ):
+        if self.regressor in {"ridge", "lasso"} and self.regression_coef is not None:
             user_idx = np.full(n_items, u_idx, dtype=np.int32)
             item_idx = np.arange(n_items, dtype=np.int32)
             x_raw = self._build_feature_matrix(user_idx, item_idx)
-            x_std = (x_raw - self.feature_mean) / self.feature_scale
-            preds = (self.regression_intercept + x_std @ self.regression_coef).astype(np.float32)
+            if self.regression_uses_standardization and self.feature_mean is not None and self.feature_scale is not None:
+                x_features = (x_raw - self.feature_mean) / self.feature_scale
+            else:
+                x_features = x_raw
+            preds = (self.regression_intercept + x_features @ self.regression_coef).astype(np.float32)
         else:
             user_vector = self.user_factors[u_idx]
             preds = (

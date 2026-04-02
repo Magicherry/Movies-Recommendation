@@ -32,7 +32,7 @@ def _create_csr(n_elements, list_indices, list_data):
     indptr[n_elements] = pos
     return indptr, indices, data
 
-@numba.njit(nopython=True)
+@numba.njit
 def _als_update_numba(
     n_entities: int,
     indptr: np.ndarray,
@@ -296,13 +296,34 @@ class Option4ALSRecommender:
 
     
     def predict_batch(self, user_ids: np.ndarray, item_ids: np.ndarray) -> np.ndarray:
-        u_max = self.user_factors.shape[0] - 1
-        i_max = self.item_factors.shape[0] - 1
-        u_idx = np.clip(user_ids, 0, u_max)
-        i_idx = np.clip(item_ids, 0, i_max)
-        
-        dots = np.sum(self.user_factors[u_idx] * self.item_factors[i_idx], axis=1)
-        preds = self.global_mean + self.user_bias[u_idx] + self.item_bias[i_idx] + dots
+        if (
+            self.user_bias is None
+            or self.item_bias is None
+            or self.user_factors is None
+            or self.item_factors is None
+        ):
+            raise RuntimeError("Model is not fitted.")
+
+        n = len(user_ids)
+        preds = np.full(n, self.global_mean, dtype=np.float32)
+        u_idx = np.fromiter((self.user_to_idx.get(int(u), -1) for u in user_ids), dtype=np.int64, count=n)
+        i_idx = np.fromiter((self.item_to_idx.get(int(i), -1) for i in item_ids), dtype=np.int64, count=n)
+
+        user_known = u_idx >= 0
+        item_known = i_idx >= 0
+        both_known = user_known & item_known
+
+        if np.any(user_known):
+            preds[user_known] += self.user_bias[u_idx[user_known]]
+        if np.any(item_known):
+            preds[item_known] += self.item_bias[i_idx[item_known]]
+        if np.any(both_known):
+            dots = np.sum(
+                self.user_factors[u_idx[both_known]] * self.item_factors[i_idx[both_known]],
+                axis=1,
+            )
+            preds[both_known] += dots.astype(np.float32)
+
         return np.clip(preds, self.min_rating, self.max_rating)
 
     def predict(self, user_id: int, item_id: int) -> float:

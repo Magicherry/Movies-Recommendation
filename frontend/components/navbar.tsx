@@ -53,8 +53,6 @@ export default function AppNavbar() {
             setActiveEngine('SVD-Ridge');
           } else if (data.active_model === 'option3_lasso') {
             setActiveEngine('SVD-Lasso');
-          } else if (data.active_model === 'option3') {
-            setActiveEngine('SVD');
           } else if (data.active_model === 'option4') {
             setActiveEngine('MF-ALS');
           } else {
@@ -176,7 +174,14 @@ export default function AppNavbar() {
             <span style={{ color: 'var(--brand)' }}>STREAM</span>X
           </span>
           {showBrandAlgorithm && (
-            <span className="option-badge" title="Current Recommendation Engine">{activeEngine}</span>
+            <NextLink
+              href="/settings?tab=model"
+              className="option-badge-link"
+              title="Go to engine settings"
+              aria-label="Go to recommendation engine settings"
+            >
+              <span className="option-badge">{activeEngine}</span>
+            </NextLink>
           )}
         </div>
 

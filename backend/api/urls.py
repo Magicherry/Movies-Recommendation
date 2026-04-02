@@ -15,6 +15,7 @@ urlpatterns = [
     path("stats", views.db_stats, name="db-stats"),
     path("model-config", views.model_config, name="model-config"),
     path("scrape/start", views.scrape_start, name="scrape-start"),
+    path("scrape/cancel", views.scrape_cancel, name="scrape-cancel"),
     path("scrape/status", views.scrape_status, name="scrape-status"),
     path("scrape/key", views.scrape_key, name="scrape-key"),
     path("scrape/test-key", views.scrape_test_key, name="scrape-test-key"),

@@ -89,9 +89,10 @@ def _save_scrape_state(state: dict[str, object]) -> None:
 
 
 scrape_state = _load_scrape_state()
+scrape_process = None
 
 def run_scrape_thread(api_key: str, refresh: bool = False):
-    global scrape_state
+    global scrape_state, scrape_process
     scrape_state["status"] = "running"
     scrape_state["processed"] = 0
     scrape_state["total"] = 0
@@ -118,7 +119,7 @@ def run_scrape_thread(api_key: str, refresh: bool = False):
         cmd.append("--refresh")
 
     try:
-        process = subprocess.Popen(
+        scrape_process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -128,13 +129,13 @@ def run_scrape_thread(api_key: str, refresh: bool = False):
         )
         
         error_lines = []
-        for line in process.stdout:
+        for line in scrape_process.stdout:
             line = line.strip()
             if not line:
                 continue
                 
             scrape_state["message"] = line
-            if "Error:" in line or process.poll() is not None:
+            if "Error:" in line or scrape_process.poll() is not None:
                 error_lines.append(line)
             
             match = re.search(r"Processed (\d+)/(\d+)", line)
@@ -165,11 +166,16 @@ def run_scrape_thread(api_key: str, refresh: bool = False):
                     scrape_state["processed"] = scrape_state["total"]
                 _save_scrape_state(scrape_state)
                 
-        process.wait()
-        if process.returncode == 0:
+        scrape_process.wait()
+        if scrape_process.returncode == 0:
             scrape_state["status"] = "completed"
             if scrape_state["total"] > 0:
                 scrape_state["processed"] = scrape_state["total"]
+            _save_scrape_state(scrape_state)
+        elif scrape_process.returncode == -15 or scrape_process.returncode == 15 or scrape_process.returncode == 1:
+            # Handle cancellation
+            scrape_state["status"] = "error"
+            scrape_state["message"] = "Scraping cancelled by user."
             _save_scrape_state(scrape_state)
         else:
             scrape_state["status"] = "error"
@@ -184,6 +190,8 @@ def run_scrape_thread(api_key: str, refresh: bool = False):
         scrape_state["status"] = "error"
         scrape_state["message"] = str(e)
         _save_scrape_state(scrape_state)
+    finally:
+        scrape_process = None
 
 
 
@@ -362,7 +370,7 @@ def model_config(request: HttpRequest) -> JsonResponse:
 @csrf_exempt
 @require_http_methods(["POST"])
 def scrape_start(request: HttpRequest) -> JsonResponse:
-    global scrape_state
+    global scrape_state, scrape_process
     if scrape_state["status"] == "running":
         return JsonResponse({"status": "already_running"})
     
@@ -390,6 +398,29 @@ def scrape_start(request: HttpRequest) -> JsonResponse:
     thread.start()
     
     return JsonResponse({"status": "started"})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def scrape_cancel(request: HttpRequest) -> JsonResponse:
+    global scrape_state, scrape_process
+    if scrape_state["status"] != "running" and scrape_state["status"] != "starting":
+        return JsonResponse({"status": "not_running"})
+        
+    if scrape_process is not None:
+        try:
+            scrape_process.terminate()
+            scrape_state["status"] = "error"
+            scrape_state["message"] = "Scraping cancelled by user."
+            _save_scrape_state(scrape_state)
+        except Exception as e:
+            return _error(f"Failed to cancel: {e}", status=500)
+    else:
+        scrape_state["status"] = "error"
+        scrape_state["message"] = "Scraping cancelled by user."
+        _save_scrape_state(scrape_state)
+            
+    return JsonResponse({"status": "cancelled"})
 
 
 @require_GET

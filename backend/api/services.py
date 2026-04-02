@@ -30,6 +30,51 @@ class RecommenderService:
         self.movie_behavior_stats: pd.DataFrame = pd.DataFrame()
         self.users: List[int] = []
         self.user_history: Dict[int, List[Dict[str, Any]]] = {}
+        self.reference_ratings_path: Path | None = None
+        self._model_train_user_ids: set[int] = set()
+        self._model_train_item_ids: set[int] = set()
+
+    def _select_default_active_model(self) -> str:
+        available = getattr(self, "_available_model_names", set())
+        for candidate in ("option1", "option2", "option3_ridge", "option3_lasso", "option4"):
+            if candidate in available:
+                return candidate
+        return sorted(available)[0]
+
+    def _resolve_reference_ratings_path(self, train_ratings_path: Path) -> Path:
+        external_ratings_env = os.environ.get("STREAMX_RATINGS_PATH", "").strip()
+        candidates: List[Path] = []
+        if external_ratings_env:
+            candidates.append(Path(external_ratings_env))
+        candidates.append(self.project_root / "dataset" / "ml-latest" / "ratings.csv")
+        candidates.append(train_ratings_path)
+
+        for path in candidates:
+            if path.exists():
+                return path
+        return train_ratings_path
+
+    @staticmethod
+    def _read_ratings_any_format(path: Path) -> pd.DataFrame:
+        columns = pd.read_csv(path, nrows=0).columns.tolist()
+
+        if {"userId", "movieId", "rating"}.issubset(columns):
+            ratings = pd.read_csv(
+                path,
+                usecols=["userId", "movieId", "rating"],
+                dtype={"userId": "int32", "movieId": "int32", "rating": "float32"},
+            ).rename(columns={"userId": "user_id", "movieId": "item_id"})
+            return ratings[["user_id", "item_id", "rating"]]
+
+        if {"user_id", "item_id", "rating"}.issubset(columns):
+            ratings = pd.read_csv(
+                path,
+                usecols=["user_id", "item_id", "rating"],
+                dtype={"user_id": "int32", "item_id": "int32", "rating": "float32"},
+            )
+            return ratings[["user_id", "item_id", "rating"]]
+
+        raise ValueError(f"Unsupported ratings schema in {path}")
 
     def _load_movies_from_path(self, source_path: Path) -> None:
         frame = pd.read_csv(source_path)
@@ -176,12 +221,27 @@ class RecommenderService:
         if train_ratings_path is None or not train_ratings_path.exists():
             raise FileNotFoundError("Model-specific train_ratings.csv not found.")
 
-        # Optimization: Skip slow 800MB csv reloading if path is identical
-        if getattr(self, "_last_ratings_path", None) == train_ratings_path and hasattr(self, "ratings_df"):
+        reference_path = self._resolve_reference_ratings_path(train_ratings_path)
+        # Optimization: Skip expensive csv reloading if source paths are identical.
+        if (
+            getattr(self, "_last_train_ratings_path", None) == train_ratings_path
+            and getattr(self, "_last_reference_ratings_path", None) == reference_path
+            and hasattr(self, "ratings_df")
+        ):
             return
 
-        ratings = pd.read_csv(train_ratings_path)
-        self._last_ratings_path = train_ratings_path
+        model_ratings = pd.read_csv(
+            train_ratings_path,
+            usecols=["user_id", "item_id", "rating"],
+            dtype={"user_id": "int32", "item_id": "int32", "rating": "float32"},
+        )
+        self._model_train_user_ids = set(model_ratings["user_id"].astype(int).unique().tolist())
+        self._model_train_item_ids = set(model_ratings["item_id"].astype(int).unique().tolist())
+
+        ratings = self._read_ratings_any_format(reference_path)
+        self.reference_ratings_path = reference_path
+        self._last_train_ratings_path = train_ratings_path
+        self._last_reference_ratings_path = reference_path
         self.users = sorted(ratings["user_id"].astype(int).unique().tolist())
 
         behavior_stats = ratings.groupby("item_id").agg(
@@ -215,6 +275,103 @@ class RecommenderService:
             r_rounded = round(float(r) * 2) / 2
             rating_dist[r_rounded] = rating_dist.get(r_rounded, 0) + cnt
         self.rating_distribution = [{"rating": str(k), "count": int(v)} for k, v in sorted(rating_dist.items())]
+
+    def _fallback_popular_items(
+        self,
+        n: int,
+        exclude_items: set[int] | None = None,
+        preferred_genres: set[str] | None = None,
+        target_year: int | None = None,
+        score_mode: str = "behavior",
+    ) -> List[Dict[str, Any]]:
+        if self.movie_behavior_stats.empty or self.movies is None or n <= 0:
+            return []
+
+        exclude = exclude_items or set()
+        genre_pref = preferred_genres or set()
+        behavior_map = self.movie_behavior_stats.set_index("item_id")
+
+        # Build a ranked candidate table from database-wide behavior signals.
+        ranked = self.movies[["item_id", "title", "genres"]].copy()
+        ranked["item_id"] = ranked["item_id"].astype(int)
+        ranked = ranked[~ranked["item_id"].isin(exclude)]
+        if ranked.empty:
+            return []
+
+        ranked["watched_count"] = ranked["item_id"].map(behavior_map["watched_count"]).fillna(0.0)
+        ranked["avg_rating"] = ranked["item_id"].map(behavior_map["avg_rating"]).fillna(0.0)
+        ranked["behavior_score"] = ranked["item_id"].map(behavior_map["behavior_score"]).fillna(0.0)
+
+        if genre_pref:
+            ranked["genre_overlap"] = ranked["genres"].fillna("").map(
+                lambda raw: len(genre_pref.intersection({g for g in str(raw).split("|") if g and g != "(no genres listed)"}))
+            )
+            genre_filtered = ranked[ranked["genre_overlap"] > 0]
+            if not genre_filtered.empty:
+                ranked = genre_filtered
+        else:
+            ranked["genre_overlap"] = 0
+
+        if target_year is not None:
+            years = ranked["title"].str.extract(r"\((\d{4})\)\s*$", expand=False).fillna("0").astype(int)
+            ranked["year_distance"] = (years - int(target_year)).abs()
+        else:
+            ranked["year_distance"] = 9999
+
+        ranked = ranked.sort_values(
+            ["genre_overlap", "behavior_score", "avg_rating", "watched_count", "year_distance", "item_id"],
+            ascending=[False, False, False, False, True, True],
+            kind="mergesort",
+        ).head(n)
+
+        mode = str(score_mode).strip().lower()
+        if mode == "rating":
+            ranked["display_score"] = ranked["avg_rating"].clip(lower=0.5, upper=5.0)
+            score_source = "fallback_rating"
+        elif mode == "similarity":
+            behavior_values = ranked["behavior_score"].astype(float)
+            min_v = float(behavior_values.min()) if len(behavior_values) else 0.0
+            max_v = float(behavior_values.max()) if len(behavior_values) else 0.0
+            if max_v - min_v > 1e-9:
+                ranked["display_score"] = (behavior_values - min_v) / (max_v - min_v)
+            else:
+                ranked["display_score"] = 1.0
+            score_source = "fallback_similarity"
+        else:
+            ranked["display_score"] = ranked["behavior_score"]
+            score_source = "fallback_behavior"
+
+        rows: List[Dict[str, Any]] = []
+        for item_id, score in zip(ranked["item_id"], ranked["display_score"]):
+            meta = self.movie_lookup.get(
+                int(item_id),
+                {
+                    "item_id": int(item_id),
+                    "title": "Unknown",
+                    "scraped_title": "",
+                    "genres": "",
+                    "poster_url": "",
+                    "backdrop_url": "",
+                    "overview": "",
+                    "tmdb_id": "",
+                },
+            )
+            rows.append(
+                {
+                    "item_id": int(item_id),
+                    "title": meta["title"],
+                    "scraped_title": meta.get("scraped_title", ""),
+                    "genres": meta["genres"],
+                    "poster_url": meta.get("poster_url", ""),
+                    "backdrop_url": meta.get("backdrop_url", ""),
+                    "overview": meta.get("overview", ""),
+                    "tmdb_id": meta.get("tmdb_id", ""),
+                    "score": float(score),
+                    "score_source": score_source,
+                    "is_fallback_score": True,
+                }
+            )
+        return rows
 
     def _load_active_model_data(self) -> None:
         paths = self._resolve_model_data_paths(self.active_model_name)
@@ -334,13 +491,11 @@ class RecommenderService:
             # Scan available models without loading them into memory (save 30s)
             for path in [(self.artifacts_dir / "option1" / "model.pkl", "option1"),
                          (self.artifacts_dir / "option2" / "model.pkl", "option2"),
-                         (self.artifacts_dir / "option3" / "model.pkl", "option3"),
                          (self.artifacts_dir / "option3_ridge" / "model.pkl", "option3_ridge"),
                          (self.artifacts_dir / "option3_lasso" / "model.pkl", "option3_lasso"),
                          (self.artifacts_dir / "option4" / "model.pkl", "option4"),
                          (self.artifacts_dir / "model_option1.pkl", "option1"),
                          (self.artifacts_dir / "model_option2.pkl", "option2"),
-                         (self.artifacts_dir / "model_option3.pkl", "option3"),
                          (self.artifacts_dir / "model_option3_ridge.pkl", "option3_ridge"),
                          (self.artifacts_dir / "model_option3_lasso.pkl", "option3_lasso"),
                          (self.artifacts_dir / "model_option4.pkl", "option4"),
@@ -354,7 +509,7 @@ class RecommenderService:
             # Resolve and persist active model so it survives reloads and cross-process requests.
             self._load_active_model_from_disk()
             if self.active_model_name not in getattr(self, '_available_model_names', set()):
-                self.active_model_name = list(getattr(self, '_available_model_names', {'option1'}))[0]
+                self.active_model_name = self._select_default_active_model()
             self._persist_active_model_to_disk()
 
             self._load_active_model_data()
@@ -558,30 +713,29 @@ class RecommenderService:
         if model is None:
             self._lazy_load_model(self.active_model_name)
             model = self.models.get(self.active_model_name)
-            
+
+        # If the active model was trained on old artifacts and does not cover this user,
+        # fall back to popularity from the current database-wide ratings.
+        model_user_to_idx = getattr(model, "user_to_idx", {})
+        if not isinstance(model_user_to_idx, dict) or user_id not in model_user_to_idx:
+            seen = set(self.ratings_df[self.ratings_df["user_id"] == user_id]["item_id"].astype(int).tolist())
+            return self._fallback_popular_items(n=n, exclude_items=seen, score_mode="rating")
+
         # Dynamically inject seen items to bypass massive pickle overhead
         user_rows = self.ratings_df[self.ratings_df["user_id"] == user_id]
         seen = set(user_rows["item_id"])
         
         recs = model.recommend_top_n(user_id=user_id, n=n, exclude_seen=True, seen_items=seen)
         enriched = []
+        selected_item_ids: set[int] = set()
         for rec in recs:
-            meta = self.movie_lookup.get(
-                rec.item_id,
-                {
-                    "item_id": rec.item_id,
-                    "title": "Unknown",
-                    "scraped_title": "",
-                    "genres": "",
-                    "poster_url": "",
-                    "backdrop_url": "",
-                    "overview": "",
-                    "tmdb_id": "",
-                },
-            )
+            rec_item_id = int(rec.item_id)
+            meta = self.movie_lookup.get(rec_item_id)
+            if meta is None or rec_item_id in selected_item_ids:
+                continue
             enriched.append(
                 {
-                    "item_id": int(rec.item_id),
+                    "item_id": rec_item_id,
                     "title": meta["title"],
                     "scraped_title": meta.get("scraped_title", ""),
                     "genres": meta["genres"],
@@ -590,9 +744,25 @@ class RecommenderService:
                     "overview": meta.get("overview", ""),
                     "tmdb_id": meta.get("tmdb_id", ""),
                     "score": float(rec.score),
+                    "score_source": "model",
+                    "is_fallback_score": False,
                 }
             )
-        return enriched
+            selected_item_ids.add(rec_item_id)
+            if len(enriched) >= n:
+                break
+
+        if len(enriched) < n:
+            fallback_exclude = {int(iid) for iid in seen}
+            fallback_exclude.update(selected_item_ids)
+            enriched.extend(
+                self._fallback_popular_items(
+                    n=n - len(enriched),
+                    exclude_items=fallback_exclude,
+                    score_mode="rating",
+                )
+            )
+        return enriched[:n]
 
     def similar_for_item(self, item_id: int, n: int = 10) -> List[Dict[str, Any]]:
         self._ensure_movie_data_fresh()
@@ -601,25 +771,36 @@ class RecommenderService:
         if model is None:
             self._lazy_load_model(self.active_model_name)
             model = self.models.get(self.active_model_name)
+
         recs = model.similar_items(item_id=item_id, n=n)
-        enriched = []
-        for rec in recs:
-            meta = self.movie_lookup.get(
-                rec.item_id,
-                {
-                    "item_id": rec.item_id,
-                    "title": "Unknown",
-                    "scraped_title": "",
-                    "genres": "",
-                    "poster_url": "",
-                    "backdrop_url": "",
-                    "overview": "",
-                    "tmdb_id": "",
-                },
+        if not recs:
+            target = self.movie_lookup.get(item_id)
+            if target is None:
+                return []
+            target_genres = {g for g in str(target.get("genres", "")).split("|") if g and g != "(no genres listed)"}
+            year_match = None
+            title = str(target.get("title", ""))
+            year_token = pd.Series([title]).str.extract(r"\((\d{4})\)\s*$", expand=False).iloc[0]
+            if isinstance(year_token, str) and year_token.isdigit():
+                year_match = int(year_token)
+            return self._fallback_popular_items(
+                n=n,
+                exclude_items={item_id},
+                preferred_genres=target_genres,
+                target_year=year_match,
+                score_mode="similarity",
             )
+
+        enriched = []
+        selected_item_ids: set[int] = set()
+        for rec in recs:
+            rec_item_id = int(rec.item_id)
+            meta = self.movie_lookup.get(rec_item_id)
+            if meta is None or rec_item_id == item_id or rec_item_id in selected_item_ids:
+                continue
             enriched.append(
                 {
-                    "item_id": int(rec.item_id),
+                    "item_id": rec_item_id,
                     "title": meta["title"],
                     "scraped_title": meta.get("scraped_title", ""),
                     "genres": meta["genres"],
@@ -628,9 +809,36 @@ class RecommenderService:
                     "overview": meta.get("overview", ""),
                     "tmdb_id": meta.get("tmdb_id", ""),
                     "score": float(rec.score),
+                    "score_source": "model",
+                    "is_fallback_score": False,
                 }
             )
-        return enriched
+            selected_item_ids.add(rec_item_id)
+            if len(enriched) >= n:
+                break
+
+        if len(enriched) < n:
+            target = self.movie_lookup.get(item_id)
+            target_genres: set[str] = set()
+            year_match = None
+            if target is not None:
+                target_genres = {g for g in str(target.get("genres", "")).split("|") if g and g != "(no genres listed)"}
+                title = str(target.get("title", ""))
+                year_token = pd.Series([title]).str.extract(r"\((\d{4})\)\s*$", expand=False).iloc[0]
+                if isinstance(year_token, str) and year_token.isdigit():
+                    year_match = int(year_token)
+            fallback_exclude = {item_id}
+            fallback_exclude.update(selected_item_ids)
+            enriched.extend(
+                self._fallback_popular_items(
+                    n=n - len(enriched),
+                    exclude_items=fallback_exclude,
+                    preferred_genres=target_genres,
+                    target_year=year_match,
+                    score_mode="similarity",
+                )
+            )
+        return enriched[:n]
 
 
     def get_user_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
@@ -750,7 +958,7 @@ class RecommenderService:
         return rows
 
     def _build_option3_diagnostics(self) -> Dict[str, Any] | None:
-        if not self.active_model_name.startswith("option3"):
+        if not self.active_model_name.startswith("option3_"):
             return None
         model = self.models.get(self.active_model_name)
         if model is None:
@@ -853,9 +1061,11 @@ class RecommenderService:
         except Exception:
             pass
 
+        available_models = sorted(getattr(self, "_available_model_names", set(self.models.keys())))
+
         return {
             "active_model": self.active_model_name,
-            "available_models": list(getattr(self, '_available_model_names', set(self.models.keys()))),
+            "available_models": available_models,
             "metrics": active_metrics,
             "history": active_history,
             "diagnostics": diagnostics,

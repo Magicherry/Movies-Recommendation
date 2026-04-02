@@ -18,16 +18,77 @@ class RecommenderLike(Protocol):
     def recommend_top_n(self, user_id: int, n: int = 10, exclude_seen: bool = True) -> List[RecommendationLike]: ...
 
 
+def _is_predict_batch_consistent(
+    model: RecommenderLike,
+    test_ratings: pd.DataFrame,
+    sample_size: int = 2048,
+    mean_abs_tol: float = 1e-3,
+) -> bool:
+    if not hasattr(model, "predict_batch") or not hasattr(model, "predict"):
+        return False
+    if test_ratings.empty:
+        return True
+
+    n_rows = len(test_ratings)
+    n_sample = min(max(1, int(sample_size)), n_rows)
+    if n_sample < n_rows:
+        rng = np.random.default_rng(42)
+        sample_indices = rng.choice(n_rows, size=n_sample, replace=False)
+        sample = test_ratings.iloc[sample_indices]
+    else:
+        sample = test_ratings
+
+    user_ids = sample["user_id"].to_numpy(dtype=np.int64)
+    item_ids = sample["item_id"].to_numpy(dtype=np.int64)
+
+    try:
+        batch_preds = np.asarray(model.predict_batch(user_ids, item_ids), dtype=np.float64)
+        scalar_preds = np.array(
+            [model.predict(int(u), int(i)) for u, i in zip(user_ids, item_ids)],
+            dtype=np.float64,
+        )
+    except Exception as err:
+        print("[Evaluation] predict_batch consistency check failed, fallback to scalar predict:", err)
+        return False
+
+    if batch_preds.shape != scalar_preds.shape:
+        print(
+            "[Evaluation] predict_batch shape mismatch, fallback to scalar predict: "
+            f"batch={batch_preds.shape}, scalar={scalar_preds.shape}"
+        )
+        return False
+
+    mean_abs_diff = float(np.mean(np.abs(batch_preds - scalar_preds)))
+    if not np.isfinite(mean_abs_diff) or mean_abs_diff > float(mean_abs_tol):
+        print(
+            "[Evaluation] predict_batch mismatch detected, fallback to scalar predict: "
+            f"mean_abs_diff={mean_abs_diff:.6f}, tolerance={mean_abs_tol:.6f}"
+        )
+        return False
+    return True
+
+
 def evaluate_rating_prediction(model: RecommenderLike, test_ratings: pd.DataFrame) -> Dict[str, float]:
     if test_ratings.empty:
         return {"mae": 0.0, "rmse": 0.0}
 
-    if hasattr(model, "predict_batch"):
-        user_ids = test_ratings["user_id"].to_numpy(dtype=np.int32)
-        item_ids = test_ratings["item_id"].to_numpy(dtype=np.int32)
-        preds_np = model.predict_batch(user_ids, item_ids)
-        trues_np = test_ratings["rating"].to_numpy(dtype=np.float64)
-    else:
+    use_batch = hasattr(model, "predict_batch")
+    if use_batch and hasattr(model, "predict"):
+        use_batch = _is_predict_batch_consistent(model, test_ratings)
+
+    if use_batch:
+        try:
+            user_ids = test_ratings["user_id"].to_numpy(dtype=np.int64)
+            item_ids = test_ratings["item_id"].to_numpy(dtype=np.int64)
+            preds_np = np.asarray(model.predict_batch(user_ids, item_ids), dtype=np.float64)
+            trues_np = test_ratings["rating"].to_numpy(dtype=np.float64)
+            if preds_np.shape != trues_np.shape:
+                raise ValueError(f"shape mismatch: preds={preds_np.shape}, trues={trues_np.shape}")
+        except Exception as err:
+            print("[Evaluation] predict_batch failed, fallback to scalar predict:", err)
+            use_batch = False
+
+    if not use_batch:
         preds = []
         trues = []
         for row in tqdm(test_ratings.itertuples(index=False), total=len(test_ratings), desc="Evaluating Rating Predictions"):
@@ -47,7 +108,7 @@ def _fast_eval_numba(
     train_indptr, train_indices,
     test_indptr, test_indices,
     user_factors, item_factors, user_bias, item_bias, global_mean,
-    k, min_rating, max_rating
+    k, min_rating, max_rating, apply_score_clip
 ):
     n_eval_users = len(test_users)
     precisions = np.zeros(n_eval_users, dtype=np.float32)
@@ -70,6 +131,13 @@ def _fast_eval_numba(
         
         u_factor = user_factors[u]
         scores = global_mean + user_bias[u] + item_bias + np.dot(item_factors, u_factor)
+
+        if apply_score_clip:
+            for item in range(len(scores)):
+                if scores[item] < min_rating:
+                    scores[item] = min_rating
+                elif scores[item] > max_rating:
+                    scores[item] = max_rating
         
         for item in seen_items:
             scores[item] = -np.inf
@@ -164,8 +232,11 @@ def evaluate_top_n(
     if not test_users:
         return {"precision": 0.0, "recall": 0.0, "f_measure": 0.0, "ndcg": 0.0}
 
+    model_name = model.__class__.__name__
+    use_fast_path = model_name != "Option4ALSRecommender"
+
     # Numba Accelerated Fast Path
-    if hasattr(model, "user_factors") and hasattr(model, "item_factors") and getattr(model, "user_factors") is not None:
+    if use_fast_path and hasattr(model, "user_factors") and hasattr(model, "item_factors") and getattr(model, "user_factors") is not None:
         try:
             print("[Evaluation] Numba fast-path active for Top-K.")
             max_user = model.user_factors.shape[0] - 1
@@ -183,12 +254,19 @@ def evaluate_top_n(
             else:
                 test_users_np = np.array(test_users, dtype=np.int32)
             
+            # Option1 recommend_top_n clips scores before ranking.
+            # Keep fast-path behavior aligned with the model implementation.
+            apply_score_clip = model_name == "Option1MatrixFactorizationSGD"
+
             p_arr, r_arr, f_arr, n_arr = _fast_eval_numba(
                 test_users_np,
                 train_indptr, train_indices,
                 test_indptr, test_indices,
                 model.user_factors, model.item_factors, model.user_bias, model.item_bias, float(model.global_mean),
-                int(k), float(getattr(model, "min_rating", 0.5)), float(getattr(model, "max_rating", 5.0))
+                int(k),
+                float(getattr(model, "min_rating", 0.5)),
+                float(getattr(model, "max_rating", 5.0)),
+                bool(apply_score_clip),
             )
             
             return {
@@ -199,6 +277,8 @@ def evaluate_top_n(
             }
         except Exception as e:
             print("[Evaluation] Numba fast-path failed, falling back to Python loop. Error:", e)
+    elif not use_fast_path:
+        print("[Evaluation] Using model-consistent fallback for Top-K.")
 
     # Generic Python Fallback
     print("[Evaluation] Using generic Python fallback.")

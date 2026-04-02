@@ -63,11 +63,6 @@ const MODEL_METADATA: Record<string, { title: string; description: string }> = {
     description:
       "An advanced deep learning model that combines user/item embeddings with a Text CNN feature extractor for movie titles. Captures complex non-linear patterns.",
   },
-  option3: {
-    title: "Matrix SVD + Ridge/Lasso",
-    description:
-      "A robust linear algebra model that extracts latent factors using Singular Value Decomposition, calibrated with Ridge or Lasso regression for stable generalization.",
-  },
   option3_ridge: {
     title: "Option3 Ridge",
     description: "SVD latent factors calibrated with Ridge regression.",
@@ -83,7 +78,7 @@ const MODEL_METADATA: Record<string, { title: string; description: string }> = {
   },
 };
 
-const OPTION3_MODEL_KEYS = new Set(["option3", "option3_ridge", "option3_lasso"]);
+const OPTION3_MODEL_KEYS = new Set(["option3_ridge", "option3_lasso"]);
 const OPTION1_MODEL_KEYS = new Set(["option1", "option4"]);
 
 export default function AlgorithmSettings() {
@@ -101,7 +96,8 @@ export default function AlgorithmSettings() {
       if (res.ok) {
         const data = await res.json();
         if (seq !== fetchConfigSeqRef.current) return;
-        setModelConfig(data);
+        const availableModels = Array.isArray(data.available_models) ? data.available_models : [];
+        setModelConfig({ ...data, available_models: availableModels });
       }
     } catch (err) {
       console.error("Failed to fetch model config", err);
@@ -273,7 +269,6 @@ export default function AlgorithmSettings() {
   }, [modelConfig?.history]);
 
   const topK = Number(modelConfig?.metrics?.top_k ?? 10);
-  const usesAllTestRelevance = modelConfig?.metrics?.topn_relevance === "all_test";
   const availableModels = modelConfig?.available_models ?? [];
 
   const option1VariantModels = useMemo(() => {
@@ -289,11 +284,10 @@ export default function AlgorithmSettings() {
   const primaryModelOptions = useMemo(() => {
     return availableModels.filter((name) => {
       if (["option3_ridge", "option3_lasso"].includes(name)) return false;
-      if (option3VariantModels.length > 0 && name === "option3") return false;
       if (["option1", "option4"].includes(name)) return false;
       return true;
     });
-  }, [availableModels, option3VariantModels]);
+  }, [availableModels]);
 
   const formatMetricNumber = useCallback((value: unknown, digits = 4) => {
     if (typeof value !== "number" || !Number.isFinite(value)) return "-";
@@ -479,7 +473,7 @@ export default function AlgorithmSettings() {
                     </div>
                     <div className="model-info" style={{ flex: 1 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                        <h3 style={{ margin: 0 }}>{MODEL_METADATA["option3"]?.title ?? "Matrix SVD"}</h3>
+                        <h3 style={{ margin: 0 }}>Matrix SVD + Ridge/Lasso</h3>
                         <div
                           style={{
                             display: "flex",
@@ -521,7 +515,7 @@ export default function AlgorithmSettings() {
                           })}
                         </div>
                       </div>
-                      <p>{MODEL_METADATA["option3"]?.description ?? "Custom recommendation engine."}</p>
+                      <p>A robust linear algebra model that extracts latent factors using Singular Value Decomposition, calibrated with Ridge or Lasso regression for stable generalization.</p>
                     </div>
                   </div>
                 </div>
@@ -544,86 +538,6 @@ export default function AlgorithmSettings() {
                 <span className="metric-value">{card.value}</span>
               </div>
             ))}
-          </div>
-          
-          <div className="metrics-info settings-panel-inset" style={{ marginTop: '24px', marginBottom: 0 }}>
-            <h5 style={{ 
-              margin: '0 0 12px 0', 
-              fontWeight: 600, 
-              color: 'var(--text-main)',
-              fontSize: '1rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="16" x2="12" y2="12"></line>
-                <line x1="12" y1="8" x2="12.01" y2="8"></line>
-              </svg>
-              Evaluation Criteria & Standards
-            </h5>
-            <ul style={{ 
-              margin: 0, 
-              paddingLeft: '0', 
-              listStyle: 'none',
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: '16px' 
-            }}>
-              <li style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
-                <div>
-                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Holdout Protocol</strong> 
-                  A per-user 80/20 random split is applied so each user is evaluated on personalized unseen interactions.
-                </div>
-              </li>
-              <li style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
-                <div>
-                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Candidate Filtering</strong> 
-                  Recommendation candidates always exclude items already observed in each user's training set.
-                </div>
-              </li>
-              <li style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
-                <div>
-                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Point-wise Error</strong> 
-                  `MAE` and `RMSE` evaluate rating prediction error on hidden test interactions (lower is better).
-                </div>
-              </li>
-              <li style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
-                <div>
-                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Top-{topK} Ranking Quality</strong>{" "}
-                  {`Precision@${topK}, Recall@${topK}, F-measure@${topK}, and NDCG@${topK}`} measure recommendation quality in the top-{topK} list (higher is better).
-                </div>
-              </li>
-              <li style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
-                <div>
-                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Top-K Relevance Rule</strong>{" "}
-                  {usesAllTestRelevance ? (
-                    <>All hidden test interactions are treated as relevant (`all_test`, CS550-aligned).</>
-                  ) : (
-                    <>A recommended item is relevant only when its hidden-test rating is <strong>≥ {modelConfig.metrics.min_relevant_rating || "4.0"}</strong> (`rating_threshold`).</>
-                  )}
-                </div>
-              </li>
-              <li style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
-                <div>
-                  <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Model Selection</strong>{" "}
-                  {modelConfig?.active_model && OPTION3_MODEL_KEYS.has(modelConfig.active_model) ? (
-                    <>Matrix SVD is a single-pass fit (no epoch checkpoints). The active engine is the trained artifact on disk; use the bar chart below to compare in-sample training error to holdout MAE/RMSE.</>
-                  ) : isOption4Als ? (
-                    <>ALS Matrix Factorization runs iterative updates and reports per-epoch training RMSE/MAE. Best Model Epoch is selected from the lowest training RMSE checkpoint.</>
-                  ) : (
-                    <>The deployed checkpoint is chosen by validation performance (minimum validation loss), reported by Best Model Epoch and Best Model Val Loss.</>
-                  )}
-                </div>
-              </li>
-            </ul>
           </div>
         </div>
       )}

@@ -52,7 +52,7 @@
 dataset/          # Raw MovieLens data (e.g. ml-latest/)
 backend/          # Django REST API
 frontend/         # Next.js web application
-models/           # ML model code and generated artifacts (option1, option2, option3, option4, splits)
+models/           # ML model code and generated artifacts (option1, option2, option3_ridge, option3_lasso, option4, splits)
 scripts/          # Training, evaluation, enrichment, and report generation
 analysis/         # Final report (final_report.md), figures, and JSON/CSV artifacts
 ```
@@ -85,65 +85,37 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-If you plan to train the Option 2 deep model locally, install training extras:
-
-```bash
-pip install -r requirements-train.txt
-```
-
 ### 2. Train the Model
 
-Train the recommender model using the provided dataset. Place MovieLens data under `dataset/ml-latest/` (or pass `--dataset-dir`). Model files and train/test splits are saved under `models/artifacts/<model-type>/` (e.g. `models/artifacts/option1/`); metadata is shared in `models/artifacts/`.
+Train on MovieLens data under `dataset/ml-latest/` (or pass `--dataset-dir`).
+Model files are written to `models/artifacts/<model-type>/`, and split metadata is shared in `models/artifacts/`.
+
+Quick default run:
 
 ```bash
 python -m scripts.train_and_evaluate --dataset-dir dataset/ml-latest --top-k 10
 ```
 
-Top-K relevance threshold can be configured (default: `rating >= 4.0`):
+Model-specific quick runs:
+
 ```bash
-python -m scripts.train_and_evaluate --top-k 10 --topn-relevance rating_threshold --min-relevant-rating 4.0
+python -m scripts.train_and_evaluate --model-type option1 --dataset-dir dataset/ml-latest
+python -m scripts.train_and_evaluate --model-type option2 --dataset-dir dataset/ml-latest
+python -m scripts.train_and_evaluate --model-type option3_ridge --dataset-dir dataset/ml-latest
+python -m scripts.train_and_evaluate --model-type option3_lasso --dataset-dir dataset/ml-latest
+python -m scripts.train_and_evaluate --model-type option4 --dataset-dir dataset/ml-latest
 ```
 
-By default, Top-K evaluation follows the CS550 holdout definition (`--topn-relevance all_test`), which treats all testing interactions as relevant.
+Detailed parameter presets and copy-ready commands are documented in [@TRAINING_PARAMETERS.md](docs/TRAINING_PARAMETERS.md).
 
-*(Optional)* Tune Matrix Factorization hyperparameters:
-```bash
-python -m scripts.train_and_evaluate --dataset-dir dataset/ml-latest --n-factors 48 --epochs 30 --lr 0.01 --reg 0.05
-```
-
-Train the improved Option 2 hybrid deep model (title + genre features):
-```bash
-python -m scripts.train_and_evaluate --model-type option2 --dataset-dir dataset/ml-latest --n-factors 16 --epochs 10 --batch-size 4096
-```
-> **Note for Apple Silicon (M1/M2/M3) Mac users:** Option 2 uses TensorFlow which natively supports GPU acceleration on Macs. To enable it and speed up training by up to 5-10x, create a specialized conda environment:
+> **GPU note:** Option 2 is PyTorch-based and auto-selects `cuda`/`mps` when available.
+> Training, deep-model dependencies, and plotting tools are all included in:
 > ```bash
-> conda create -n tf-metal python=3.11 -y
-> conda activate tf-metal
-> pip install tensorflow==2.16.2 tensorflow-metal==1.2.0 pandas numpy scikit-learn tqdm numba scipy
+> pip install -r requirements.txt
 > ```
 
-Train the chunked Matrix SVD with Covariance Ridge or Lasso Regression (Option 3):
-```bash
-# Option 3 - Ridge Regression
-python -m scripts.train_and_evaluate --model-type option3_ridge --n-factors 48 --option3-reg-alpha 0.1
-
-# Option 3 - Sparse Lasso Regression
-python -m scripts.train_and_evaluate --model-type option3_lasso --n-factors 48 --option3-reg-alpha 0.1
-```
-
-Train the Matrix Factorization ALS model (Option 4):
-```bash
-python -m scripts.train_and_evaluate --model-type option4 --epochs 15 --n-factors 48 --reg 0.05 --option4-bias-reg 5.0
-```
-
-Useful Option 2 controls:
-- `--option2-dropout-rate`
-- `--option2-l2-reg`
-- `--option2-validation-split`
-- `--option2-lr-plateau-patience`
-- `--option2-rating-weight-power`
-
-The script caches a shared train/test split in `models/artifacts/splits/` so all models are evaluated on the same holdout split. Use `--force-resplit` to regenerate.
+The script caches a shared train/test split in `models/artifacts/splits/` so all models are evaluated on the same holdout split.
+Use `--force-resplit` to regenerate.
 
 ### 3. Fetch Movie Information (Optional but Recommended)
 
@@ -168,7 +140,7 @@ python manage.py runserver 8001
 ```
 
 > **⚡ Performance Architecture — Lazy Loading:**
-> The backend uses a **lazy model loading** strategy optimized for the full MovieLens 27M dataset. On startup, the server only scans which model files exist on disk (instant) rather than loading all 6 model pickle files into memory (which would take 30+ seconds).
+> The backend uses a **lazy model loading** strategy optimized for the full MovieLens 27M dataset. On startup, the server only scans which model files exist on disk (instant) rather than loading all 5 model pickle files into memory (which would take 30+ seconds).
 >
 > - **First request after startup:** The active model (~100–200 MB) is loaded on-demand when the first API request arrives. Expect a **~15–25 second** wait on the very first request (or when switching to a new model via Settings).
 > - **All subsequent requests:** Served from memory in **< 5 ms**. Models stay cached until the server restarts.
@@ -254,33 +226,6 @@ For the free-tier blueprint, the backend uses `STREAMX_DATA_DIR=/tmp/streamx`.
 - The analysis pipeline is designed to support course-style interpretation questions, not only predictive metrics.
 - The UI features a responsive design, glass-morphism effects, and dynamic filtering components.
 
-### Analysis Report
-
-**Report:** [analysis/Report.md](analysis/Report.md)
-
-You can also run the analysis pipeline after training to produce a single technical report that compares both recommender options and documents the dataset structure:
-
-```bash
-python -m scripts.generate_report
-```
-
-This generates:
-- `analysis/figures/`
-- `analysis/artifacts/final_summary.json`
-- `analysis/artifacts/option1_analysis.json`
-- `analysis/artifacts/option1_synthetic_ratings.csv`
-- `analysis/artifacts/option2_analysis.json`
-- `analysis/artifacts/option2_synthetic_ratings.csv`
-
-The report covers:
-- Data distribution and sparsity
-- Model performance comparison across variants
-- Training-curve analysis
-- Feature influence with bootstrap confidence intervals
-- Signal-vs-noise ablation checks
-- Latent factor interpretation for both models
-- Synthetic rating generation for realism checks
-- Limitations and recommendation for the final submission
 
 ## Acknowledgements
 

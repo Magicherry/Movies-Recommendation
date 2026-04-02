@@ -266,6 +266,27 @@ body {
   margin-left: 12px;
 }
 
+.option-badge-link {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.option-badge-link .option-badge {
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.option-badge-link:hover .option-badge {
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.option-badge-link:focus-visible .option-badge {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
 .nav-links {
   display: flex;
   gap: 8px;
@@ -993,6 +1014,20 @@ body {
   font-weight: 700;
   font-size: 0.8rem;
   margin-top: 4px;
+}
+
+.score-fallback-flag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  background: rgba(250, 204, 21, 0.16);
+  color: #fde68a;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
 }
 
 /* Recommend Page */

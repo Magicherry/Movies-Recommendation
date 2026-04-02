@@ -46,7 +46,7 @@ export default function DashboardStats() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (scrapeState?.status === "running") {
+    if (scrapeState?.status === "running" || scrapeState?.status === "starting") {
       interval = setInterval(fetchScrapeStatus, 1000);
     }
     return () => {
@@ -113,6 +113,22 @@ export default function DashboardStats() {
     }
   };
 
+  const cancelScrape = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/scrape/cancel`, { 
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+      if (res.ok) {
+        fetchScrapeStatus();
+      }
+    } catch (err) {
+      console.error("Failed to cancel scrape", err);
+    }
+  };
+
   const testApiKey = async () => {
     if (!apiKey) {
       setTestResult({ valid: false, message: "Please enter an API Key first" });
@@ -146,58 +162,46 @@ export default function DashboardStats() {
   };
 
   return (
-    <section className="settings-card full-width">
+    <section className="settings-card">
       <h2>Database</h2>
       
-      <div className="metrics-info settings-panel-strong">
-        <h3 className="settings-subsection-title">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
-            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
-          </svg>
-          Dataset Overview
-        </h3>
-        <p style={{ marginBottom: '12px', lineHeight: '1.5' }}>
+      <div className="setting-group">
+        <label>Dataset Overview</label>
+        <p className="setting-desc">
           This application is powered by the <a href="https://grouplens.org/datasets/movielens/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand)', textDecoration: 'none' }}>MovieLens dataset</a>, collected by the GroupLens Research Project at the University of Minnesota. It is widely recognized as the benchmark dataset for evaluating recommender systems.
         </p>
-        <ul style={{ 
-          margin: 0, 
-          paddingLeft: '0', 
-          listStyle: 'none',
-          display: 'flex', 
-          flexDirection: 'column', 
-          gap: '8px' 
-        }}>
-          <li style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-            <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
-            <div><strong>Source:</strong> MovieLens Latest Small Dataset</div>
-          </li>
-          <li style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-            <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
-            <div><strong>Content:</strong> 100,000 ratings and 3,600 tag applications applied to 9,000 movies by 600 users.</div>
-          </li>
-          <li style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-            <span style={{ color: 'var(--brand)', marginTop: '2px' }}>•</span>
-            <div><strong>Enrichment:</strong> Movie posters and backdrops are dynamically fetched via the TMDB API.</div>
-          </li>
-        </ul>
+        
+        {stats ? (
+          <div className="stats-overview" style={{ marginTop: '16px' }}>
+            <div className="stat-box">
+              <span className="stat-value">{stats.total_movies.toLocaleString()}</span>
+              <span className="stat-label">Total Movies</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-value">{stats.total_users.toLocaleString()}</span>
+              <span className="stat-label">Active Users</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-value">{stats.total_ratings.toLocaleString()}</span>
+              <span className="stat-label">User Ratings</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-value">{stats.average_rating.toFixed(2)}</span>
+              <span className="stat-label">Avg Rating</span>
+            </div>
+          </div>
+        ) : (
+          <div className="loading-state" style={{ marginTop: '16px' }}>Loading database statistics...</div>
+        )}
       </div>
 
-      <div className="scrape-section settings-panel-strong">
-        <h3 className="settings-subsection-title">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-          TMDB Data Scraping
-        </h3>
-        <p style={{ color: 'var(--text-subtle)', marginBottom: '16px', fontSize: '0.9rem' }}>
+      <div className="setting-group">
+        <label>TMDB Data Scraping</label>
+        <p className="setting-desc">
           Enrich the movie database by fetching high-quality posters, backdrops, and overviews from the TMDB API.
         </p>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div className="setting-group-block" style={{ padding: '20px', background: 'var(--bg-overlay-light)', borderRadius: 'var(--radius-panel)', border: '1px solid var(--border-soft)', display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <label htmlFor="tmdb-api-key" style={{ fontSize: '0.9rem', color: 'var(--text-main)', fontWeight: 500 }}>
               TMDB API Key (Optional if set in .env)
@@ -216,30 +220,39 @@ export default function DashboardStats() {
                   }}
                   onFocus={() => setShowApiKey(true)}
                   onBlur={() => setShowApiKey(false)}
-                  disabled={scrapeState?.status === 'running'}
+                  disabled={scrapeState?.status === 'running' || scrapeState?.status === 'starting'}
                 />
               </div>
               <button 
                 onClick={testApiKey}
-                disabled={scrapeState?.status === 'running' || isTesting || !apiKey}
+                disabled={scrapeState?.status === 'running' || scrapeState?.status === 'starting' || isTesting || !apiKey}
                 className="settings-action-btn settings-action-btn-secondary"
               >
                 {isTesting ? 'Testing...' : 'Test Key'}
               </button>
               <button 
                 onClick={startScrape}
-                disabled={scrapeState?.status === 'running'}
+                disabled={scrapeState?.status === 'running' || scrapeState?.status === 'starting'}
                 className="settings-action-btn settings-action-btn-primary"
               >
-                {scrapeState?.status === 'running' ? 'Scraping in Progress...' : refreshAll ? 'Refresh All Metadata' : 'Start Scraping'}
+                {scrapeState?.status === 'running' || scrapeState?.status === 'starting' ? 'Scraping in Progress...' : refreshAll ? 'Refresh All Metadata' : 'Start Scraping'}
               </button>
+              {(scrapeState?.status === 'running' || scrapeState?.status === 'starting') && (
+                <button 
+                  onClick={cancelScrape}
+                  className="settings-action-btn"
+                  style={{ background: '#ef4444', color: 'white', borderColor: '#ef4444' }}
+                >
+                  Cancel
+                </button>
+              )}
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: scrapeState?.status === 'running' ? 'not-allowed' : 'pointer', opacity: scrapeState?.status === 'running' ? 0.7 : 1, width: '100%' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: (scrapeState?.status === 'running' || scrapeState?.status === 'starting') ? 'not-allowed' : 'pointer', opacity: (scrapeState?.status === 'running' || scrapeState?.status === 'starting') ? 0.7 : 1, width: '100%' }}>
               <input
                 type="checkbox"
                 checked={refreshAll}
                 onChange={(e) => setRefreshAll(e.target.checked)}
-                disabled={scrapeState?.status === 'running'}
+                disabled={scrapeState?.status === 'running' || scrapeState?.status === 'starting'}
                 style={{ width: '16px', height: '16px' }}
               />
               <span style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>Refresh all (re-scrape existing metadata)</span>
@@ -266,11 +279,12 @@ export default function DashboardStats() {
           </div>
 
           {scrapeState && scrapeState.status !== 'idle' && (
-            <div className="overlay-box">
+            <div className="overlay-box" style={{ background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--border-soft)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem' }}>
                 <span style={{ color: 'var(--text-main)' }}>
                   {scrapeState.status === 'completed' ? 'Scraping Completed' : 
-                   scrapeState.status === 'error' ? 'Error occurred' : 'Progress'}
+                   scrapeState.status === 'error' ? 'Error occurred' : 
+                   scrapeState.status === 'starting' ? 'Starting scrape...' : 'Progress'}
                 </span>
                 <span style={{ color: 'var(--brand)', fontWeight: 600 }}>
                   {scrapeState.status === 'completed' ? '100%' : 
@@ -358,106 +372,87 @@ export default function DashboardStats() {
         </div>
       </div>
 
-      {stats ? (
-        <div className="stats-container">
-          <div className="stats-overview">
-            <div className="stat-box">
-              <span className="stat-value">{stats.total_movies.toLocaleString()}</span>
-              <span className="stat-label">Total Movies</span>
+      {stats && (
+        <>
+          <div className="setting-group">
+            <label>Top Genres Distribution</label>
+            <p className="setting-desc">The distribution of movies across the most popular genres.</p>
+            <div className="chart-wrapper" style={{ marginTop: '16px' }}>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={stats.top_genres} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
+                  <XAxis dataKey="name" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                  <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
+                    itemStyle={{ color: 'var(--brand)' }}
+                    cursor={{ fill: 'var(--chart-cursor-fill)' }}
+                  />
+                  <Bar dataKey="count" fill="var(--brand)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div className="stat-box">
-              <span className="stat-value">{stats.total_users.toLocaleString()}</span>
-              <span className="stat-label">Active Users</span>
-            </div>
-            <div className="stat-box">
-              <span className="stat-value">{stats.total_ratings.toLocaleString()}</span>
-              <span className="stat-label">User Ratings</span>
-            </div>
-            <div className="stat-box">
-              <span className="stat-value">{stats.average_rating.toFixed(2)}</span>
-              <span className="stat-label">Avg Rating</span>
+          </div>
+
+          <div className="setting-group">
+            <label>Rating Distribution</label>
+            <p className="setting-desc">How users have rated movies on the 0.5 to 5.0 scale.</p>
+            <div className="chart-wrapper" style={{ marginTop: '16px' }}>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={stats.rating_distribution} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
+                  <XAxis dataKey="rating" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                  <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
+                    itemStyle={{ color: '#8884d8' }}
+                    cursor={{ fill: 'var(--chart-cursor-fill)' }}
+                  />
+                  <Bar dataKey="count" fill="#8884d8" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
-          <div className="chart-grid" style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginTop: '24px' }}>
-            <div className="chart-section">
-              <h3>Top Genres Distribution</h3>
-              <div className="chart-wrapper">
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={stats.top_genres} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
-                    <XAxis dataKey="name" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                    <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
-                      itemStyle={{ color: 'var(--brand)' }}
-                      cursor={{ fill: 'var(--chart-cursor-fill)' }}
-                    />
-                    <Bar dataKey="count" fill="var(--brand)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="chart-section">
-              <h3>Rating Distribution</h3>
-              <div className="chart-wrapper">
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={stats.rating_distribution} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
-                    <XAxis dataKey="rating" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                    <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
-                      itemStyle={{ color: '#8884d8' }}
-                      cursor={{ fill: 'var(--chart-cursor-fill)' }}
-                    />
-                    <Bar dataKey="count" fill="#8884d8" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="chart-section">
-              <h3>Movies Added by Year (Last 20 Years)</h3>
-              <div className="chart-wrapper">
-                <ResponsiveContainer width="100%" height={400}>
-                  <LineChart data={stats.movies_by_year} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
-                    <XAxis dataKey="year" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                    <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
-                      itemStyle={{ color: '#82ca9d' }}
-                    />
-                    <Line type="monotone" dataKey="count" stroke="#82ca9d" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="chart-section">
-              <h3>Most Rated Movies</h3>
-              <div className="chart-wrapper">
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={stats.top_rated_movies.map((m) => ({ ...m, title: displayMovieTitle(m.title) }))} layout="vertical" margin={{ top: 20, right: 30, left: 150, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" horizontal={false} />
-                    <XAxis type="number" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                    <YAxis dataKey="title" type="category" stroke="#a1a1aa" tick={{ fill: '#a1a1aa', fontSize: 13 }} width={250} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
-                      itemStyle={{ color: '#ffc658' }}
-                      cursor={{ fill: 'var(--chart-cursor-fill)' }}
-                    />
-                    <Bar dataKey="count" fill="#ffc658" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+          <div className="setting-group">
+            <label>Movies Added by Year (Last 20 Years)</label>
+            <p className="setting-desc">The number of movies released each year over the past two decades.</p>
+            <div className="chart-wrapper" style={{ marginTop: '16px' }}>
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={stats.movies_by_year} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
+                  <XAxis dataKey="year" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                  <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
+                    itemStyle={{ color: '#82ca9d' }}
+                  />
+                  <Line type="monotone" dataKey="count" stroke="#82ca9d" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="loading-state">Loading database statistics...</div>
+
+          <div className="setting-group">
+            <label>Most Rated Movies</label>
+            <p className="setting-desc">The movies that have received the highest number of user ratings.</p>
+            <div className="chart-wrapper" style={{ marginTop: '16px' }}>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={stats.top_rated_movies.map((m) => ({ ...m, title: displayMovieTitle(m.title) }))} layout="vertical" margin={{ top: 20, right: 30, left: 150, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" horizontal={false} />
+                  <XAxis type="number" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                  <YAxis dataKey="title" type="category" stroke="#a1a1aa" tick={{ fill: '#a1a1aa', fontSize: 13 }} width={250} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
+                    itemStyle={{ color: '#ffc658' }}
+                    cursor={{ fill: 'var(--chart-cursor-fill)' }}
+                  />
+                  <Bar dataKey="count" fill="#ffc658" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </>
       )}
     </section>
   );

@@ -97,7 +97,14 @@ def resolve_links_path(
             raise FileNotFoundError(f"Specified links.csv path not found: {explicit}")
         return explicit
 
-    # Try to recover original dataset dir from split metadata.
+    # Always prefer the full MovieLens latest dataset for production scraping.
+    candidates = [
+        PROJECT_ROOT / "dataset" / "ml-latest" / "links.csv",
+        movies_path.parent / "links.csv",
+        PROJECT_ROOT / "frontend" / "ml-latest" / "ml-latest" / "links.csv",
+    ]
+
+    # Fallback: recover original dataset dir from split metadata if needed.
     split_meta_path = artifacts_dir / "splits" / "split_meta.json"
     if split_meta_path.exists():
         try:
@@ -105,17 +112,10 @@ def resolve_links_path(
                 meta = json.load(f)
             dataset_dir = meta.get("dataset_dir", "")
             if dataset_dir:
-                candidate = Path(str(dataset_dir)) / "links.csv"
-                if candidate.exists():
-                    return candidate
+                candidates.append(Path(str(dataset_dir)) / "links.csv")
         except (OSError, json.JSONDecodeError):
             pass
 
-    candidates = [
-        movies_path.parent / "links.csv",
-        PROJECT_ROOT / "dataset" / "ml-latest" / "links.csv",
-        PROJECT_ROOT / "frontend" / "ml-latest" / "ml-latest" / "links.csv",
-    ]
     return _first_existing_path(candidates)
 
 
@@ -378,13 +378,30 @@ def main():
     movies_df = attach_seed_tmdb_ids(movies_df, links_map)
 
     existing_items = set()
+    items_with_tmdb = set()
+    existing_df: pd.DataFrame | None = None
     if enriched_source_path is not None and enriched_source_path.exists():
         existing_df = pd.read_csv(enriched_source_path)
         existing_df = ensure_enriched_columns(existing_df.fillna(""))
         existing_df.to_csv(enriched_write_path, index=False)
         existing_items = set(existing_df["item_id"])
+        # Treat rows without tmdb_id as pending and continue scraping them in non-refresh mode.
+        existing_df["tmdb_id"] = pd.to_numeric(existing_df["tmdb_id"], errors="coerce")
+        items_with_tmdb = set(
+            existing_df.loc[
+                existing_df["tmdb_id"].notna() & (existing_df["tmdb_id"] > 0),
+                "item_id",
+            ].astype(int)
+        )
 
-    movies_to_fetch = movies_df[~movies_df["item_id"].isin(existing_items)]
+    if existing_items:
+        missing_rows = movies_df[~movies_df["item_id"].isin(existing_items)]
+        pending_rows = movies_df[movies_df["item_id"].isin(existing_items - items_with_tmdb)]
+        movies_to_fetch = pd.concat([missing_rows, pending_rows], ignore_index=True).drop_duplicates(
+            subset=["item_id"], keep="first"
+        )
+    else:
+        movies_to_fetch = movies_df
 
     if len(movies_to_fetch) == 0:
         print("All movies enriched.", flush=True)
@@ -392,8 +409,8 @@ def main():
         return
 
     print(f"Scraping TMDB for {len(movies_to_fetch)} movies...", flush=True)
-    is_first = not enriched_write_path.exists()
     summary = init_scrape_summary()
+    fetched_rows: list[dict] = []
 
     with ThreadPoolExecutor(max_workers=20) as executor:
         futures = [executor.submit(fetch_tmdb_info, row) for _, row in movies_to_fetch.iterrows()]
@@ -410,11 +427,19 @@ def main():
                         orig_row[col] = res.get(col, "[]") if col in res else "[]"
                     else:
                         orig_row[col] = res.get(col, "") if col in res else ""
-            pd.DataFrame([orig_row]).to_csv(enriched_write_path, mode="a", header=is_first, index=False)
-            is_first = False
+            fetched_rows.append(orig_row)
             if (idx + 1) % 100 == 0:
                 print(f"Processed {idx + 1}/{len(movies_to_fetch)}", flush=True)
 
+    fetched_df = pd.DataFrame(fetched_rows)
+    if existing_df is not None and not existing_df.empty:
+        base_df = existing_df.drop(columns=["seed_tmdb_id"], errors="ignore")
+        merged_df = pd.concat([base_df, fetched_df], ignore_index=True)
+        merged_df = merged_df.drop_duplicates(subset=["item_id"], keep="last")
+    else:
+        merged_df = fetched_df
+
+    merged_df.to_csv(enriched_write_path, index=False)
     print(f"Saved enriched data to {enriched_write_path}", flush=True)
     print_scrape_summary(summary)
 

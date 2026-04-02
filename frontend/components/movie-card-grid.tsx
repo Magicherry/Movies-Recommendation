@@ -13,6 +13,8 @@ export type MovieCardItem = {
   title: string;
   genres: string;
   score?: number;
+  score_source?: "model" | "fallback_rating" | "fallback_similarity" | "fallback_behavior" | string;
+  is_fallback_score?: boolean;
   poster_url?: string;
   backdrop_url?: string;
   overview?: string;
@@ -86,6 +88,7 @@ const MovieCard = memo(function MovieCard({
             <span className="poster-score">
               {scoreLabel}: {(movie.score).toFixed(2)}
               {scoreLabel === "Rating" ? "/5.00" : scoreLabel === "Match" || scoreLabel === "Match Score" ? "/5.00" : scoreLabel === "Similarity" ? "/1.00" : ""}
+              {movie.is_fallback_score ? <span className="score-fallback-flag">Fallback</span> : null}
             </span>
           )}
         </div>

@@ -5,48 +5,15 @@ from typing import Dict, List
 
 import numpy as np
 import pandas as pd
-import numba
-from numba import njit
 
 @dataclass
 class Recommendation:
     item_id: int
     score: float
 
-@numba.njit(nopython=True)
-def _sgd_epoch_numba(
-    indices,
-    user_ids,
-    item_ids,
-    values,
-    global_mean,
-    user_bias,
-    item_bias,
-    user_factors,
-    item_factors,
-    lr,
-    reg,
-):
-    for idx in indices:
-        u = user_ids[idx]
-        i = item_ids[idx]
-        rating = values[idx]
-
-        pred = global_mean + user_bias[u] + item_bias[i] + np.dot(user_factors[u], item_factors[i])
-        err = pred - rating
-
-        user_bias[u] -= lr * (err + reg * user_bias[u])
-        item_bias[i] -= lr * (err + reg * item_bias[i])
-
-        u_f = user_factors[u]
-        i_f = item_factors[i]
-        user_factors[u] -= lr * (err * i_f + reg * u_f)
-        item_factors[i] -= lr * (err * u_f + reg * i_f)
-
-
 class Option1MatrixFactorizationSGD:
     """
-    Matrix Factorization recommender trained with explicit SGD updates.
+    Matrix Factorization recommender trained with PyTorch mini-batch updates.
     """
 
     def __init__(
@@ -56,6 +23,7 @@ class Option1MatrixFactorizationSGD:
         lr: float = 0.01,
         reg: float = 0.05,
         lr_decay: float = 0.98,
+        batch_size: int = 16384,
         validation_split: float = 0.1,
         early_stopping_patience: int = 3,
         seed: int = 42,
@@ -67,6 +35,7 @@ class Option1MatrixFactorizationSGD:
         self.lr = lr
         self.reg = reg
         self.lr_decay = lr_decay
+        self.batch_size = batch_size
         self.validation_split = validation_split
         self.early_stopping_patience = early_stopping_patience
         self.seed = seed
@@ -88,7 +57,26 @@ class Option1MatrixFactorizationSGD:
         self.item_popularity_score: np.ndarray | None = None
         self.training_history: Dict[str, List[float]] = {}
 
+    @staticmethod
+    def _iter_slices(size: int, batch_size: int):
+        for start in range(0, size, batch_size):
+            yield slice(start, min(start + batch_size, size))
+
+    @staticmethod
+    def _select_device():
+        import torch  # pyright: ignore[reportMissingImports]
+
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+
     def fit(self, train_ratings: pd.DataFrame) -> "Option1MatrixFactorizationSGD":
+        import torch  # pyright: ignore[reportMissingImports]
+        import torch.nn as nn  # pyright: ignore[reportMissingImports]
+        import torch.nn.functional as F  # pyright: ignore[reportMissingImports]
+
         users = sorted(train_ratings["user_id"].astype(int).unique().tolist())
         items = sorted(train_ratings["item_id"].astype(int).unique().tolist())
         self.user_to_idx = {u: i for i, u in enumerate(users)}
@@ -98,13 +86,7 @@ class Option1MatrixFactorizationSGD:
         self.global_mean = float(train_ratings["rating"].mean())
         n_users, n_items = len(users), len(items)
 
-        self.user_bias = np.zeros(n_users, dtype=np.float32)
-        self.item_bias = np.zeros(n_items, dtype=np.float32)
         self.training_history = {"train_mae": [], "train_rmse": [], "learning_rate": []}
-
-        rng = np.random.default_rng(self.seed)
-        self.user_factors = rng.normal(0.0, 0.1, size=(n_users, self.n_factors)).astype(np.float32)
-        self.item_factors = rng.normal(0.0, 0.1, size=(n_items, self.n_factors)).astype(np.float32)
 
         user_ids = train_ratings["user_id"].astype(int).map(self.user_to_idx).to_numpy(dtype=np.int32)
         item_ids = train_ratings["item_id"].astype(int).map(self.item_to_idx).to_numpy(dtype=np.int32)
@@ -129,6 +111,7 @@ class Option1MatrixFactorizationSGD:
             out=np.full_like(item_sum, self.global_mean, dtype=np.float32),
         )
 
+        rng = np.random.default_rng(self.seed)
         indices = np.arange(len(values), dtype=np.int32)
         rng.shuffle(indices)
 
@@ -143,76 +126,122 @@ class Option1MatrixFactorizationSGD:
             self.training_history["val_mae"] = []
             self.training_history["val_rmse"] = []
 
-        current_lr = self.lr
+        torch.manual_seed(self.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(self.seed)
+        device = self._select_device()
+
+        class _MFModule(nn.Module):
+            def __init__(self, user_count: int, item_count: int, factors: int) -> None:
+                super().__init__()
+                self.user_embedding = nn.Embedding(user_count, factors)
+                self.item_embedding = nn.Embedding(item_count, factors)
+                self.user_bias = nn.Embedding(user_count, 1)
+                self.item_bias = nn.Embedding(item_count, 1)
+
+                nn.init.normal_(self.user_embedding.weight, mean=0.0, std=0.1)
+                nn.init.normal_(self.item_embedding.weight, mean=0.0, std=0.1)
+                nn.init.zeros_(self.user_bias.weight)
+                nn.init.zeros_(self.item_bias.weight)
+
+            def forward(self, user_idx_t: torch.Tensor, item_idx_t: torch.Tensor) -> torch.Tensor:
+                u_vec = self.user_embedding(user_idx_t)
+                i_vec = self.item_embedding(item_idx_t)
+                dot = (u_vec * i_vec).sum(dim=1)
+                return dot + self.user_bias(user_idx_t).squeeze(1) + self.item_bias(item_idx_t).squeeze(1)
+
+        model = _MFModule(n_users, n_items, self.n_factors).to(device)
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=self.lr,
+            weight_decay=max(float(self.reg), 0.0),
+        )
+
+        train_user_t = torch.from_numpy(user_ids[train_indices].astype(np.int64)).to(device)
+        train_item_t = torch.from_numpy(item_ids[train_indices].astype(np.int64)).to(device)
+        train_y_t = torch.from_numpy((values[train_indices] - self.global_mean).astype(np.float32)).to(device)
+
+        if val_size > 0:
+            val_user_t = torch.from_numpy(user_ids[val_indices].astype(np.int64)).to(device)
+            val_item_t = torch.from_numpy(item_ids[val_indices].astype(np.int64)).to(device)
+            val_y_t = torch.from_numpy((values[val_indices] - self.global_mean).astype(np.float32)).to(device)
+        else:
+            val_user_t = None
+            val_item_t = None
+            val_y_t = None
+
         best_val_rmse = np.inf
-        best_state: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None
+        best_state: Dict[str, torch.Tensor] | None = None
         stale_epochs = 0
 
-        from tqdm import tqdm
-        for epoch_idx in tqdm(range(self.epochs), desc="SGD Epochs"):
-            _sgd_epoch_numba(
-                train_indices,
-                user_ids,
-                item_ids,
-                values,
-                self.global_mean,
-                self.user_bias,
-                self.item_bias,
-                self.user_factors,
-                self.item_factors,
-                current_lr,
-                float(self.reg)
-            )
+        for epoch_idx in range(self.epochs):
+            model.train()
+            permutation = torch.randperm(train_user_t.shape[0], device=device)
+            train_abs_error = 0.0
+            train_sq_error = 0.0
+            train_samples = 0
 
-            train_preds = (
-                self.global_mean
-                + self.user_bias[user_ids[train_indices]]
-                + self.item_bias[item_ids[train_indices]]
-                + np.sum(
-                    self.user_factors[user_ids[train_indices]] * self.item_factors[item_ids[train_indices]],
-                    axis=1,
-                )
-            )
-            train_errors = train_preds - values[train_indices]
-            self.training_history["train_mae"].append(float(np.mean(np.abs(train_errors))))
-            self.training_history["train_rmse"].append(float(np.sqrt(np.mean(np.square(train_errors)))))
-            self.training_history["learning_rate"].append(float(current_lr))
+            for batch_slice in self._iter_slices(train_user_t.shape[0], max(1, int(self.batch_size))):
+                batch_idx = permutation[batch_slice]
+                batch_user = train_user_t[batch_idx]
+                batch_item = train_item_t[batch_idx]
+                batch_y = train_y_t[batch_idx]
+
+                preds = model(batch_user, batch_item)
+                loss = F.smooth_l1_loss(preds, batch_y)
+
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
+
+                with torch.no_grad():
+                    err = preds - batch_y
+                    train_abs_error += float(torch.abs(err).sum().item())
+                    train_sq_error += float(torch.square(err).sum().item())
+                    train_samples += int(batch_y.shape[0])
+
+            train_mae = train_abs_error / max(train_samples, 1)
+            train_rmse = float(np.sqrt(train_sq_error / max(train_samples, 1)))
+            self.training_history["train_mae"].append(train_mae)
+            self.training_history["train_rmse"].append(train_rmse)
+            self.training_history["learning_rate"].append(float(optimizer.param_groups[0]["lr"]))
 
             if val_size > 0:
-                val_preds = (
-                    self.global_mean
-                    + self.user_bias[user_ids[val_indices]]
-                    + self.item_bias[item_ids[val_indices]]
-                    + np.sum(
-                        self.user_factors[user_ids[val_indices]] * self.item_factors[item_ids[val_indices]],
-                        axis=1,
-                    )
-                )
-                val_errors = val_preds - values[val_indices]
-                val_mae = float(np.mean(np.abs(val_errors)))
-                val_rmse = float(np.sqrt(np.mean(np.square(val_errors))))
+                model.eval()
+                with torch.no_grad():
+                    val_preds = model(val_user_t, val_item_t)
+                    val_err = val_preds - val_y_t
+                    val_mae = float(torch.abs(val_err).mean().item())
+                    val_rmse = float(torch.sqrt(torch.square(val_err).mean()).item())
                 self.training_history["val_mae"].append(val_mae)
                 self.training_history["val_rmse"].append(val_rmse)
 
                 if val_rmse < best_val_rmse - 1e-6:
                     best_val_rmse = val_rmse
                     stale_epochs = 0
-                    best_state = (
-                        self.user_bias.copy(),
-                        self.item_bias.copy(),
-                        self.user_factors.copy(),
-                        self.item_factors.copy(),
-                    )
+                    best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
                 else:
                     stale_epochs += 1
                     if self.early_stopping_patience > 0 and stale_epochs >= self.early_stopping_patience:
-                        print(f"\n🌟 [Early Stopping] Validation RMSE stopped improving! Terminating SGD training early at Epoch {epoch_idx+1}.")
+                        print(
+                            f"Early stopping triggered at epoch {epoch_idx + 1} "
+                            f"(best val_rmse={best_val_rmse:.4f})."
+                        )
                         break
 
-            current_lr *= self.lr_decay
+            for group in optimizer.param_groups:
+                group["lr"] = float(group["lr"]) * float(self.lr_decay)
 
         if best_state is not None:
-            self.user_bias, self.item_bias, self.user_factors, self.item_factors = best_state
+            model.load_state_dict(best_state)
+
+        model.eval()
+        with torch.no_grad():
+            self.user_factors = model.user_embedding.weight.detach().cpu().numpy().astype(np.float32)
+            self.item_factors = model.item_embedding.weight.detach().cpu().numpy().astype(np.float32)
+            self.user_bias = model.user_bias.weight.detach().cpu().numpy().reshape(-1).astype(np.float32)
+            self.item_bias = model.item_bias.weight.detach().cpu().numpy().reshape(-1).astype(np.float32)
 
         item_norms = np.linalg.norm(self.item_factors, axis=1, keepdims=True)
         self.normalized_item_factors = np.divide(
@@ -225,13 +254,34 @@ class Option1MatrixFactorizationSGD:
 
     
     def predict_batch(self, user_ids: np.ndarray, item_ids: np.ndarray) -> np.ndarray:
-        u_max = self.user_factors.shape[0] - 1
-        i_max = self.item_factors.shape[0] - 1
-        u_idx = np.clip(user_ids, 0, u_max)
-        i_idx = np.clip(item_ids, 0, i_max)
-        
-        dots = np.sum(self.user_factors[u_idx] * self.item_factors[i_idx], axis=1)
-        preds = self.global_mean + self.user_bias[u_idx] + self.item_bias[i_idx] + dots
+        if (
+            self.user_bias is None
+            or self.item_bias is None
+            or self.user_factors is None
+            or self.item_factors is None
+        ):
+            raise RuntimeError("Model is not fitted.")
+
+        n = len(user_ids)
+        preds = np.full(n, self.global_mean, dtype=np.float32)
+        u_idx = np.fromiter((self.user_to_idx.get(int(u), -1) for u in user_ids), dtype=np.int64, count=n)
+        i_idx = np.fromiter((self.item_to_idx.get(int(i), -1) for i in item_ids), dtype=np.int64, count=n)
+
+        user_known = u_idx >= 0
+        item_known = i_idx >= 0
+        both_known = user_known & item_known
+
+        if np.any(user_known):
+            preds[user_known] += self.user_bias[u_idx[user_known]]
+        if np.any(item_known):
+            preds[item_known] += self.item_bias[i_idx[item_known]]
+        if np.any(both_known):
+            dots = np.sum(
+                self.user_factors[u_idx[both_known]] * self.item_factors[i_idx[both_known]],
+                axis=1,
+            )
+            preds[both_known] += dots.astype(np.float32)
+
         return np.clip(preds, self.min_rating, self.max_rating)
 
     def predict(self, user_id: int, item_id: int) -> float:

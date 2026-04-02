@@ -13,6 +13,8 @@ export type Movie = {
 
 export type Recommendation = Movie & {
   score: number;
+  score_source?: "model" | "fallback_rating" | "fallback_similarity" | "fallback_behavior" | string;
+  is_fallback_score?: boolean;
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
@@ -102,7 +104,16 @@ export async function getMovies(
 export async function getMovieDetail(itemId: number, similarLimit: number = 100): Promise<{ movie: Movie; similar: Recommendation[] }> {
   const safeLimit = Number.isFinite(similarLimit) ? Math.max(1, Math.min(200, Math.floor(similarLimit))) : 100;
   const res = await devFetch(`${API_BASE}/movie/${itemId}?n=${safeLimit}`, { cache: "no-store" }, `/movie/${itemId}`, { n: safeLimit });
-  if (!res.ok) throw new Error("Failed to fetch movie detail.");
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    const message =
+      (errBody as { error?: string; message?: string }).error ||
+      (errBody as { error?: string; message?: string }).message ||
+      (res.status === 404 ? `Movie ${itemId} not found.` : "Failed to fetch movie detail.");
+    const error = new Error(message) as Error & { status?: number };
+    error.status = res.status;
+    throw error;
+  }
   const data = await res.json();
   if (data.movie) {
     data.movie.title = formatTitle(data.movie.title);

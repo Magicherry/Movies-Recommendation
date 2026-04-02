@@ -1,6 +1,5 @@
 # LaTeX build artifacts for report.tex (keep report.tex, report.pdf, references.bib, figures/)
 report.aux
-report.bbl
 report.blg
 report.log
 report.out

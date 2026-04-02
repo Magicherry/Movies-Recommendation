@@ -26,7 +26,9 @@ def main():
         option_name = sys.argv[1]
 
     history_path = os.path.join(BASE_DIR, "models", "artifacts", option_name, "training_history.csv")
-    output_path = os.path.join(BASE_DIR, "models", "artifacts", option_name, "training_history_plot.png")
+    figures_dir = os.path.join(BASE_DIR, "models", "artifacts", option_name, "figures")
+    os.makedirs(figures_dir, exist_ok=True)
+    output_path = os.path.join(figures_dir, "training_history_plot.png")
 
     if not os.path.exists(history_path):
         print(f"Error: Could not find {history_path}")

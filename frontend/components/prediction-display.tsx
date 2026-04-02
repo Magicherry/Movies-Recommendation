@@ -41,8 +41,6 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
             setActiveEngine('Matrix SVD + Ridge');
           } else if (modelData.active_model === 'option3_lasso') {
             setActiveEngine('Matrix SVD + Lasso');
-          } else if (modelData.active_model === 'option3') {
-            setActiveEngine('Matrix SVD + Regression');
           } else if (modelData.active_model === 'option4') {
             setActiveEngine('ALS Matrix Factorization');
           } else {

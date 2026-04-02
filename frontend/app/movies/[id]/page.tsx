@@ -5,6 +5,7 @@ import RefreshOnEngineChange from "../../../components/refresh-on-engine-change"
 import MovieDetailActions from "../../../components/movie-detail-actions";
 import PersonList from "../../../components/person-list";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 type MovieDetailPageProps = {
   params: {
@@ -20,7 +21,20 @@ function getGradient(id: number) {
 
 export default async function MovieDetailPage({ params }: MovieDetailPageProps) {
   const itemId = Number(params.id);
-  const data = await getMovieDetail(itemId, 100);
+  if (!Number.isFinite(itemId) || itemId <= 0) {
+    notFound();
+  }
+
+  let data: Awaited<ReturnType<typeof getMovieDetail>>;
+  try {
+    data = await getMovieDetail(itemId, 100);
+  } catch (error) {
+    const err = error as Error & { status?: number };
+    if (err.status === 404 || err.message.toLowerCase().includes("not found")) {
+      notFound();
+    }
+    throw error;
+  }
 
   const cast = data.movie.cast || [];
   const directors = data.movie.directors || [];

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import copy
 import re
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, Iterator, List
 
 import numpy as np
 import pandas as pd
@@ -161,6 +162,13 @@ class Option2DeepRecommender:
             genre_matrix[idx] = self._encode_genres(genres)
         return genre_matrix
 
+    def _set_torch_seed(self) -> None:
+        import torch  # pyright: ignore[reportMissingImports]
+
+        torch.manual_seed(self.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(self.seed)
+
     def _build_model(
         self,
         num_users: int,
@@ -168,128 +176,119 @@ class Option2DeepRecommender:
         vocab_size: int,
         genre_vocab_size: int,
     ):
-        import tensorflow as tf  # pyright: ignore[reportMissingImports]
+        import torch  # pyright: ignore[reportMissingImports]
+        import torch.nn as nn  # pyright: ignore[reportMissingImports]
 
-        tf.random.set_seed(self.seed)
-        regularizer = tf.keras.regularizers.l2(self.l2_reg) if self.l2_reg > 0 else None
+        class _HybridNCFModule(nn.Module):
+            def __init__(
+                self,
+                embedding_dim: int,
+                title_embedding_dim: int,
+                title_num_filters: int,
+                genre_embedding_dim: int,
+                dropout_rate: float,
+            ) -> None:
+                super().__init__()
+                self.user_embedding = nn.Embedding(num_users, embedding_dim)
+                self.item_id_embedding = nn.Embedding(num_items, embedding_dim)
+                self.title_embedding = nn.Embedding(vocab_size + 1, title_embedding_dim)
+                self.genre_embedding = nn.Embedding(genre_vocab_size + 1, genre_embedding_dim)
 
-        user_input = tf.keras.layers.Input(shape=(1,), dtype="int32", name="user_id")
-        item_input = tf.keras.layers.Input(shape=(1,), dtype="int32", name="item_id")
-        title_input = tf.keras.layers.Input(
-            shape=(self.title_max_len,), dtype="int32", name="title_tokens"
-        )
-        genre_input = tf.keras.layers.Input(
-            shape=(self.genre_max_len,), dtype="int32", name="genre_tokens"
-        )
+                self.user_dropout = nn.Dropout(dropout_rate)
+                self.title_dropout = nn.Dropout(dropout_rate)
+                self.item_hidden_dropout = nn.Dropout(dropout_rate)
+                self.item_dropout = nn.Dropout(dropout_rate)
 
-        user_embed = tf.keras.layers.Embedding(
-            input_dim=num_users,
-            output_dim=self.embedding_dim,
-            name="user_embedding",
-            embeddings_regularizer=regularizer,
-        )(user_input)
-        user_vec = tf.keras.layers.Flatten(name="user_flat")(user_embed)
-        user_vec = tf.keras.layers.Dropout(self.dropout_rate, name="user_dropout")(user_vec)
+                self.title_conv_2 = nn.Conv1d(
+                    in_channels=title_embedding_dim,
+                    out_channels=title_num_filters,
+                    kernel_size=2,
+                )
+                self.title_conv_3 = nn.Conv1d(
+                    in_channels=title_embedding_dim,
+                    out_channels=title_num_filters,
+                    kernel_size=3,
+                )
+                self.title_conv_4 = nn.Conv1d(
+                    in_channels=title_embedding_dim,
+                    out_channels=title_num_filters,
+                    kernel_size=4,
+                )
 
-        item_id_embed = tf.keras.layers.Embedding(
-            input_dim=num_items,
-            output_dim=self.embedding_dim,
-            name="item_id_embedding",
-            embeddings_regularizer=regularizer,
-        )(item_input)
-        item_id_vec = tf.keras.layers.Flatten(name="item_id_flat")(item_id_embed)
+                self.title_dense = nn.Linear(title_num_filters * 3, embedding_dim)
+                self.item_hidden = nn.Linear(embedding_dim * 2 + genre_embedding_dim, embedding_dim * 2)
+                self.item_tower_vec = nn.Linear(embedding_dim * 2, embedding_dim)
 
-        title_embed = tf.keras.layers.Embedding(
-            input_dim=vocab_size + 1,
-            output_dim=self.title_embedding_dim,
-            name="title_embedding",
-            embeddings_regularizer=regularizer,
-        )(title_input)
-        title_embed = tf.keras.layers.SpatialDropout1D(
-            self.dropout_rate, name="title_spatial_dropout"
-        )(title_embed)
+                self.user_bias = nn.Embedding(num_users, 1)
+                self.item_bias = nn.Embedding(num_items, 1)
+                self.relu = nn.ReLU()
 
-        conv_2 = tf.keras.layers.Conv1D(
-            filters=self.title_num_filters,
-            kernel_size=2,
-            activation="relu",
-            name="title_conv_2",
-        )(title_embed)
-        conv_3 = tf.keras.layers.Conv1D(
-            filters=self.title_num_filters,
-            kernel_size=3,
-            activation="relu",
-            name="title_conv_3",
-        )(title_embed)
-        conv_4 = tf.keras.layers.Conv1D(
-            filters=self.title_num_filters,
-            kernel_size=4,
-            activation="relu",
-            name="title_conv_4",
-        )(title_embed)
+            def _encode_title(self, title_tokens: torch.Tensor) -> torch.Tensor:
+                title_embed = self.title_embedding(title_tokens)
+                title_embed = self.title_dropout(title_embed)
+                title_embed = title_embed.transpose(1, 2)
 
-        pool_2 = tf.keras.layers.GlobalMaxPooling1D(name="title_pool_2")(conv_2)
-        pool_3 = tf.keras.layers.GlobalMaxPooling1D(name="title_pool_3")(conv_3)
-        pool_4 = tf.keras.layers.GlobalMaxPooling1D(name="title_pool_4")(conv_4)
-        title_features = tf.keras.layers.Concatenate(name="title_concat")([pool_2, pool_3, pool_4])
-        title_vec = tf.keras.layers.Dense(
-            self.embedding_dim,
-            activation="relu",
-            name="title_dense",
-            kernel_regularizer=regularizer,
-        )(title_features)
-        title_vec = tf.keras.layers.Dropout(self.dropout_rate, name="title_dropout")(title_vec)
+                conv_2 = self.relu(self.title_conv_2(title_embed))
+                conv_3 = self.relu(self.title_conv_3(title_embed))
+                conv_4 = self.relu(self.title_conv_4(title_embed))
+                pool_2 = conv_2.max(dim=2).values
+                pool_3 = conv_3.max(dim=2).values
+                pool_4 = conv_4.max(dim=2).values
 
-        genre_embed = tf.keras.layers.Embedding(
-            input_dim=genre_vocab_size + 1,
-            output_dim=self.genre_embedding_dim,
-            name="genre_embedding",
-            embeddings_regularizer=regularizer,
-        )(genre_input)
-        genre_vec = tf.keras.layers.GlobalAveragePooling1D(name="genre_pool")(genre_embed)
+                title_features = torch.cat([pool_2, pool_3, pool_4], dim=1)
+                title_vec = self.relu(self.title_dense(title_features))
+                return self.title_dropout(title_vec)
 
-        item_features = tf.keras.layers.Concatenate(name="item_concat")(
-            [item_id_vec, title_vec, genre_vec]
-        )
-        item_features = tf.keras.layers.Dense(
-            self.embedding_dim * 2,
-            activation="relu",
-            name="item_hidden",
-            kernel_regularizer=regularizer,
-        )(item_features)
-        item_features = tf.keras.layers.Dropout(self.dropout_rate, name="item_hidden_dropout")(item_features)
-        item_vec = tf.keras.layers.Dense(
-            self.embedding_dim,
-            activation="relu",
-            name="item_tower_vec",
-            kernel_regularizer=regularizer,
-        )(item_features)
-        item_vec = tf.keras.layers.Dropout(self.dropout_rate, name="item_dropout")(item_vec)
+            def encode_user(self, user_ids: torch.Tensor) -> torch.Tensor:
+                user_vec = self.user_embedding(user_ids)
+                return self.user_dropout(user_vec)
 
-        dot = tf.keras.layers.Dot(axes=1, name="tower_dot")([user_vec, item_vec])
+            def encode_item(
+                self,
+                item_ids: torch.Tensor,
+                title_tokens: torch.Tensor,
+                genre_tokens: torch.Tensor,
+            ) -> torch.Tensor:
+                item_id_vec = self.item_id_embedding(item_ids)
+                title_vec = self._encode_title(title_tokens)
+                genre_embed = self.genre_embedding(genre_tokens)
+                genre_vec = genre_embed.mean(dim=1)
 
-        user_bias = tf.keras.layers.Embedding(num_users, 1, name="user_bias")(user_input)
-        item_bias = tf.keras.layers.Embedding(num_items, 1, name="item_bias")(item_input)
-        user_bias_vec = tf.keras.layers.Flatten(name="user_bias_flat")(user_bias)
-        item_bias_vec = tf.keras.layers.Flatten(name="item_bias_flat")(item_bias)
-        pred = tf.keras.layers.Add(name="prediction")([dot, user_bias_vec, item_bias_vec])
+                item_features = torch.cat([item_id_vec, title_vec, genre_vec], dim=1)
+                item_features = self.relu(self.item_hidden(item_features))
+                item_features = self.item_hidden_dropout(item_features)
+                item_vec = self.relu(self.item_tower_vec(item_features))
+                return self.item_dropout(item_vec)
 
-        model = tf.keras.Model(inputs=[user_input, item_input, title_input, genre_input], outputs=pred)
-        model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=self.lr, clipnorm=1.0),
-            loss=tf.keras.losses.Huber(delta=1.0),
-            metrics=[
-                tf.keras.metrics.MeanAbsoluteError(name="mae"),
-                tf.keras.metrics.RootMeanSquaredError(name="rmse"),
-            ],
+            def forward(
+                self,
+                user_ids: torch.Tensor,
+                item_ids: torch.Tensor,
+                title_tokens: torch.Tensor,
+                genre_tokens: torch.Tensor,
+            ) -> torch.Tensor:
+                user_vec = self.encode_user(user_ids)
+                item_vec = self.encode_item(item_ids, title_tokens, genre_tokens)
+                dot = (user_vec * item_vec).sum(dim=1)
+                pred = dot + self.user_bias(user_ids).squeeze(1) + self.item_bias(item_ids).squeeze(1)
+                return pred
+
+        return _HybridNCFModule(
+            embedding_dim=self.embedding_dim,
+            title_embedding_dim=self.title_embedding_dim,
+            title_num_filters=self.title_num_filters,
+            genre_embedding_dim=self.genre_embedding_dim,
+            dropout_rate=self.dropout_rate,
         )
 
-        user_tower = tf.keras.Model(inputs=user_input, outputs=user_vec)
-        item_tower = tf.keras.Model(inputs=[item_input, title_input, genre_input], outputs=item_vec)
-        return model, user_tower, item_tower
+    @staticmethod
+    def _iter_slices(size: int, batch_size: int) -> Iterator[slice]:
+        for start in range(0, size, batch_size):
+            yield slice(start, min(start + batch_size, size))
 
     def fit(self, train_ratings: pd.DataFrame, movies: pd.DataFrame | None = None) -> "Option2DeepRecommender":
-        import tensorflow as tf  # pyright: ignore[reportMissingImports]
+        import torch  # pyright: ignore[reportMissingImports]
+        import torch.nn.functional as F  # pyright: ignore[reportMissingImports]
 
         users = sorted(train_ratings["user_id"].astype(int).unique().tolist())
         items = sorted(train_ratings["item_id"].astype(int).unique().tolist())
@@ -303,12 +302,8 @@ class Option2DeepRecommender:
             movies = pd.DataFrame({"item_id": items, "title": [""] * len(items)})
 
         n_users, n_items = len(users), len(items)
-        user_ids = (
-            train_ratings["user_id"].astype(int).map(self.user_to_idx).to_numpy(dtype=np.int32)
-        )
-        item_ids = (
-            train_ratings["item_id"].astype(int).map(self.item_to_idx).to_numpy(dtype=np.int32)
-        )
+        user_ids = train_ratings["user_id"].astype(int).map(self.user_to_idx).to_numpy(dtype=np.int32)
+        item_ids = train_ratings["item_id"].astype(int).map(self.item_to_idx).to_numpy(dtype=np.int32)
         values = train_ratings["rating"].astype(float).to_numpy(dtype=np.float32) - self.global_mean
 
         self.user_seen_items = {}
@@ -338,12 +333,20 @@ class Option2DeepRecommender:
 
         vocab_size = max(1, len(self.title_word_to_idx))
         genre_vocab_size = max(1, len(self.genre_to_idx))
-        model, user_tower, item_tower = self._build_model(
+        self._set_torch_seed()
+        model = self._build_model(
             num_users=n_users,
             num_items=n_items,
             vocab_size=vocab_size,
             genre_vocab_size=genre_vocab_size,
         )
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+            device = torch.device("mps")
+        else:
+            device = torch.device("cpu")
+        model = model.to(device)
 
         rng = np.random.default_rng(self.seed)
         idx = np.arange(len(values), dtype=np.int32)
@@ -362,102 +365,193 @@ class Option2DeepRecommender:
             val_size = min(max(val_size, 1), len(values) - 1)
         split_at = len(values) - val_size
 
-        train_x = [
-            user_ids[:split_at].reshape(-1, 1),
-            item_ids[:split_at].reshape(-1, 1),
-            title_tokens_for_rows[:split_at],
-            genre_tokens_for_rows[:split_at],
-        ]
-        train_y = values[:split_at]
-        train_w = sample_weights[:split_at]
-
-        callbacks: List[tf.keras.callbacks.Callback] = []
-        best_val_loss = np.inf
-        best_val_epoch = 0
-        best_weights: list[np.ndarray] | None = None
-
-        class _BestModelSaver(tf.keras.callbacks.Callback):
-            def on_epoch_end(self, epoch, logs=None):
-                nonlocal best_val_loss, best_val_epoch, best_weights
-                if not logs or "val_loss" not in logs:
-                    return
-                current_val_loss = float(logs["val_loss"])
-                if current_val_loss < best_val_loss - 1e-8:
-                    best_val_loss = current_val_loss
-                    best_val_epoch = int(epoch) + 1
-                    best_weights = self.model.get_weights()
+        train_user_t = torch.from_numpy(user_ids[:split_at].astype(np.int64)).to(device)
+        train_item_t = torch.from_numpy(item_ids[:split_at].astype(np.int64)).to(device)
+        train_title_t = torch.from_numpy(title_tokens_for_rows[:split_at].astype(np.int64)).to(device)
+        train_genre_t = torch.from_numpy(genre_tokens_for_rows[:split_at].astype(np.int64)).to(device)
+        train_y_t = torch.from_numpy(values[:split_at].astype(np.float32)).to(device)
+        train_w_t = torch.from_numpy(sample_weights[:split_at].astype(np.float32)).to(device)
 
         if val_size > 0:
-            # Keep full training schedule, but always restore the best validation checkpoint.
-            callbacks.append(_BestModelSaver())
-            if self.lr_plateau_patience > 0:
-                callbacks.append(
-                    tf.keras.callbacks.ReduceLROnPlateau(
-                        monitor="val_loss",
-                        factor=self.lr_plateau_factor,
-                        patience=self.lr_plateau_patience,
-                        min_delta=1e-4,
-                        min_lr=self.min_lr,
-                        verbose=0,
-                    )
-                )
-            callbacks.append(
-                tf.keras.callbacks.EarlyStopping(
-                    monitor="val_loss",
-                    patience=max(1, self.lr_plateau_patience + 1),
-                    verbose=1,
-                    min_delta=1e-4,
-                    restore_best_weights=False,
-                )
+            val_user_t = torch.from_numpy(user_ids[split_at:].astype(np.int64)).to(device)
+            val_item_t = torch.from_numpy(item_ids[split_at:].astype(np.int64)).to(device)
+            val_title_t = torch.from_numpy(title_tokens_for_rows[split_at:].astype(np.int64)).to(device)
+            val_genre_t = torch.from_numpy(genre_tokens_for_rows[split_at:].astype(np.int64)).to(device)
+            val_y_t = torch.from_numpy(values[split_at:].astype(np.float32)).to(device)
+            val_w_t = torch.from_numpy(sample_weights[split_at:].astype(np.float32)).to(device)
+        else:
+            val_user_t = None
+            val_item_t = None
+            val_title_t = None
+            val_genre_t = None
+            val_y_t = None
+            val_w_t = None
+
+        optimizer = torch.optim.Adam(
+            model.parameters(),
+            lr=self.lr,
+            weight_decay=max(self.l2_reg, 0.0),
+        )
+        scheduler = None
+        if val_size > 0 and self.lr_plateau_patience > 0:
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                mode="min",
+                factor=self.lr_plateau_factor,
+                patience=self.lr_plateau_patience,
+                min_lr=self.min_lr,
             )
 
-        fit_kwargs = {
-            "x": train_x,
-            "y": train_y,
-            "sample_weight": train_w,
-            "batch_size": self.batch_size,
-            "epochs": self.epochs,
-            "verbose": 1,
-            "shuffle": True,
-            "callbacks": callbacks,
-        }
+        history: Dict[str, List[float]] = {"loss": [], "mae": [], "rmse": [], "lr": []}
         if val_size > 0:
-            val_x = [
-                user_ids[split_at:].reshape(-1, 1),
-                item_ids[split_at:].reshape(-1, 1),
-                title_tokens_for_rows[split_at:],
-                genre_tokens_for_rows[split_at:],
-            ]
-            val_y = values[split_at:]
-            val_w = sample_weights[split_at:]
-            fit_kwargs["validation_data"] = (val_x, val_y, val_w)
+            history["val_loss"] = []
+            history["val_mae"] = []
+            history["val_rmse"] = []
 
-        history = model.fit(
-            **fit_kwargs,
-        )
+        best_val_loss = float("inf")
+        best_val_epoch = 0
+        best_state = None
+        epochs_without_improvement = 0
+        min_delta = 1e-4
+        early_stopping_patience = max(1, self.lr_plateau_patience + 1)
 
-        if best_weights is not None:
-            model.set_weights(best_weights)
+        for epoch in range(1, self.epochs + 1):
+            model.train()
+            permutation = torch.randperm(train_user_t.shape[0], device=device)
+            train_loss_weighted_sum = 0.0
+            train_weight_sum = 0.0
+            train_abs_error = 0.0
+            train_sq_error = 0.0
+            train_samples = 0
 
-        self.training_history = {
-            key: [float(v) for v in value]
-            for key, value in history.history.items()
-        }
-        if best_weights is not None:
+            for batch_slice in self._iter_slices(train_user_t.shape[0], self.batch_size):
+                batch_idx = permutation[batch_slice]
+                batch_user = train_user_t[batch_idx]
+                batch_item = train_item_t[batch_idx]
+                batch_title = train_title_t[batch_idx]
+                batch_genre = train_genre_t[batch_idx]
+                batch_y = train_y_t[batch_idx]
+                batch_w = train_w_t[batch_idx]
+
+                preds = model(batch_user, batch_item, batch_title, batch_genre)
+                huber = F.smooth_l1_loss(preds, batch_y, reduction="none")
+                loss = (huber * batch_w).mean()
+
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
+
+                with torch.no_grad():
+                    err = preds - batch_y
+                    train_loss_weighted_sum += float((huber * batch_w).sum().item())
+                    train_weight_sum += float(batch_w.sum().item())
+                    train_abs_error += float(torch.abs(err).sum().item())
+                    train_sq_error += float(torch.square(err).sum().item())
+                    train_samples += int(batch_y.shape[0])
+
+            train_loss = train_loss_weighted_sum / max(train_weight_sum, 1e-8)
+            train_mae = train_abs_error / max(train_samples, 1)
+            train_rmse = float(np.sqrt(train_sq_error / max(train_samples, 1)))
+            history["loss"].append(float(train_loss))
+            history["mae"].append(float(train_mae))
+            history["rmse"].append(float(train_rmse))
+            history["lr"].append(float(optimizer.param_groups[0]["lr"]))
+
+            if val_size > 0:
+                model.eval()
+                with torch.no_grad():
+                    val_loss_weighted_sum = 0.0
+                    val_weight_sum = 0.0
+                    val_abs_error = 0.0
+                    val_sq_error = 0.0
+                    val_samples = 0
+
+                    for batch_slice in self._iter_slices(val_user_t.shape[0], self.batch_size):
+                        batch_user = val_user_t[batch_slice]
+                        batch_item = val_item_t[batch_slice]
+                        batch_title = val_title_t[batch_slice]
+                        batch_genre = val_genre_t[batch_slice]
+                        batch_y = val_y_t[batch_slice]
+                        batch_w = val_w_t[batch_slice]
+
+                        preds = model(batch_user, batch_item, batch_title, batch_genre)
+                        huber = F.smooth_l1_loss(preds, batch_y, reduction="none")
+                        err = preds - batch_y
+
+                        val_loss_weighted_sum += float((huber * batch_w).sum().item())
+                        val_weight_sum += float(batch_w.sum().item())
+                        val_abs_error += float(torch.abs(err).sum().item())
+                        val_sq_error += float(torch.square(err).sum().item())
+                        val_samples += int(batch_y.shape[0])
+
+                val_loss = val_loss_weighted_sum / max(val_weight_sum, 1e-8)
+                val_mae = val_abs_error / max(val_samples, 1)
+                val_rmse = float(np.sqrt(val_sq_error / max(val_samples, 1)))
+                history["val_loss"].append(float(val_loss))
+                history["val_mae"].append(float(val_mae))
+                history["val_rmse"].append(float(val_rmse))
+
+                if scheduler is not None:
+                    scheduler.step(val_loss)
+
+                if val_loss < best_val_loss - min_delta:
+                    best_val_loss = float(val_loss)
+                    best_val_epoch = epoch
+                    best_state = copy.deepcopy(model.state_dict())
+                    epochs_without_improvement = 0
+                else:
+                    epochs_without_improvement += 1
+
+                print(
+                    f"Epoch {epoch}/{self.epochs} - "
+                    f"loss={train_loss:.4f} mae={train_mae:.4f} rmse={train_rmse:.4f} "
+                    f"val_loss={val_loss:.4f} val_mae={val_mae:.4f} val_rmse={val_rmse:.4f}"
+                )
+
+                if epochs_without_improvement >= early_stopping_patience:
+                    print("Early stopping triggered.")
+                    break
+            else:
+                print(
+                    f"Epoch {epoch}/{self.epochs} - "
+                    f"loss={train_loss:.4f} mae={train_mae:.4f} rmse={train_rmse:.4f}"
+                )
+
+        if best_state is not None:
+            model.load_state_dict(best_state)
+
+        self.training_history = history
+        if best_state is not None:
             self.training_history["best_val_epoch"] = [float(best_val_epoch)]
             self.training_history["best_val_loss"] = [float(best_val_loss)]
 
-        user_idx_arr = np.arange(n_users, dtype=np.int32).reshape(-1, 1)
-        item_idx_arr = np.arange(n_items, dtype=np.int32).reshape(-1, 1)
+        model.eval()
+        with torch.no_grad():
+            all_user_idx = torch.arange(n_users, dtype=torch.long, device=device)
+            user_vec_chunks: List[np.ndarray] = []
+            for batch_slice in self._iter_slices(n_users, 4096):
+                user_vec_chunks.append(model.encode_user(all_user_idx[batch_slice]).cpu().numpy())
+            self.user_vectors = np.concatenate(user_vec_chunks, axis=0).astype(np.float32)
 
-        self.user_vectors = user_tower.predict(user_idx_arr, batch_size=4096, verbose=0).astype(np.float32)
-        self.item_vectors = item_tower.predict(
-            [item_idx_arr, item_title_matrix, item_genre_matrix],
-            batch_size=4096,
-            verbose=0,
-        ).astype(np.float32)
-        self.user_bias = model.get_layer("user_bias").get_weights()[0].reshape(-1).astype(np.float32)
-        self.item_bias = model.get_layer("item_bias").get_weights()[0].reshape(-1).astype(np.float32)
+            all_item_idx = torch.arange(n_items, dtype=torch.long, device=device)
+            item_title_t = torch.from_numpy(item_title_matrix.astype(np.int64)).to(device)
+            item_genre_t = torch.from_numpy(item_genre_matrix.astype(np.int64)).to(device)
+            item_vec_chunks: List[np.ndarray] = []
+            for batch_slice in self._iter_slices(n_items, 4096):
+                item_vec_chunks.append(
+                    model.encode_item(
+                        all_item_idx[batch_slice],
+                        item_title_t[batch_slice],
+                        item_genre_t[batch_slice],
+                    )
+                    .cpu()
+                    .numpy()
+                )
+            self.item_vectors = np.concatenate(item_vec_chunks, axis=0).astype(np.float32)
+
+            self.user_bias = model.user_bias.weight.cpu().numpy().reshape(-1).astype(np.float32)
+            self.item_bias = model.item_bias.weight.cpu().numpy().reshape(-1).astype(np.float32)
 
         item_norms = np.linalg.norm(self.item_vectors, axis=1, keepdims=True)
         self.normalized_item_vectors = np.divide(
@@ -484,7 +578,13 @@ class Option2DeepRecommender:
             pred += float(np.dot(self.user_vectors[u_idx], self.item_vectors[i_idx]))
         return float(np.clip(pred, self.min_rating, self.max_rating))
 
-    def recommend_top_n(self, user_id: int, n: int = 10, exclude_seen: bool = True, seen_items: set[int] | None = None) -> List[Recommendation]:
+    def recommend_top_n(
+        self,
+        user_id: int,
+        n: int = 10,
+        exclude_seen: bool = True,
+        seen_items: set[int] | None = None,
+    ) -> List[Recommendation]:
         if (
             self.user_vectors is None
             or self.item_vectors is None
