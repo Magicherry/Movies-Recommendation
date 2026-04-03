@@ -40,9 +40,9 @@
 \maketitle
 
 \begin{abstract}
-Recommender systems are central to modern online platforms, yet choosing the right collaborative filtering strategy for a given dataset remains an open practical question. We implement and compare four collaborative filtering methods for movie recommendation on the \textbf{MovieLens Latest} corpus (33.8M ratings, 330{,}975 users, 83{,}239 rated movies): biased matrix factorization with SGD (PyTorch), a deep hybrid model with CNN title and genre encoders, truncated-SVD with Ridge/Lasso calibration, and alternating least squares.
-All models are evaluated on rating prediction (MAE, RMSE) and top-10 recommendation (Precision, Recall, F1, NDCG) under an identical per-user 80/20 holdout split (27.1M train / 6.77M test ratings, seed~42).
-The deep hybrid model achieves the strongest overall profile (MAE\,=\,0.595, NDCG@10\,=\,0.0569), while tuned MF-SGD becomes a close second and attains the lowest RMSE (0.8074 vs.\ 0.8075 for the deep model).
+Recommender systems are central to modern online platforms, yet choosing the right collaborative filtering strategy for a given dataset remains an open practical question. We implement and compare four collaborative filtering methods for movie recommendation on the \textbf{MovieLens Latest} corpus: biased matrix factorization with SGD (PyTorch), a deep hybrid model with CNN title and genre encoders, truncated-SVD with Ridge/Lasso calibration, and alternating least squares.
+All models are evaluated on rating prediction (MAE, RMSE) and top-10 recommendation under an identical per-user 80/20 holdout split.
+The deep hybrid model achieves the strongest overall profile, while tuned MF-SGD becomes a close second and attains the lowest RMSE.
 SVD-Ridge/Lasso remain competitive linear baselines, and ALS still underperforms mainly on top-10 ranking quality under our current explicit-feedback configuration.
 We provide training-dynamics analysis, auxiliary feature-block ablation on a smaller subset, and latent-factor discussion, and we ship a full-stack web demo (\textit{StreamX}) that serves the retrained checkpoints.
 \end{abstract}
@@ -252,9 +252,9 @@ Drama, Comedy, and Thriller dominate the catalog, while niche genres are compara
 \end{figure}
 
 \paragraph{Data Splitting.}
-Following a standard per-user random holdout protocol, for each user we randomly assign 80\% of their ratings to the training set and 20\% to the test set (random seed 42).
+Following a standard per-user random holdout protocol, for each user we randomly assign 80\% of their ratings to the training set and 20\% to the test set (fixed random seed).
 This yields 27{,}065{,}494 training ratings and 6{,}766{,}668 test ratings.
-All models share exactly the same split, identified by a deterministic hash (\texttt{953d2ab2\ldots}) for reproducibility.
+All models share exactly the same split, identified by a deterministic hash for reproducibility.
 
 
 \section{Experiments}
