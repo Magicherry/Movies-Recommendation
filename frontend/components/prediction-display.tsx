@@ -42,7 +42,7 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
           } else if (modelData.active_model === 'option3_lasso') {
             setActiveEngine('Matrix SVD + Lasso');
           } else if (modelData.active_model === 'option4') {
-            setActiveEngine('ALS Matrix Factorization');
+            setActiveEngine('MF-ALS Matrix Factorization');
           } else {
             setActiveEngine(modelData.active_model);
           }

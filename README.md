@@ -16,7 +16,7 @@
 ## Features
 
 - **Robust Recommendation Engine**
-  - **Matrix Factorization**: Custom implementations trained with Numba-accelerated Stochastic Gradient Descent (SGD, Option 1) and Sparse CSR-block Alternating Least Squares (ALS, Option 4). Both feature massive loop parallelization and dynamic Early Stopping for millisecond-scale processing on 27M+ ratings.
+  - **Matrix Factorization**: Custom implementations trained with Numba-accelerated Stochastic Gradient Descent (SGD, Option 1) and Sparse CSR-block Alternating Least Squares (MF-ALS, Option 4). Both feature massive loop parallelization and dynamic Early Stopping for millisecond-scale processing on 27M+ ratings.
   - **Deep Neural CF**: Hybrid deep learning model with Text CNN for title feature extraction.
   - **Matrix SVD**: Closed-form SVD latent factors calibrated with Ridge/Lasso regression.
 - **Automated Data Processing**
@@ -119,7 +119,7 @@ Use `--force-resplit` to regenerate.
 
 ### 3. Fetch Movie Information (Optional but Recommended)
 
-Enrich movie records with posters, backdrops, overviews, and cast/director data from [TMDB](https://www.themoviedb.org/documentation/api). The script reads `movies.csv` from training artifacts and writes `models/artifacts/movies_enriched.csv`. Run **after** training (Step 2).
+Enrich movie records with posters, backdrops, overviews, and cast/director data from [TMDB](https://www.themoviedb.org/documentation/api). The script reads `movies.csv` from `dataset/ml-latest` (or `--dataset-dir`) and writes `movies_enriched.csv` beside it. If the dataset copy is unavailable, it falls back to `models/artifacts`. Run **after** training (Step 2).
 
 1. Get a free API key at [TMDB](https://www.themoviedb.org/documentation/api) and create a `.env` in the project root:
    ```bash

@@ -7,6 +7,7 @@ from typing import Dict, Iterator, List
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 
 @dataclass
@@ -41,6 +42,7 @@ class Option2DeepRecommender:
         lr_plateau_patience: int = 2,
         lr_plateau_factor: float = 0.5,
         min_lr: float = 1e-5,
+        early_stopping_patience: int = 5,
         rating_weight_power: float = 1.25,
         popularity_prior_count: float = 20.0,
     ) -> None:
@@ -63,6 +65,7 @@ class Option2DeepRecommender:
         self.lr_plateau_patience = lr_plateau_patience
         self.lr_plateau_factor = lr_plateau_factor
         self.min_lr = min_lr
+        self.early_stopping_patience = max(0, int(early_stopping_patience))
         self.rating_weight_power = rating_weight_power
         self.popularity_prior_count = popularity_prior_count
 
@@ -290,6 +293,7 @@ class Option2DeepRecommender:
         import torch  # pyright: ignore[reportMissingImports]
         import torch.nn.functional as F  # pyright: ignore[reportMissingImports]
 
+        print("[Option2] Initializing Deep Hybrid training pipeline...")
         users = sorted(train_ratings["user_id"].astype(int).unique().tolist())
         items = sorted(train_ratings["item_id"].astype(int).unique().tolist())
         self.user_to_idx = {u: i for i, u in enumerate(users)}
@@ -297,6 +301,10 @@ class Option2DeepRecommender:
         self.item_to_idx = {m: i for i, m in enumerate(items)}
         self.idx_to_item = {i: m for m, i in self.item_to_idx.items()}
         self.global_mean = float(train_ratings["rating"].mean())
+        print(
+            f"[Option2] Loaded {len(train_ratings):,} ratings "
+            f"({len(users):,} users, {len(items):,} items)."
+        )
 
         if movies is None:
             movies = pd.DataFrame({"item_id": items, "title": [""] * len(items)})
@@ -347,6 +355,7 @@ class Option2DeepRecommender:
         else:
             device = torch.device("cpu")
         model = model.to(device)
+        print(f"[Option2] Using device: {device}.")
 
         rng = np.random.default_rng(self.seed)
         idx = np.arange(len(values), dtype=np.int32)
@@ -402,7 +411,7 @@ class Option2DeepRecommender:
                 min_lr=self.min_lr,
             )
 
-        history: Dict[str, List[float]] = {"loss": [], "mae": [], "rmse": [], "lr": []}
+        history: Dict[str, List[float]] = {"train_loss": [], "train_mae": [], "train_rmse": [], "learning_rate": []}
         if val_size > 0:
             history["val_loss"] = []
             history["val_mae"] = []
@@ -413,9 +422,10 @@ class Option2DeepRecommender:
         best_state = None
         epochs_without_improvement = 0
         min_delta = 1e-4
-        early_stopping_patience = max(1, self.lr_plateau_patience + 1)
+        early_stopping_patience = self.early_stopping_patience
 
-        for epoch in range(1, self.epochs + 1):
+        epoch_progress = tqdm(range(1, self.epochs + 1), desc="Option2 Deep", unit="epoch")
+        for epoch in epoch_progress:
             model.train()
             permutation = torch.randperm(train_user_t.shape[0], device=device)
             train_loss_weighted_sum = 0.0
@@ -453,10 +463,17 @@ class Option2DeepRecommender:
             train_loss = train_loss_weighted_sum / max(train_weight_sum, 1e-8)
             train_mae = train_abs_error / max(train_samples, 1)
             train_rmse = float(np.sqrt(train_sq_error / max(train_samples, 1)))
-            history["loss"].append(float(train_loss))
-            history["mae"].append(float(train_mae))
-            history["rmse"].append(float(train_rmse))
-            history["lr"].append(float(optimizer.param_groups[0]["lr"]))
+            history["train_loss"].append(float(train_loss))
+            history["train_mae"].append(float(train_mae))
+            history["train_rmse"].append(float(train_rmse))
+            current_lr = float(optimizer.param_groups[0]["lr"])
+            history["learning_rate"].append(current_lr)
+            progress_stats: Dict[str, float] = {
+                "train_loss": float(train_loss),
+                "train_rmse": float(train_rmse),
+                "train_mae": float(train_mae),
+                "lr": current_lr,
+            }
 
             if val_size > 0:
                 model.eval()
@@ -491,6 +508,9 @@ class Option2DeepRecommender:
                 history["val_loss"].append(float(val_loss))
                 history["val_mae"].append(float(val_mae))
                 history["val_rmse"].append(float(val_rmse))
+                progress_stats["val_loss"] = float(val_loss)
+                progress_stats["val_rmse"] = float(val_rmse)
+                progress_stats["val_mae"] = float(val_mae)
 
                 if scheduler is not None:
                     scheduler.step(val_loss)
@@ -503,20 +523,15 @@ class Option2DeepRecommender:
                 else:
                     epochs_without_improvement += 1
 
-                print(
-                    f"Epoch {epoch}/{self.epochs} - "
-                    f"loss={train_loss:.4f} mae={train_mae:.4f} rmse={train_rmse:.4f} "
-                    f"val_loss={val_loss:.4f} val_mae={val_mae:.4f} val_rmse={val_rmse:.4f}"
-                )
-
-                if epochs_without_improvement >= early_stopping_patience:
-                    print("Early stopping triggered.")
+                if early_stopping_patience > 0 and epochs_without_improvement >= early_stopping_patience:
+                    epoch_progress.set_postfix(progress_stats, refresh=False)
+                    epoch_progress.write(
+                        f"Early stopping triggered at epoch {epoch} "
+                        f"(best val_loss={best_val_loss:.4f})."
+                    )
                     break
-            else:
-                print(
-                    f"Epoch {epoch}/{self.epochs} - "
-                    f"loss={train_loss:.4f} mae={train_mae:.4f} rmse={train_rmse:.4f}"
-                )
+            epoch_progress.set_postfix(progress_stats, refresh=False)
+        epoch_progress.close()
 
         if best_state is not None:
             model.load_state_dict(best_state)
@@ -561,6 +576,37 @@ class Option2DeepRecommender:
             where=item_norms > 1e-12,
         )
         return self
+
+    def predict_batch(self, user_ids: np.ndarray, item_ids: np.ndarray) -> np.ndarray:
+        if (
+            self.user_vectors is None
+            or self.item_vectors is None
+            or self.user_bias is None
+            or self.item_bias is None
+        ):
+            raise RuntimeError("Model is not fitted.")
+
+        n = len(user_ids)
+        preds = np.full(n, self.global_mean, dtype=np.float32)
+        u_idx = np.fromiter((self.user_to_idx.get(int(u), -1) for u in user_ids), dtype=np.int64, count=n)
+        i_idx = np.fromiter((self.item_to_idx.get(int(i), -1) for i in item_ids), dtype=np.int64, count=n)
+
+        user_known = u_idx >= 0
+        item_known = i_idx >= 0
+        both_known = user_known & item_known
+
+        if np.any(user_known):
+            preds[user_known] += self.user_bias[u_idx[user_known]]
+        if np.any(item_known):
+            preds[item_known] += self.item_bias[i_idx[item_known]]
+        if np.any(both_known):
+            dots = np.sum(
+                self.user_vectors[u_idx[both_known]] * self.item_vectors[i_idx[both_known]],
+                axis=1,
+            )
+            preds[both_known] += dots.astype(np.float32)
+
+        return np.clip(preds, self.min_rating, self.max_rating)
 
     def predict(self, user_id: int, item_id: int) -> float:
         if self.user_vectors is None or self.item_vectors is None:

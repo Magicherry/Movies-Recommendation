@@ -5,6 +5,7 @@ from typing import Dict, List
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 @dataclass
 class Recommendation:
@@ -25,7 +26,7 @@ class Option1MatrixFactorizationSGD:
         lr_decay: float = 0.98,
         batch_size: int = 16384,
         validation_split: float = 0.1,
-        early_stopping_patience: int = 3,
+        early_stopping_patience: int = 6,
         seed: int = 42,
         min_rating: float = 0.5,
         max_rating: float = 5.0,
@@ -77,6 +78,7 @@ class Option1MatrixFactorizationSGD:
         import torch.nn as nn  # pyright: ignore[reportMissingImports]
         import torch.nn.functional as F  # pyright: ignore[reportMissingImports]
 
+        print("[Option1] Initializing MF-SGD training pipeline...")
         users = sorted(train_ratings["user_id"].astype(int).unique().tolist())
         items = sorted(train_ratings["item_id"].astype(int).unique().tolist())
         self.user_to_idx = {u: i for i, u in enumerate(users)}
@@ -85,6 +87,10 @@ class Option1MatrixFactorizationSGD:
         self.idx_to_item = {i: m for m, i in self.item_to_idx.items()}
         self.global_mean = float(train_ratings["rating"].mean())
         n_users, n_items = len(users), len(items)
+        print(
+            f"[Option1] Loaded {len(train_ratings):,} ratings "
+            f"({n_users:,} users, {n_items:,} items)."
+        )
 
         self.training_history = {"train_mae": [], "train_rmse": [], "learning_rate": []}
 
@@ -174,7 +180,8 @@ class Option1MatrixFactorizationSGD:
         best_state: Dict[str, torch.Tensor] | None = None
         stale_epochs = 0
 
-        for epoch_idx in range(self.epochs):
+        epoch_progress = tqdm(range(self.epochs), desc="Option1 MF-SGD", unit="epoch")
+        for epoch_idx in epoch_progress:
             model.train()
             permutation = torch.randperm(train_user_t.shape[0], device=device)
             train_abs_error = 0.0
@@ -205,7 +212,13 @@ class Option1MatrixFactorizationSGD:
             train_rmse = float(np.sqrt(train_sq_error / max(train_samples, 1)))
             self.training_history["train_mae"].append(train_mae)
             self.training_history["train_rmse"].append(train_rmse)
-            self.training_history["learning_rate"].append(float(optimizer.param_groups[0]["lr"]))
+            current_lr = float(optimizer.param_groups[0]["lr"])
+            self.training_history["learning_rate"].append(current_lr)
+            progress_stats: Dict[str, float] = {
+                "train_rmse": train_rmse,
+                "train_mae": train_mae,
+                "lr": current_lr,
+            }
 
             if val_size > 0:
                 model.eval()
@@ -216,6 +229,8 @@ class Option1MatrixFactorizationSGD:
                     val_rmse = float(torch.sqrt(torch.square(val_err).mean()).item())
                 self.training_history["val_mae"].append(val_mae)
                 self.training_history["val_rmse"].append(val_rmse)
+                progress_stats["val_rmse"] = val_rmse
+                progress_stats["val_mae"] = val_mae
 
                 if val_rmse < best_val_rmse - 1e-6:
                     best_val_rmse = val_rmse
@@ -224,14 +239,17 @@ class Option1MatrixFactorizationSGD:
                 else:
                     stale_epochs += 1
                     if self.early_stopping_patience > 0 and stale_epochs >= self.early_stopping_patience:
-                        print(
+                        epoch_progress.set_postfix(progress_stats, refresh=False)
+                        epoch_progress.write(
                             f"Early stopping triggered at epoch {epoch_idx + 1} "
                             f"(best val_rmse={best_val_rmse:.4f})."
                         )
                         break
+            epoch_progress.set_postfix(progress_stats, refresh=False)
 
             for group in optimizer.param_groups:
                 group["lr"] = float(group["lr"]) * float(self.lr_decay)
+        epoch_progress.close()
 
         if best_state is not None:
             model.load_state_dict(best_state)

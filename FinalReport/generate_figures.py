@@ -119,9 +119,9 @@ print("  training_mf_sgd.pdf")
 # Figure 4: Deep Hybrid training curves
 # ═══════════════════════════════════════════════════════════════════════
 fig, axes = plt.subplots(1, 2, figsize=(6.2, 2.5))
-epochs_2 = list(range(1, len(hist2["loss"]) + 1))
+epochs_2 = list(range(1, len(hist2["train_loss"]) + 1))
 
-axes[0].plot(epochs_2, hist2["loss"], color=COLORS[0], label="Train Loss", linewidth=1.2)
+axes[0].plot(epochs_2, hist2["train_loss"], color=COLORS[0], label="Train Loss", linewidth=1.2)
 axes[0].plot(epochs_2, hist2["val_loss"], color=COLORS[1], label="Val Loss", linewidth=1.2, linestyle="--")
 axes[0].set_xlabel("Epoch")
 axes[0].set_ylabel("Huber Loss")
@@ -140,7 +140,7 @@ plt.close(fig)
 print("  training_deep.pdf")
 
 # ═══════════════════════════════════════════════════════════════════════
-# Figure 5: ALS training curves (with optional validation)
+# Figure 5: MF-ALS training curves (with optional validation)
 # ═══════════════════════════════════════════════════════════════════════
 has_val_als = "val_mae" in hist4 and len(hist4["val_mae"]) > 0
 if has_val_als:
@@ -150,13 +150,13 @@ if has_val_als:
     axes[0].plot(epochs_4, hist4["val_mae"], color=COLORS[1], label="Validation", linewidth=1.2, linestyle="--")
     axes[0].set_xlabel("Epoch")
     axes[0].set_ylabel("MAE")
-    axes[0].set_title("ALS: MAE Convergence")
+    axes[0].set_title("MF-ALS: MAE Convergence")
     axes[0].legend()
     axes[1].plot(epochs_4, hist4["train_rmse"], color=COLORS[0], label="Train", linewidth=1.2)
     axes[1].plot(epochs_4, hist4["val_rmse"], color=COLORS[1], label="Validation", linewidth=1.2, linestyle="--")
     axes[1].set_xlabel("Epoch")
     axes[1].set_ylabel("RMSE")
-    axes[1].set_title("ALS: RMSE Convergence")
+    axes[1].set_title("MF-ALS: RMSE Convergence")
     axes[1].legend()
     fig.tight_layout()
 else:
@@ -166,7 +166,7 @@ else:
     ax.plot(epochs_4, hist4["train_rmse"], color=COLORS[1], label="Train RMSE", linewidth=1.2)
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Error")
-    ax.set_title("ALS: Training Convergence")
+    ax.set_title("MF-ALS: Training Convergence")
     ax.legend()
     fig.tight_layout()
 fig.savefig(os.path.join(FIGURES, "training_als.pdf"), bbox_inches="tight")
@@ -176,7 +176,7 @@ print("  training_als.pdf")
 # ═══════════════════════════════════════════════════════════════════════
 # Figure 6: Model comparison – Rating Prediction (MAE + RMSE)
 # ═══════════════════════════════════════════════════════════════════════
-model_names = ["MF-SGD", "Deep Hybrid", "SVD-Ridge", "SVD-Lasso", "ALS"]
+model_names = ["MF-SGD", "Deep Hybrid", "SVD-Ridge", "SVD-Lasso", "MF-ALS"]
 model_keys = ["option1", "option2", "option3_ridge", "option3_lasso", "option4"]
 mae_vals = [metrics[k]["mae"] for k in model_keys]
 rmse_vals = [metrics[k]["rmse"] for k in model_keys]

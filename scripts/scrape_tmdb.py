@@ -61,26 +61,87 @@ def _first_existing_path(candidates: list[Path]) -> Path | None:
     return None
 
 
-def resolve_data_paths(artifacts_dir: Path) -> tuple[Path, Path | None, Path]:
+def _dedupe_paths(paths: list[Path]) -> list[Path]:
+    unique_paths: list[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_paths.append(path)
+    return unique_paths
+
+
+def _resolve_dataset_dir_candidates(artifacts_dir: Path, dataset_dir_arg: str | None = None) -> list[Path]:
+    candidates: list[Path] = []
+    env_dataset_dir = os.environ.get("STREAMX_DATASET_DIR", "").strip()
+
+    for raw in (dataset_dir_arg, env_dataset_dir):
+        if not raw:
+            continue
+        candidate = Path(raw)
+        if not candidate.is_absolute():
+            candidate = PROJECT_ROOT / candidate
+        candidates.append(candidate)
+
+    split_meta_path = artifacts_dir / "splits" / "split_meta.json"
+    if split_meta_path.exists():
+        try:
+            with open(split_meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            dataset_dir = str(meta.get("dataset_dir", "")).strip()
+            if dataset_dir:
+                candidates.append(Path(dataset_dir))
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    candidates.append(PROJECT_ROOT / "dataset" / "ml-latest")
+    return _dedupe_paths(candidates)
+
+
+def resolve_data_paths(
+    artifacts_dir: Path,
+    dataset_dir_arg: str | None = None,
+) -> tuple[Path, Path | None, Path]:
     fallback_dir = artifacts_dir / "option1"
     option2_fallback_dir = artifacts_dir / "option2"
+    dataset_dirs = _resolve_dataset_dir_candidates(artifacts_dir=artifacts_dir, dataset_dir_arg=dataset_dir_arg)
 
     movies_path = _first_existing_path(
-        [artifacts_dir / "movies.csv", fallback_dir / "movies.csv", option2_fallback_dir / "movies.csv"]
+        _dedupe_paths(
+            [dataset_dir / "movies.csv" for dataset_dir in dataset_dirs]
+            + [artifacts_dir / "movies.csv", fallback_dir / "movies.csv", option2_fallback_dir / "movies.csv"]
+        )
     )
     if movies_path is None:
         raise FileNotFoundError(
-            "No movies.csv found. Run training first: python -m scripts.train_and_evaluate"
+            "No movies.csv found. Provide --dataset-dir or place movies.csv under dataset/ml-latest."
         )
 
+    movies_dir = movies_path.parent
     enriched_source_path = _first_existing_path(
-        [
-            artifacts_dir / "movies_enriched.csv",
-            fallback_dir / "movies_enriched.csv",
-            option2_fallback_dir / "movies_enriched.csv",
-        ]
+        _dedupe_paths(
+            [movies_dir / "movies_enriched.csv"]
+            + [dataset_dir / "movies_enriched.csv" for dataset_dir in dataset_dirs]
+            + [
+                artifacts_dir / "movies_enriched.csv",
+                fallback_dir / "movies_enriched.csv",
+                option2_fallback_dir / "movies_enriched.csv",
+            ]
+        )
     )
-    enriched_write_path = artifacts_dir / "movies_enriched.csv"
+
+    try:
+        is_movies_from_artifacts = movies_dir.resolve().is_relative_to(artifacts_dir.resolve())
+    except OSError:
+        is_movies_from_artifacts = False
+
+    enriched_write_path = (
+        artifacts_dir / "movies_enriched.csv"
+        if is_movies_from_artifacts
+        else movies_dir / "movies_enriched.csv"
+    )
     return movies_path, enriched_source_path, enriched_write_path
 
 
@@ -139,7 +200,22 @@ def load_links_tmdb_map(links_path: Path | None) -> pd.DataFrame:
     return out.drop_duplicates(subset=["item_id"], keep="first")
 
 
+def normalize_movie_id_column(frame: pd.DataFrame) -> pd.DataFrame:
+    normalized = frame.copy()
+    if "item_id" not in normalized.columns:
+        if "movieId" in normalized.columns:
+            normalized = normalized.rename(columns={"movieId": "item_id"})
+        else:
+            raise KeyError("Missing movie identifier column. Expected 'item_id' or 'movieId'.")
+
+    normalized["item_id"] = pd.to_numeric(normalized["item_id"], errors="coerce")
+    normalized = normalized.dropna(subset=["item_id"])
+    normalized["item_id"] = normalized["item_id"].astype(int)
+    return normalized
+
+
 def attach_seed_tmdb_ids(frame: pd.DataFrame, links_map: pd.DataFrame) -> pd.DataFrame:
+    frame = normalize_movie_id_column(frame)
     if links_map.empty:
         frame = frame.copy()
         frame["seed_tmdb_id"] = pd.NA
@@ -312,13 +388,22 @@ def main():
         default=None,
         help="Optional path to MovieLens links.csv. If omitted, the script auto-detects it.",
     )
+    parser.add_argument(
+        "--dataset-dir",
+        type=str,
+        default=os.environ.get("STREAMX_DATASET_DIR", "dataset/ml-latest"),
+        help="Preferred MovieLens dataset directory containing movies.csv and links.csv.",
+    )
     args = parser.parse_args()
     refresh = args.refresh
     artifacts_dir = Path(args.artifacts_dir)
     if not artifacts_dir.is_absolute():
         artifacts_dir = PROJECT_ROOT / artifacts_dir
 
-    movies_path, enriched_source_path, enriched_write_path = resolve_data_paths(artifacts_dir)
+    movies_path, enriched_source_path, enriched_write_path = resolve_data_paths(
+        artifacts_dir=artifacts_dir,
+        dataset_dir_arg=args.dataset_dir,
+    )
     links_path = resolve_links_path(artifacts_dir=artifacts_dir, movies_path=movies_path, links_path_arg=args.links_path)
     links_map = load_links_tmdb_map(links_path)
     if links_path is not None:
@@ -346,6 +431,7 @@ def main():
             sys.exit(1)
         print(f"Loading movies from {enriched_source_path} (refresh mode)", flush=True)
         df = pd.read_csv(enriched_source_path)
+        df = normalize_movie_id_column(df)
         df = df.fillna("")
         df = ensure_enriched_columns(df)
         df = attach_seed_tmdb_ids(df, links_map)
@@ -382,6 +468,7 @@ def main():
     existing_df: pd.DataFrame | None = None
     if enriched_source_path is not None and enriched_source_path.exists():
         existing_df = pd.read_csv(enriched_source_path)
+        existing_df = normalize_movie_id_column(existing_df)
         existing_df = ensure_enriched_columns(existing_df.fillna(""))
         existing_df.to_csv(enriched_write_path, index=False)
         existing_items = set(existing_df["item_id"])

@@ -199,7 +199,7 @@ export default function SettingsPage() {
                   <div className="about-section">
                     <h3 className="about-section-title">Recommendation Engines</h3>
                     <ul className="about-list">
-                      <li><strong className="about-label">Matrix Factorization:</strong> Custom implementations trained with Stochastic Gradient Descent (SGD) and Alternating Least Squares (ALS).</li>
+                      <li><strong className="about-label">Matrix Factorization:</strong> Custom implementations trained with Stochastic Gradient Descent (SGD) and Alternating Least Squares (MF-ALS).</li>
                       <li><strong className="about-label">Deep Neural CF:</strong> Hybrid deep learning model with Text CNN for title feature extraction.</li>
                       <li><strong className="about-label">Matrix SVD:</strong> Closed-form SVD latent factors calibrated with Ridge/Lasso regression.</li>
                     </ul>

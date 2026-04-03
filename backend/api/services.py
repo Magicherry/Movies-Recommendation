@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import pickle
+import json
 from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List
@@ -46,13 +47,53 @@ class RecommenderService:
         candidates: List[Path] = []
         if external_ratings_env:
             candidates.append(Path(external_ratings_env))
-        candidates.append(self.project_root / "dataset" / "ml-latest" / "ratings.csv")
+        for dataset_dir in self._resolve_dataset_dir_candidates():
+            candidates.append(dataset_dir / "ratings.csv")
         candidates.append(train_ratings_path)
 
         for path in candidates:
             if path.exists():
                 return path
         return train_ratings_path
+
+    @staticmethod
+    def _dedupe_paths(candidates: List[Path]) -> List[Path]:
+        unique: List[Path] = []
+        seen: set[str] = set()
+        for path in candidates:
+            key = str(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(path)
+        return unique
+
+    def _resolve_dataset_dir_candidates(self) -> List[Path]:
+        candidates: List[Path] = []
+        dataset_dir_env = os.environ.get("STREAMX_DATASET_DIR", "").strip()
+        if dataset_dir_env:
+            candidates.append(Path(dataset_dir_env))
+
+        split_meta_path = self.artifacts_dir / "splits" / "split_meta.json"
+        if split_meta_path.exists():
+            try:
+                with open(split_meta_path, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+                dataset_dir = str(meta.get("dataset_dir", "")).strip()
+                if dataset_dir:
+                    candidates.append(Path(dataset_dir))
+            except (OSError, ValueError, json.JSONDecodeError):
+                pass
+
+        candidates.append(self.project_root / "dataset" / "ml-latest")
+        return self._dedupe_paths(candidates)
+
+    def _resolve_dataset_movies_path(self) -> Path | None:
+        for dataset_dir in self._resolve_dataset_dir_candidates():
+            movies_path = dataset_dir / "movies.csv"
+            if movies_path.exists():
+                return movies_path
+        return None
 
     @staticmethod
     def _read_ratings_any_format(path: Path) -> pd.DataFrame:
@@ -78,6 +119,13 @@ class RecommenderService:
 
     def _load_movies_from_path(self, source_path: Path) -> None:
         frame = pd.read_csv(source_path)
+        if "item_id" not in frame.columns and "movieId" in frame.columns:
+            frame = frame.rename(columns={"movieId": "item_id"})
+        if "item_id" not in frame.columns:
+            raise ValueError(f"Unsupported movies schema in {source_path}: missing 'item_id' or 'movieId'")
+        frame["item_id"] = pd.to_numeric(frame["item_id"], errors="coerce")
+        frame = frame.dropna(subset=["item_id"]).copy()
+        frame["item_id"] = frame["item_id"].astype(int)
         text_cols = ("poster_url", "backdrop_url", "overview", "tmdb_id", "scraped_title", "cast", "directors")
         for col in text_cols:
             if col not in frame.columns:
@@ -101,7 +149,6 @@ class RecommenderService:
             cast_str = getattr(row, "cast", "")
             directors_str = getattr(row, "directors", "")
             
-            import json
             try:
                 cast_data = json.loads(cast_str) if cast_str else []
             except json.JSONDecodeError:
@@ -179,20 +226,28 @@ class RecommenderService:
         model_dir = self.artifacts_dir / model_name
         # Metadata is shared; training split is model-specific.
         fallback_dir = self.artifacts_dir / "option1"
+        dataset_movies_path = self._resolve_dataset_movies_path()
 
-        movies_candidates = [
-            self.artifacts_dir / "movies.csv",
-            model_dir / "movies.csv",
-            fallback_dir / "movies.csv",
-        ]
+        movies_candidates = self._dedupe_paths(
+            ([dataset_movies_path] if dataset_movies_path is not None else [])
+            + [self.artifacts_dir / "movies.csv", model_dir / "movies.csv", fallback_dir / "movies.csv"]
+        )
         train_candidates = [
             model_dir / "train_ratings.csv",
         ]
-        enriched_candidates = [
-            self.artifacts_dir / "movies_enriched.csv",
-            model_dir / "movies_enriched.csv",
-            fallback_dir / "movies_enriched.csv",
-        ]
+        dataset_enriched_path = (
+            dataset_movies_path.parent / "movies_enriched.csv"
+            if dataset_movies_path is not None
+            else None
+        )
+        enriched_candidates = self._dedupe_paths(
+            ([dataset_enriched_path] if dataset_enriched_path is not None else [])
+            + [
+                self.artifacts_dir / "movies_enriched.csv",
+                model_dir / "movies_enriched.csv",
+                fallback_dir / "movies_enriched.csv",
+            ]
+        )
 
         movies_path = self._first_existing_path(movies_candidates)
         if movies_path is None:
@@ -206,8 +261,10 @@ class RecommenderService:
                 f"train_ratings.csv for model '{model_name}' not found. Run training for this model: "
                 f"python -m scripts.train_and_evaluate --model-type {model_name}"
             )
-        # Always write enriched metadata to the shared root file.
-        preferred_enriched_write_path = self.artifacts_dir / "movies_enriched.csv"
+        # Keep enriched metadata beside the canonical movies.csv source when possible.
+        preferred_enriched_write_path = (
+            dataset_enriched_path if dataset_enriched_path is not None else (self.artifacts_dir / "movies_enriched.csv")
+        )
         source_enriched_path = self._first_existing_path(enriched_candidates)
 
         return {

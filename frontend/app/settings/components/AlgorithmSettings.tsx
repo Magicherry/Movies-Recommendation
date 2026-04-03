@@ -72,7 +72,7 @@ const MODEL_METADATA: Record<string, { title: string; description: string }> = {
     description: "SVD latent factors calibrated with Lasso regression.",
   },
   option4: {
-    title: "ALS Matrix Factorization",
+    title: "MF-ALS Matrix Factorization",
     description:
       "An alternating least squares recommender that iteratively optimizes user and item latent factors with ridge-regularized closed-form updates.",
   },
@@ -319,8 +319,8 @@ export default function AlgorithmSettings() {
     }
     if (isOption4Als) {
       return [
-        { label: "ALS factors (n_factors)", value: formatMetricInteger(metrics.n_factors) },
-        { label: "ALS epochs", value: formatMetricInteger(metrics.epochs) },
+        { label: "MF-ALS factors (n_factors)", value: formatMetricInteger(metrics.n_factors) },
+        { label: "MF-ALS epochs", value: formatMetricInteger(metrics.epochs) },
         { label: "Reg strength (lambda)", value: formatMetricNumber(metrics.reg) },
         { label: "Bias reg", value: formatMetricNumber(metrics.bias_reg) },
         { label: "MAE (holdout)", value: formatMetricNumber(metrics.mae) },
@@ -423,13 +423,13 @@ export default function AlgorithmSettings() {
                                 }}
                                 title={MODEL_METADATA[modelName]?.description ?? modelName}
                               >
-                                {modelName === "option1" ? "SGD" : "ALS"}
+                                {modelName === "option1" ? "SGD" : "MF-ALS"}
                               </button>
                             );
                           })}
                         </div>
                       </div>
-                      <p>A collaborative filtering model that learns latent factors for users and items. Choose between Stochastic Gradient Descent (SGD) or Alternating Least Squares (ALS) optimization.</p>
+                      <p>A collaborative filtering model that learns latent factors for users and items. Choose between Stochastic Gradient Descent (SGD) or Alternating Least Squares (MF-ALS) optimization.</p>
                     </div>
                   </div>
                 </div>
@@ -739,7 +739,7 @@ export default function AlgorithmSettings() {
               boxShadow: "var(--shadow-card)"
             }}>
               <h4 style={{ margin: "0 0 16px 20px", fontSize: "1rem", fontWeight: 600, color: "var(--text-main)" }}>
-                {isOption4Als ? "ALS Training Convergence" : `Training History (${modelConfig.history.loss ? 'Loss' : 'RMSE'})`}
+                {isOption4Als ? "MF-ALS Training Convergence" : `Training History (${modelConfig.history.loss ? 'Loss' : 'RMSE'})`}
               </h4>
               <div style={{ height: "250px", width: "100%" }}>
                 <ResponsiveContainer width="100%" height="100%">

@@ -27,7 +27,7 @@ def parse_args() -> argparse.Namespace:
         choices=["option1", "option2", "option3_ridge", "option3_lasso", "option4"],
         help=(
             "Which model to train: option1 (MF SGD), option2 (Deep NCF), "
-            "option3_ridge (SVD + Ridge), option3_lasso (SVD + Lasso), or option4 (ALS)."
+            "option3_ridge (SVD + Ridge), option3_lasso (SVD + Lasso), or option4 (MF-ALS)."
         ),
     )
     parser.add_argument(
@@ -71,7 +71,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--option1-early-stopping-patience",
         type=int,
-        default=3,
+        default=6,
         help="Early stopping patience for option1 (0 disables).",
     )
     parser.add_argument(
@@ -116,6 +116,12 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.5,
         help="ReduceLROnPlateau factor for option2.",
+    )
+    parser.add_argument(
+        "--option2-early-stopping-patience",
+        type=int,
+        default=5,
+        help="Early stopping patience for option2 (0 disables).",
     )
     parser.add_argument(
         "--option2-min-lr",
@@ -201,19 +207,19 @@ def parse_args() -> argparse.Namespace:
         "--option4-bias-reg",
         type=float,
         default=5.0,
-        help="Ridge penalty for the bias term in option4 ALS updates.",
+        help="Ridge penalty for the bias term in option4 MF-ALS updates.",
     )
     parser.add_argument(
         "--option4-validation-split",
         type=float,
         default=0.1,
-        help="Validation split ratio for option4 ALS.",
+        help="Validation split ratio for option4 MF-ALS.",
     )
     parser.add_argument(
         "--option4-early-stopping-patience",
         type=int,
-        default=5,
-        help="Early stopping patience for option4 ALS (0 disables).",
+        default=6,
+        help="Early stopping patience for option4 MF-ALS (0 disables).",
     )
     parser.add_argument(
         "--artifacts-dir",
@@ -253,72 +259,75 @@ def _auto_tune_model_hparams(args: argparse.Namespace) -> list[str]:
 
     if model_type == "option1":
         if not _flag_was_provided("--n-factors"):
-            args.n_factors = 96
-            notes.append("option1 n_factors -> 96")
+            args.n_factors = 64
+            notes.append("option1 n_factors -> 64")
         if not _flag_was_provided("--epochs"):
-            args.epochs = 40
-            notes.append("option1 epochs -> 40")
+            args.epochs = 50
+            notes.append("option1 epochs -> 50")
         if not _flag_was_provided("--lr"):
-            args.lr = 0.008
-            notes.append("option1 lr -> 0.008")
+            args.lr = 0.005
+            notes.append("option1 lr -> 0.005")
         if not _flag_was_provided("--reg"):
-            args.reg = 0.03
-            notes.append("option1 reg -> 0.03")
+            args.reg = 0.02
+            notes.append("option1 reg -> 0.02")
         if not _flag_was_provided("--lr-decay"):
-            args.lr_decay = 0.985
-            notes.append("option1 lr_decay -> 0.985")
+            args.lr_decay = 0.97
+            notes.append("option1 lr_decay -> 0.97")
         if not _flag_was_provided("--option1-early-stopping-patience"):
             args.option1_early_stopping_patience = 6
             notes.append("option1 early_stopping_patience -> 6")
         if not _flag_was_provided("--option1-batch-size"):
             if has_cuda:
                 if cuda_mem_gb >= 20:
-                    args.option1_batch_size = 65536
+                    args.option1_batch_size = 131072
                 elif cuda_mem_gb >= 12:
-                    args.option1_batch_size = 32768
+                    args.option1_batch_size = 65536
                 else:
-                    args.option1_batch_size = 16384
+                    args.option1_batch_size = 32768
                 notes.append(f"option1 batch_size -> {args.option1_batch_size} (auto from GPU memory)")
             else:
-                args.option1_batch_size = 8192
-                notes.append("option1 batch_size -> 8192 (CPU fallback)")
+                args.option1_batch_size = 16384
+                notes.append("option1 batch_size -> 16384 (CPU fallback)")
 
     elif model_type == "option2":
         if not _flag_was_provided("--n-factors"):
-            args.n_factors = 64
-            notes.append("option2 n_factors -> 64")
+            args.n_factors = 96
+            notes.append("option2 n_factors -> 96")
         if not _flag_was_provided("--epochs"):
-            args.epochs = 24
-            notes.append("option2 epochs -> 24")
+            args.epochs = 50
+            notes.append("option2 epochs -> 50")
         if not _flag_was_provided("--option2-lr"):
-            args.option2_lr = 7e-4
-            notes.append("option2 lr -> 7e-4")
+            args.option2_lr = 8e-4
+            notes.append("option2 lr -> 8e-4")
         if not _flag_was_provided("--option2-dropout-rate"):
-            args.option2_dropout_rate = 0.10
-            notes.append("option2 dropout -> 0.10")
+            args.option2_dropout_rate = 0.18
+            notes.append("option2 dropout -> 0.18")
         if not _flag_was_provided("--option2-l2-reg"):
-            args.option2_l2_reg = 3e-6
-            notes.append("option2 l2_reg -> 3e-6")
+            args.option2_l2_reg = 1e-5
+            notes.append("option2 l2_reg -> 1e-5")
         if not _flag_was_provided("--option2-validation-split"):
-            args.option2_validation_split = 0.12
-            notes.append("option2 validation_split -> 0.12")
+            args.option2_validation_split = 0.10
+            notes.append("option2 validation_split -> 0.10")
         if not _flag_was_provided("--option2-lr-plateau-patience"):
-            args.option2_lr_plateau_patience = 3
-            notes.append("option2 lr_plateau_patience -> 3")
+            args.option2_lr_plateau_patience = 4
+            notes.append("option2 lr_plateau_patience -> 4")
+        if not _flag_was_provided("--option2-early-stopping-patience"):
+            args.option2_early_stopping_patience = 5
+            notes.append("option2 early_stopping_patience -> 5")
         if not _flag_was_provided("--title-embedding-dim"):
             args.title_embedding_dim = 48
             notes.append("option2 title_embedding_dim -> 48")
         if not _flag_was_provided("--title-num-filters"):
-            args.title_num_filters = 64
-            notes.append("option2 title_num_filters -> 64")
+            args.title_num_filters = 96
+            notes.append("option2 title_num_filters -> 96")
         if not _flag_was_provided("--batch-size"):
             if has_cuda:
                 if cuda_mem_gb >= 20:
-                    args.batch_size = 32768
+                    args.batch_size = 65536
                 elif cuda_mem_gb >= 12:
-                    args.batch_size = 16384
+                    args.batch_size = 32768
                 else:
-                    args.batch_size = 8192
+                    args.batch_size = 16384
                 notes.append(f"option2 batch_size -> {args.batch_size} (auto from GPU memory)")
             else:
                 args.batch_size = 4096
@@ -326,29 +335,46 @@ def _auto_tune_model_hparams(args: argparse.Namespace) -> list[str]:
 
     elif model_type in {"option3_ridge", "option3_lasso"}:
         if not _flag_was_provided("--n-factors"):
-            args.n_factors = 96
-            notes.append("option3 n_factors -> 96")
+            args.n_factors = 200
+            notes.append("option3 n_factors -> 200")
         if not _flag_was_provided("--option3-bias-reg"):
-            args.option3_bias_reg = 8.0
-            notes.append("option3 bias_reg -> 8.0")
+            args.option3_bias_reg = 12.0
+            notes.append("option3 bias_reg -> 12.0")
 
         if model_type == "option3_ridge":
             if not _flag_was_provided("--option3-reg-alpha"):
-                args.option3_reg_alpha = 0.05
-                notes.append("option3_ridge reg_alpha -> 0.05")
+                args.option3_reg_alpha = 0.08
+                notes.append("option3_ridge reg_alpha -> 0.08")
         else:
             if not _flag_was_provided("--option3-reg-alpha"):
-                args.option3_reg_alpha = 0.02
-                notes.append("option3_lasso reg_alpha -> 0.02")
+                args.option3_reg_alpha = 0.008
+                notes.append("option3_lasso reg_alpha -> 0.008")
             if not _flag_was_provided("--option3-lasso-max-iter"):
-                args.option3_lasso_max_iter = 600
-                notes.append("option3_lasso max_iter -> 600")
+                args.option3_lasso_max_iter = 2000
+                notes.append("option3_lasso max_iter -> 2000")
             if not _flag_was_provided("--option3-lasso-tol"):
-                args.option3_lasso_tol = 5e-5
-                notes.append("option3_lasso tol -> 5e-5")
+                args.option3_lasso_tol = 1e-5
+                notes.append("option3_lasso tol -> 1e-5")
 
         if has_cuda:
             notes.append("option3 uses CUDA sparse randomized SVD when available")
+
+    elif model_type == "option4":
+        if not _flag_was_provided("--n-factors"):
+            args.n_factors = 96
+            notes.append("option4 n_factors -> 96")
+        if not _flag_was_provided("--epochs"):
+            args.epochs = 40
+            notes.append("option4 epochs -> 40")
+        if not _flag_was_provided("--reg"):
+            args.reg = 0.10
+            notes.append("option4 reg -> 0.10")
+        if not _flag_was_provided("--option4-bias-reg"):
+            args.option4_bias_reg = 6.0
+            notes.append("option4 bias_reg -> 6.0")
+        if not _flag_was_provided("--option4-early-stopping-patience"):
+            args.option4_early_stopping_patience = 6
+            notes.append("option4 early_stopping_patience -> 6")
 
     return notes
 
@@ -501,6 +527,7 @@ def main() -> None:
             lr_plateau_patience=args.option2_lr_plateau_patience,
             lr_plateau_factor=args.option2_lr_plateau_factor,
             min_lr=args.option2_min_lr,
+            early_stopping_patience=args.option2_early_stopping_patience,
             rating_weight_power=args.option2_rating_weight_power,
             popularity_prior_count=args.option2_popularity_prior_count,
         )
@@ -571,6 +598,7 @@ def main() -> None:
             "lr_plateau_patience": int(args.option2_lr_plateau_patience),
             "lr_plateau_factor": float(args.option2_lr_plateau_factor),
             "min_lr": float(args.option2_min_lr),
+            "early_stopping_patience": int(args.option2_early_stopping_patience),
             "rating_weight_power": float(args.option2_rating_weight_power),
             "popularity_prior_count": float(args.option2_popularity_prior_count),
         }
@@ -617,8 +645,7 @@ def main() -> None:
     with open(model_artifacts_dir / "model.pkl", "wb") as f:
         pickle.dump(model, f)
     
-    # Metadata stays shared; train/test split remains model-specific.
-    movies.to_csv(artifacts_dir / "movies.csv", index=False)
+    # Keep MovieLens metadata in dataset_dir as the single source of truth.
     split.train.to_csv(model_artifacts_dir / "train_ratings.csv", index=False)
     split.test.to_csv(model_artifacts_dir / "test_ratings.csv", index=False)
     
@@ -633,10 +660,10 @@ def main() -> None:
             metrics["best_model_epoch"] = best_epoch
             if history.get("best_val_loss"):
                 metrics["best_model_val_loss"] = float(history["best_val_loss"][0])
-        elif history.get("val_loss"):
-            best_epoch = int(min(range(len(history["val_loss"])), key=lambda i: history["val_loss"][i]) + 1)
         elif history.get("val_rmse"):
             best_epoch = int(min(range(len(history["val_rmse"])), key=lambda i: history["val_rmse"][i]) + 1)
+        elif history.get("val_loss"):
+            best_epoch = int(min(range(len(history["val_loss"])), key=lambda i: history["val_loss"][i]) + 1)
         elif history.get("train_rmse"):
             best_epoch = int(
                 min(range(len(history["train_rmse"])), key=lambda i: history["train_rmse"][i]) + 1

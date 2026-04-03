@@ -183,7 +183,7 @@ def plot_all_history_extras() -> None:
 
 def plot_metrics_summary() -> None:
     model_keys = ["option1", "option2", "option3_ridge", "option3_lasso", "option4"]
-    labels = ["MF-SGD", "Deep Hybrid", "SVD-Ridge", "SVD-Lasso", "ALS"]
+    labels = ["MF-SGD", "Deep Hybrid", "SVD-Ridge", "SVD-Lasso", "MF-ALS"]
     loaded: list[dict | None] = []
     for k in model_keys:
         path = ARTIFACTS / k / "metrics.json"

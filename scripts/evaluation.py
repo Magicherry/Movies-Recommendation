@@ -233,42 +233,55 @@ def evaluate_top_n(
         return {"precision": 0.0, "recall": 0.0, "f_measure": 0.0, "ndcg": 0.0}
 
     model_name = model.__class__.__name__
-    use_fast_path = model_name != "Option4ALSRecommender"
+    # Option 2 uses a deep neural encoder — no simple formula maps to _fast_eval_numba.
+    _FAST_PATH_INCOMPATIBLE = {"Option2DeepRecommender"}
+    use_fast_path = model_name not in _FAST_PATH_INCOMPATIBLE
 
     # Numba Accelerated Fast Path
     if use_fast_path and hasattr(model, "user_factors") and hasattr(model, "item_factors") and getattr(model, "user_factors") is not None:
         try:
-            print("[Evaluation] Numba fast-path active for Top-K.")
-            max_user = model.user_factors.shape[0] - 1
-            
+            # Option 3 uses a regression calibration layer; map it to the standard
+            # additive formula by pre-transforming the arrays.
+            reg_coef = getattr(model, "_reg_factor_coef", None)
+            if reg_coef is not None:
+                print("[Evaluation] Numba fast-path active for Top-K (regression-aware).")
+                eff_user_factors = (model.user_factors * reg_coef[np.newaxis, :]).astype(np.float32)
+                eff_item_factors = model.item_factors
+                eff_user_bias = (model._reg_user_bias_coef * model.user_bias).astype(np.float32)
+                eff_item_bias = (model._reg_item_bias_coef * model.item_bias).astype(np.float32)
+                eff_global_mean = float(model._reg_intercept)
+            else:
+                print("[Evaluation] Numba fast-path active for Top-K.")
+                eff_user_factors = model.user_factors
+                eff_item_factors = model.item_factors
+                eff_user_bias = model.user_bias
+                eff_item_bias = model.item_bias
+                eff_global_mean = float(model.global_mean)
+
+            max_user = eff_user_factors.shape[0] - 1
             user_to_idx = getattr(model, "user_to_idx", None)
             item_to_idx = getattr(model, "item_to_idx", None)
-            
+
             train_indptr, train_indices = _pandas_to_csr(train_ratings, max_user, user_to_idx, item_to_idx)
             test_indptr, test_indices = _pandas_to_csr(relevant_test, max_user, user_to_idx, item_to_idx)
-            
+
             if user_to_idx is not None:
-                # filter out test_users not in mapping and map them
                 valid_test_users = [user_to_idx[u] for u in test_users if u in user_to_idx]
                 test_users_np = np.array(valid_test_users, dtype=np.int32)
             else:
                 test_users_np = np.array(test_users, dtype=np.int32)
-            
-            # Option1 recommend_top_n clips scores before ranking.
-            # Keep fast-path behavior aligned with the model implementation.
-            apply_score_clip = model_name == "Option1MatrixFactorizationSGD"
 
             p_arr, r_arr, f_arr, n_arr = _fast_eval_numba(
                 test_users_np,
                 train_indptr, train_indices,
                 test_indptr, test_indices,
-                model.user_factors, model.item_factors, model.user_bias, model.item_bias, float(model.global_mean),
+                eff_user_factors, eff_item_factors, eff_user_bias, eff_item_bias, eff_global_mean,
                 int(k),
                 float(getattr(model, "min_rating", 0.5)),
                 float(getattr(model, "max_rating", 5.0)),
-                bool(apply_score_clip),
+                True,
             )
-            
+
             return {
                 "precision": float(np.mean(p_arr)),
                 "recall": float(np.mean(r_arr)),
@@ -278,7 +291,7 @@ def evaluate_top_n(
         except Exception as e:
             print("[Evaluation] Numba fast-path failed, falling back to Python loop. Error:", e)
     elif not use_fast_path:
-        print("[Evaluation] Using model-consistent fallback for Top-K.")
+        print(f"[Evaluation] {model_name} requires model-specific scoring; using Python fallback for Top-K.")
 
     # Generic Python Fallback
     print("[Evaluation] Using generic Python fallback.")

@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from scipy.sparse import coo_matrix
 from scipy.sparse.linalg import svds
+from tqdm import tqdm
 
 RegressorType = Literal["svd", "ridge", "lasso"]
 
@@ -132,6 +133,11 @@ class Option3SVDHybridRecommender:
 
         self.training_history: Dict[str, List[float]] = {}
 
+        self._reg_factor_coef: np.ndarray | None = None
+        self._reg_user_bias_coef: float = 0.0
+        self._reg_item_bias_coef: float = 0.0
+        self._reg_intercept: float = 0.0
+
     @staticmethod
     def _select_torch_device():
         import torch  # pyright: ignore[reportMissingImports]
@@ -217,7 +223,8 @@ class Option3SVDHybridRecommender:
         q = torch.randn((n_items, effective_rank), device=device, dtype=torch.float32)
         q = torch.linalg.qr(q, mode="reduced").Q
 
-        for _ in range(max(1, int(self.svd_power_iters))):
+        n_power_iters = max(1, int(self.svd_power_iters))
+        for _ in tqdm(range(n_power_iters), desc="Option3 SVD power", unit="iter", leave=False):
             z = torch.sparse.mm(interaction, q)
             z = torch.linalg.qr(z, mode="reduced").Q
             q = torch.sparse.mm(interaction_t, z)
@@ -332,8 +339,11 @@ class Option3SVDHybridRecommender:
         epochs = int(self.ridge_epochs if self.regressor == "ridge" else self.lasso_epochs)
         alpha = max(float(self.reg_alpha), 0.0)
 
-        for _ in range(max(1, epochs)):
+        reg_progress = tqdm(range(max(1, epochs)), desc=f"Option3 {self.regressor} head", unit="epoch", leave=False)
+        for _ in reg_progress:
             perm = torch.randperm(user_idx_t.shape[0], device=device)
+            epoch_loss = 0.0
+            epoch_batches = 0
             for start in range(0, perm.shape[0], max(1, int(self.regression_batch_size))):
                 batch_idx = perm[start : start + max(1, int(self.regression_batch_size))]
                 u = user_idx_t[batch_idx]
@@ -353,6 +363,11 @@ class Option3SVDHybridRecommender:
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 optimizer.step()
+                epoch_loss += float(loss.detach().item())
+                epoch_batches += 1
+            if epoch_batches > 0:
+                reg_progress.set_postfix({"loss": epoch_loss / epoch_batches}, refresh=False)
+        reg_progress.close()
 
         self.feature_mean = None
         self.feature_scale = None
@@ -384,6 +399,7 @@ class Option3SVDHybridRecommender:
         return preds.astype(np.float32)
 
     def fit(self, train_ratings: pd.DataFrame) -> "Option3SVDHybridRecommender":
+        print("[Option3] Initializing SVD-hybrid training pipeline...")
         users = sorted(train_ratings["user_id"].astype(int).unique().tolist())
         items = sorted(train_ratings["item_id"].astype(int).unique().tolist())
         self.user_to_idx = {u: i for i, u in enumerate(users)}
@@ -395,6 +411,10 @@ class Option3SVDHybridRecommender:
 
         n_users = len(users)
         n_items = len(items)
+        print(
+            f"[Option3] Loaded {len(train_ratings):,} ratings "
+            f"({n_users:,} users, {n_items:,} items)."
+        )
         self.user_bias = np.zeros(n_users, dtype=np.float32)
         self.item_bias = np.zeros(n_items, dtype=np.float32)
 
@@ -470,6 +490,8 @@ class Option3SVDHybridRecommender:
             self.regression_intercept = 0.0
             self.regression_uses_standardization = True
 
+        self._precompute_regression_scoring()
+
         item_norms = np.linalg.norm(self.item_factors, axis=1, keepdims=True)
         self.normalized_item_factors = np.divide(
             self.item_factors,
@@ -486,6 +508,40 @@ class Option3SVDHybridRecommender:
             "train_rmse": [float(np.sqrt(np.mean(np.square(train_errors))))],
         }
         return self
+
+    def predict_batch(self, user_ids: np.ndarray, item_ids: np.ndarray) -> np.ndarray:
+        if (
+            self.user_bias is None
+            or self.item_bias is None
+            or self.user_factors is None
+            or self.item_factors is None
+        ):
+            raise RuntimeError("Model is not fitted.")
+
+        n = len(user_ids)
+        preds = np.full(n, self.global_mean, dtype=np.float32)
+        u_idx = np.fromiter((self.user_to_idx.get(int(u), -1) for u in user_ids), dtype=np.int64, count=n)
+        i_idx = np.fromiter((self.item_to_idx.get(int(i), -1) for i in item_ids), dtype=np.int64, count=n)
+
+        user_known = u_idx >= 0
+        item_known = i_idx >= 0
+        both_known = user_known & item_known
+
+        # For pairs where only one side is known, add the known bias.
+        only_user = user_known & ~item_known
+        only_item = item_known & ~user_known
+        if np.any(only_user):
+            preds[only_user] += self.user_bias[u_idx[only_user]]
+        if np.any(only_item):
+            preds[only_item] += self.item_bias[i_idx[only_item]]
+
+        # For fully known pairs, use the regression-aware prediction path.
+        if np.any(both_known):
+            bk_u = u_idx[both_known].astype(np.int32)
+            bk_i = i_idx[both_known].astype(np.int32)
+            preds[both_known] = self._predict_known_pairs(bk_u, bk_i)
+
+        return np.clip(preds, self.min_rating, self.max_rating)
 
     def predict(self, user_id: int, item_id: int) -> float:
         if (
@@ -512,6 +568,55 @@ class Option3SVDHybridRecommender:
             pred += float(self.item_bias[self.item_to_idx[item_id]])
         return float(np.clip(pred, self.min_rating, self.max_rating))
 
+    def _precompute_regression_scoring(self) -> None:
+        """Pre-derive vectorized regression coefficients for fast all-item scoring.
+
+        Rewrites: pred[i] = _reg_user_offset(u) + _reg_item_coef * item_bias[i]
+                           + item_factors[i] @ _reg_scaled_user(u)
+        so recommend_top_n avoids building an (n_items, n_factors+2) matrix per user.
+        """
+        if self.regression_coef is None:
+            self._reg_factor_coef: np.ndarray | None = None
+            return
+
+        coef = self.regression_coef.astype(np.float64)
+        intercept = float(self.regression_intercept)
+        k = len(coef) - 2  # number of latent dimensions
+
+        if self.regression_uses_standardization and self.feature_mean is not None and self.feature_scale is not None:
+            scale = self.feature_scale.astype(np.float64)
+            mean = self.feature_mean.astype(np.float64)
+            eff_coef = coef / scale
+            eff_intercept = intercept - float(np.dot(mean / scale, coef))
+        else:
+            eff_coef = coef
+            eff_intercept = intercept
+
+        self._reg_factor_coef = eff_coef[:k].astype(np.float32)
+        self._reg_user_bias_coef = float(eff_coef[k])
+        self._reg_item_bias_coef = float(eff_coef[k + 1])
+        self._reg_intercept = float(eff_intercept)
+
+    def _score_all_items_for_user(self, u_idx: int) -> np.ndarray:
+        """Compute regression-aware scores for one user against all items in O(n_items*k)."""
+        if self._reg_factor_coef is not None and self.user_factors is not None and self.item_factors is not None and self.user_bias is not None and self.item_bias is not None:
+            scaled_user = self._reg_factor_coef * self.user_factors[u_idx]
+            user_offset = self._reg_intercept + self._reg_user_bias_coef * float(self.user_bias[u_idx])
+            preds = (
+                user_offset
+                + self._reg_item_bias_coef * self.item_bias
+                + self.item_factors @ scaled_user
+            ).astype(np.float32)
+        else:
+            user_vector = self.user_factors[u_idx]
+            preds = (
+                self.global_mean
+                + self.user_bias[u_idx]
+                + self.item_bias
+                + (self.item_factors @ user_vector)
+            ).astype(np.float32)
+        return preds
+
     def recommend_top_n(self, user_id: int, n: int = 10, exclude_seen: bool = True, seen_items: set[int] | None = None) -> List[Recommendation]:
         if (
             self.user_bias is None
@@ -531,26 +636,7 @@ class Option3SVDHybridRecommender:
             return [Recommendation(item_id=self.idx_to_item[i], score=float(item_scores[i])) for i in order]
 
         u_idx = self.user_to_idx[user_id]
-        n_items = len(self.item_factors)
-
-        if self.regressor in {"ridge", "lasso"} and self.regression_coef is not None:
-            user_idx = np.full(n_items, u_idx, dtype=np.int32)
-            item_idx = np.arange(n_items, dtype=np.int32)
-            x_raw = self._build_feature_matrix(user_idx, item_idx)
-            if self.regression_uses_standardization and self.feature_mean is not None and self.feature_scale is not None:
-                x_features = (x_raw - self.feature_mean) / self.feature_scale
-            else:
-                x_features = x_raw
-            preds = (self.regression_intercept + x_features @ self.regression_coef).astype(np.float32)
-        else:
-            user_vector = self.user_factors[u_idx]
-            preds = (
-                self.global_mean
-                + self.user_bias[u_idx]
-                + self.item_bias
-                + (self.item_factors @ user_vector)
-            ).astype(np.float32)
-
+        preds = self._score_all_items_for_user(u_idx)
         preds = np.clip(preds, self.min_rating, self.max_rating)
 
         if exclude_seen:
