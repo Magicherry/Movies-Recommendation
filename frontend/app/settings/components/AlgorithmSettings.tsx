@@ -12,12 +12,18 @@ import {
   ResponsiveContainer,
   CartesianGrid,
   Legend,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
 } from "recharts";
 
 interface ModelConfig {
   active_model: string;
   available_models: string[];
   metrics?: any;
+  metrics_by_model?: Record<string, any>;
   history?: {
     loss?: number[];
     val_loss?: number[];
@@ -80,11 +86,34 @@ const MODEL_METADATA: Record<string, { title: string; description: string }> = {
 
 const OPTION3_MODEL_KEYS = new Set(["option3_ridge", "option3_lasso"]);
 const OPTION1_MODEL_KEYS = new Set(["option1", "option4"]);
+const RADAR_VISUAL_FLOOR = 0.12;
+const RADAR_METRIC_DEFS = [
+  { subject: "MAE↓", key: "mae", direction: "lower" as const },
+  { subject: "RMSE↓", key: "rmse", direction: "lower" as const },
+  { subject: "P@10↑", key: "precision", direction: "higher" as const },
+  { subject: "R@10↑", key: "recall", direction: "higher" as const },
+  { subject: "F1@10↑", key: "f_measure", direction: "higher" as const },
+  { subject: "NDCG@10↑", key: "ndcg", direction: "higher" as const },
+];
+const RADAR_MODEL_LABELS: Record<string, string> = {
+  option1: "MF-SGD",
+  option2: "Deep Hybrid",
+  option3_ridge: "SVD-Ridge",
+  option3_lasso: "SVD-Lasso",
+  option4: "MF-ALS",
+};
+
+const getRadarModelColor = (modelName: string, activeModel: string, index: number) => {
+  if (modelName === activeModel) return "var(--brand)";
+  const palette = ["#ec4899", "#14b8a6", "#f59e0b", "#8b5cf6", "#06b6d4"];
+  return palette[index % palette.length];
+};
 
 export default function AlgorithmSettings() {
   const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
   const [isChangingModel, setIsChangingModel] = useState(false);
   const [chartsMounted, setChartsMounted] = useState(false);
+  const [radarDisplayMode, setRadarDisplayMode] = useState<"current" | "all">("current");
   const fetchConfigSeqRef = useRef(0);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8001/api";
@@ -268,7 +297,6 @@ export default function AlgorithmSettings() {
     return h.learning_rate.map((lr, i) => ({ epoch: i + 1, lr }));
   }, [modelConfig?.history]);
 
-  const topK = Number(modelConfig?.metrics?.top_k ?? 10);
   const availableModels = modelConfig?.available_models ?? [];
 
   const option1VariantModels = useMemo(() => {
@@ -294,66 +322,106 @@ export default function AlgorithmSettings() {
     return value.toFixed(digits);
   }, []);
 
-  const formatMetricInteger = useCallback((value: unknown) => {
-    if (typeof value !== "number" || !Number.isFinite(value)) return "-";
-    return `${Math.round(value)}`;
-  }, []);
-
   const metricCards = useMemo(() => {
     const metrics = modelConfig?.metrics;
     if (!metrics) return [];
-    if (OPTION3_MODEL_KEYS.has(activeModel)) {
-      return [
-        { label: "SVD rank (n_factors)", value: formatMetricInteger(metrics.n_factors) },
-        {
-          label: "Reg strength (α)",
-          value: formatMetricNumber(metrics.reg_alpha),
-        },
-        { label: "MAE (holdout)", value: formatMetricNumber(metrics.mae) },
-        { label: "RMSE (holdout)", value: formatMetricNumber(metrics.rmse) },
-        { label: `Precision@${topK}`, value: formatMetricNumber(metrics.precision) },
-        { label: `Recall@${topK}`, value: formatMetricNumber(metrics.recall) },
-        { label: `F-measure@${topK}`, value: formatMetricNumber(metrics.f_measure) },
-        { label: `NDCG@${topK}`, value: formatMetricNumber(metrics.ndcg) },
-      ];
-    }
-    if (isOption4Als) {
-      return [
-        { label: "MF-ALS factors (n_factors)", value: formatMetricInteger(metrics.n_factors) },
-        { label: "MF-ALS epochs", value: formatMetricInteger(metrics.epochs) },
-        { label: "Reg strength (lambda)", value: formatMetricNumber(metrics.reg) },
-        { label: "Bias reg", value: formatMetricNumber(metrics.bias_reg) },
-        { label: "MAE (holdout)", value: formatMetricNumber(metrics.mae) },
-        { label: "RMSE (holdout)", value: formatMetricNumber(metrics.rmse) },
-        { label: `Precision@${topK}`, value: formatMetricNumber(metrics.precision) },
-        { label: `Recall@${topK}`, value: formatMetricNumber(metrics.recall) },
-        { label: `F-measure@${topK}`, value: formatMetricNumber(metrics.f_measure) },
-        { label: `NDCG@${topK}`, value: formatMetricNumber(metrics.ndcg) },
-      ];
-    }
-    if (activeModel === "option1") {
-      return [
-        { label: "SGD factors (n_factors)", value: formatMetricInteger(metrics.n_factors) },
-        { label: "Best Epoch", value: formatMetricInteger(metrics.best_model_epoch ?? metrics.best_epoch) },
-        { label: "Reg strength (lambda)", value: formatMetricNumber(metrics.reg) },
-        { label: "Learning Rate", value: formatMetricNumber(metrics.lr) },
-        { label: "MAE (holdout)", value: formatMetricNumber(metrics.mae) },
-        { label: "RMSE (holdout)", value: formatMetricNumber(metrics.rmse) },
-        { label: `Precision@${topK}`, value: formatMetricNumber(metrics.precision) },
-        { label: `NDCG@${topK}`, value: formatMetricNumber(metrics.ndcg) },
-      ];
-    }
+
     return [
-      { label: "Best Model Epoch", value: formatMetricInteger(metrics.best_model_epoch ?? metrics.best_epoch) },
-      { label: "Best Model Val Loss", value: formatMetricNumber(metrics.best_model_val_loss) },
-      { label: "MAE", value: formatMetricNumber(metrics.mae) },
-      { label: "RMSE", value: formatMetricNumber(metrics.rmse) },
-      { label: `Precision@${topK}`, value: formatMetricNumber(metrics.precision) },
-      { label: `Recall@${topK}`, value: formatMetricNumber(metrics.recall) },
-      { label: `F-measure@${topK}`, value: formatMetricNumber(metrics.f_measure) },
-      { label: `NDCG@${topK}`, value: formatMetricNumber(metrics.ndcg) },
+      { label: "MAE↓", value: formatMetricNumber(metrics.mae) },
+      { label: "RMSE↓", value: formatMetricNumber(metrics.rmse) },
+      { label: "P@10↑", value: formatMetricNumber(metrics.precision) },
+      { label: "R@10↑", value: formatMetricNumber(metrics.recall) },
+      { label: "F1@10↑", value: formatMetricNumber(metrics.f_measure) },
+      { label: "NDCG@10↑", value: formatMetricNumber(metrics.ndcg) },
     ];
-  }, [modelConfig?.metrics, activeModel, formatMetricInteger, formatMetricNumber, topK, isOption4Als]);
+  }, [modelConfig?.metrics, formatMetricNumber]);
+
+  const radarModelMetrics = useMemo(() => {
+    const metricsByModel = modelConfig?.metrics_by_model ?? {};
+    const orderedModels = availableModels.filter((name) => metricsByModel[name]);
+
+    const rows = orderedModels.map((modelName) => ({
+      modelName,
+      metrics: metricsByModel[modelName],
+    }));
+
+    if (
+      activeModel &&
+      modelConfig?.metrics &&
+      !rows.some((row) => row.modelName === activeModel)
+    ) {
+      rows.unshift({ modelName: activeModel, metrics: modelConfig.metrics });
+    }
+
+    return rows.filter((row) =>
+      RADAR_METRIC_DEFS.some((def) => Number.isFinite(Number(row.metrics?.[def.key])))
+    );
+  }, [availableModels, modelConfig?.metrics_by_model, modelConfig?.metrics, activeModel]);
+
+  const radarChartData = useMemo(() => {
+    const activeMetrics = modelConfig?.metrics;
+    if (!activeMetrics) return [];
+
+    return RADAR_METRIC_DEFS.map((def) => {
+      const current = Number(activeMetrics?.[def.key]);
+      const allValues = radarModelMetrics
+        .map((row) => Number(row.metrics?.[def.key]))
+        .filter((v) => Number.isFinite(v));
+
+      let normalized = 0.5;
+      if (Number.isFinite(current) && allValues.length > 0) {
+        const lo = Math.min(...allValues);
+        const hi = Math.max(...allValues);
+        const span = hi - lo;
+        if (span > 1e-12) {
+          normalized =
+            def.direction === "lower"
+              ? (hi - current) / span
+              : (current - lo) / span;
+        }
+      }
+
+      const rawScore = Math.max(0, Math.min(1, normalized));
+      const score = RADAR_VISUAL_FLOOR + rawScore * (1 - RADAR_VISUAL_FLOOR);
+
+      return {
+        subject: def.subject,
+        score,
+        rawScore,
+      };
+    });
+  }, [modelConfig?.metrics, radarModelMetrics]);
+
+  const allModelsRadarChartData = useMemo(() => {
+    if (radarModelMetrics.length < 2) return [];
+
+    return RADAR_METRIC_DEFS.map((def) => {
+      const allValues = radarModelMetrics
+        .map((row) => Number(row.metrics?.[def.key]))
+        .filter((v) => Number.isFinite(v));
+      const lo = allValues.length > 0 ? Math.min(...allValues) : 0;
+      const hi = allValues.length > 0 ? Math.max(...allValues) : 1;
+      const span = hi - lo;
+
+      const row: Record<string, string | number> = { subject: def.subject };
+      radarModelMetrics.forEach(({ modelName, metrics }) => {
+        const value = Number(metrics?.[def.key]);
+        let normalized = 0.5;
+        if (Number.isFinite(value) && allValues.length > 0) {
+          if (span > 1e-12) {
+            normalized =
+              def.direction === "lower"
+                ? (hi - value) / span
+                : (value - lo) / span;
+          }
+        }
+        const rawScore = Math.max(0, Math.min(1, normalized));
+        const score = RADAR_VISUAL_FLOOR + rawScore * (1 - RADAR_VISUAL_FLOOR);
+        row[`${modelName}_score`] = score;
+      });
+      return row;
+    });
+  }, [radarModelMetrics]);
 
   return (
     <section className="settings-card">
@@ -529,15 +597,147 @@ export default function AlgorithmSettings() {
       </div>
 
       {modelConfig?.metrics && (
-        <div className="model-metrics settings-panel-strong">
-          <h4>Current Model Metrics</h4>
-          <div className="metrics-grid">
-            {metricCards.map((card) => (
-              <div key={card.label} className="metric-item">
-                <span className="metric-label">{card.label}</span>
-                <span className="metric-value">{card.value}</span>
+        <div className="setting-group" style={{ marginTop: "32px" }}>
+          <label>Current Model Metrics</label>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
+            <p className="setting-desc" style={{ margin: 0 }}>Compare evaluation metrics across different recommendation engines.</p>
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => setRadarDisplayMode("current")}
+                className="variant-button"
+                style={{
+                  flex: "0 1 auto",
+                  minWidth: "100px",
+                  padding: "6px 16px",
+                  borderRadius: "20px",
+                  border: radarDisplayMode === "current" ? "1px solid var(--brand)" : "1px solid var(--border-soft)",
+                  background: radarDisplayMode === "current" ? "rgba(99,102,241,0.12)" : "var(--bg-hover-soft)",
+                  color: radarDisplayMode === "current" ? "var(--text-main)" : "var(--text-subtle)",
+                  fontSize: "0.85rem",
+                  fontWeight: radarDisplayMode === "current" ? 600 : 500,
+                  cursor: "pointer",
+                  transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                  textAlign: "center",
+                }}
+              >
+                Current model
+              </button>
+              <button
+                type="button"
+                onClick={() => setRadarDisplayMode("all")}
+                className="variant-button"
+                style={{
+                  flex: "0 1 auto",
+                  minWidth: "100px",
+                  padding: "6px 16px",
+                  borderRadius: "20px",
+                  border: radarDisplayMode === "all" ? "1px solid var(--brand)" : "1px solid var(--border-soft)",
+                  background: radarDisplayMode === "all" ? "rgba(99,102,241,0.12)" : "var(--bg-hover-soft)",
+                  color: radarDisplayMode === "all" ? "var(--text-main)" : "var(--text-subtle)",
+                  fontSize: "0.85rem",
+                  fontWeight: radarDisplayMode === "all" ? 600 : 500,
+                  cursor: "pointer",
+                  transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                  textAlign: "center",
+                }}
+              >
+                All models
+              </button>
+            </div>
+          </div>
+
+          <div className="model-metrics settings-panel-strong" style={{ marginTop: 0, padding: "20px" }}>
+            <div style={{ display: "flex", gap: "24px", alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ flex: "1 1 300px", height: "280px" }}>
+                {chartsMounted && (radarDisplayMode === "all" ? allModelsRadarChartData.length > 0 : radarChartData.length > 0) && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart
+                      cx="50%"
+                      cy="48%"
+                      outerRadius={100}
+                      margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+                      data={radarDisplayMode === "all" ? allModelsRadarChartData : radarChartData}
+                    >
+                      <PolarGrid
+                        gridType="polygon"
+                        radialLines
+                        polarRadius={[20, 40, 60, 80, 100]}
+                        stroke="var(--chart-grid-stroke)"
+                      />
+                      <PolarAngleAxis dataKey="subject" tick={{ fill: "var(--text-subtle)", fontSize: 12 }} />
+                      <PolarRadiusAxis
+                        tickCount={6}
+                        domain={[0, 1]}
+                        tick={{ fill: "var(--text-subtle)", fontSize: 11 }}
+                        axisLine={false}
+                        tickFormatter={(value) => {
+                          if (value <= 0 || value >= 1) return "";
+                          return `${Math.round(value * 100)}%`;
+                        }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "var(--chart-tooltip-bg)",
+                          border: "var(--chart-tooltip-border)",
+                          borderRadius: "var(--chart-tooltip-radius)",
+                        }}
+                        formatter={(value: any, name: any, item: any) => {
+                          if (radarDisplayMode === "all") {
+                            if (typeof value === "number") {
+                              const raw = (value - RADAR_VISUAL_FLOOR) / (1 - RADAR_VISUAL_FLOOR);
+                              const normalized = Math.max(0, Math.min(1, raw));
+                              return [`${(normalized * 100).toFixed(1)}%`, `${name}`];
+                            }
+                            return ["-", `${name}`];
+                          }
+                          const raw = item?.payload?.rawScore;
+                          return [typeof raw === "number" ? `${(raw * 100).toFixed(1)}%` : "-", "Current model"];
+                        }}
+                      />
+                      {radarDisplayMode === "all" ? (
+                        <>
+                          {radarModelMetrics.map(({ modelName }, index) => {
+                            const isActive = modelName === activeModel;
+                            const color = getRadarModelColor(modelName, activeModel, index);
+                            return (
+                              <Radar
+                                key={modelName}
+                                name={RADAR_MODEL_LABELS[modelName] ?? MODEL_METADATA[modelName]?.title ?? modelName}
+                                dataKey={`${modelName}_score`}
+                                stroke={color}
+                                fill={color}
+                                fillOpacity={isActive ? 0.2 : 0.08}
+                                strokeWidth={isActive ? 2.4 : 1.6}
+                              />
+                            );
+                          })}
+                          <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }} />
+                        </>
+                      ) : (
+                        <Radar
+                          name="Normalized score"
+                          dataKey="score"
+                          stroke="var(--brand)"
+                          fill="var(--brand)"
+                          fillOpacity={0.24}
+                        />
+                      )}
+                    </RadarChart>
+                  </ResponsiveContainer>
+                )}
               </div>
-            ))}
+              <div style={{ flex: "1 1 300px" }}>
+                <div className="metrics-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+                  {metricCards.map((card) => (
+                    <div key={card.label} className="metric-item">
+                      <span className="metric-label">{card.label}</span>
+                      <span className="metric-value">{card.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

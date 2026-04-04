@@ -2602,15 +2602,19 @@ body {
 }
 
 .variant-button {
-  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+  transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.2s cubic-bezier(0.25, 1, 0.5, 1) !important;
 }
 
 .variant-button:hover:not(:disabled) {
   background: rgba(99,102,241,0.2) !important;
   border-color: var(--brand) !important;
   color: var(--text-main) !important;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(99,102,241,0.15);
+  transform: scale(1.05) !important;
+  box-shadow: 0 4px 12px rgba(99,102,241,0.2) !important;
+}
+
+.variant-button:active:not(:disabled) {
+  transform: scale(0.98) !important;
 }
 
 .model-option.active {
@@ -3839,6 +3843,13 @@ body {
 .model-metrics h4 {
   margin: 0 0 16px 0;
   font-size: 1.1rem;
+}
+
+.model-metrics .recharts-wrapper:focus,
+.model-metrics .recharts-wrapper:focus-visible,
+.model-metrics .recharts-surface:focus,
+.model-metrics .recharts-surface:focus-visible {
+  outline: none;
 }
 
 .metrics-grid {

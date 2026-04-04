@@ -249,9 +249,13 @@ def plot_metrics_summary() -> None:
             lo, hi = min(col), max(col)
             span = hi - lo if hi - lo > 1e-12 else 1.0
             if direction == "lower":
-                scores.append((hi - vals[j]) / span)
+                raw_score = (hi - vals[j]) / span
             else:
-                scores.append((vals[j] - lo) / span)
+                raw_score = (vals[j] - lo) / span
+            
+            raw_score = max(0.0, min(1.0, raw_score))
+            score = 0.12 + raw_score * (1.0 - 0.12)
+            scores.append(score)
         scores_closed = scores + scores[:1]
         ax.plot(angles_closed, scores_closed, "o-", linewidth=1.0, label=name, color=COLORS[si % len(COLORS)])
         ax.fill(angles_closed, scores_closed, alpha=0.08, color=COLORS[si % len(COLORS)])

@@ -1094,36 +1094,46 @@ class RecommenderService:
             "top_calibration_weights": top_weights,
         }
 
+    def _load_metrics_json(self, model_name: str) -> Dict[str, Any] | None:
+        metrics_path = self.artifacts_dir / model_name / "metrics.json"
+        if not metrics_path.exists():
+            return None
+        try:
+            with open(metrics_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else None
+        except (OSError, ValueError, json.JSONDecodeError, TypeError):
+            return None
+
     def get_model_config(self) -> Dict[str, Any]:
         self._ensure_active_model_fresh()
-        
-        # Try to load metrics and history for the active model
-        active_metrics = None
+
+        # Try to load metrics and history for the active model.
+        available_models = sorted(getattr(self, "_available_model_names", set(self.models.keys())))
+        active_metrics = self._load_metrics_json(self.active_model_name)
         active_history = None
         diagnostics = None
-        
+
+        metrics_by_model: Dict[str, Dict[str, Any]] = {}
+        for model_name in available_models:
+            model_metrics = self._load_metrics_json(model_name)
+            if model_metrics is not None:
+                metrics_by_model[model_name] = model_metrics
+
         try:
-            metrics_path = self.artifacts_dir / self.active_model_name / "metrics.json"
-            if metrics_path.exists():
-                import json
-                with open(metrics_path, "r", encoding="utf-8") as f:
-                    active_metrics = json.load(f)
-                    
             history_path = self.artifacts_dir / self.active_model_name / "training_history.json"
             if history_path.exists():
-                import json
                 with open(history_path, "r", encoding="utf-8") as f:
                     active_history = json.load(f)
             diagnostics = self._build_option3_diagnostics()
         except Exception:
             pass
 
-        available_models = sorted(getattr(self, "_available_model_names", set(self.models.keys())))
-
         return {
             "active_model": self.active_model_name,
             "available_models": available_models,
             "metrics": active_metrics,
+            "metrics_by_model": metrics_by_model,
             "history": active_history,
             "diagnostics": diagnostics,
         }
