@@ -17,7 +17,17 @@ export type Recommendation = Movie & {
   is_fallback_score?: boolean;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
+const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8001/api";
+
+function resolveApiBase(rawBase: string): string {
+  // On Windows + Node SSR, localhost may resolve to ::1 while Django listens on 127.0.0.1.
+  if (typeof window === "undefined") {
+    return rawBase.replace(/^http:\/\/localhost(?=[:/]|$)/i, "http://127.0.0.1");
+  }
+  return rawBase;
+}
+
+const API_BASE = resolveApiBase(RAW_API_BASE);
 
 function isDevMode(): boolean {
   return typeof window !== "undefined" && localStorage.getItem("streamx-dev-mode") === "true";
@@ -31,7 +41,16 @@ async function devFetch(
   params?: unknown
 ): Promise<Response> {
   const start = performance.now();
-  const res = await fetch(url, options);
+  let res: Response;
+  try {
+    res = await fetch(url, options);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "Unknown network error";
+    const target = endpoint ?? url;
+    throw new Error(
+      `Cannot reach backend API at ${API_BASE}. Check that backend is running and NEXT_PUBLIC_API_BASE_URL is correct. Request: ${target}. Cause: ${reason}`
+    );
+  }
   if (isDevMode() && endpoint !== undefined) {
     const ms = Math.round(performance.now() - start);
     const paramStr = params !== undefined && params !== "" ? ` ${JSON.stringify(params)}` : "";

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 
 export default function AdvancedSettings() {
   const [apiStatus, setApiStatus] = useState<"checking" | "online" | "offline">("checking");
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8001/api";
 
   useEffect(() => {
     checkApi();

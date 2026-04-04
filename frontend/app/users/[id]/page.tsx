@@ -15,10 +15,33 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
   
   // Use Promise.all to fetch concurrently for performance
   // We fetch ALL history to calculate accurate stats, even if we only display the top few later.
-  const [history, recommendations] = await Promise.all([
-    getUserHistory(userId, true),
-    getRecommendations(userId, 50)
-  ]);
+  let history: Awaited<ReturnType<typeof getUserHistory>> = [];
+  let recommendations: Awaited<ReturnType<typeof getRecommendations>> = [];
+  let loadError: string | null = null;
+  try {
+    [history, recommendations] = await Promise.all([
+      getUserHistory(userId, true),
+      getRecommendations(userId, 50)
+    ]);
+  } catch (error) {
+    loadError = error instanceof Error ? error.message : "Failed to load user profile data.";
+  }
+
+  if (loadError) {
+    return (
+      <section className="content-padding" style={{ paddingTop: "90px", minHeight: "70vh" }}>
+        <h1 className="row-header" style={{ fontSize: "2rem", paddingLeft: 0, marginBottom: "16px" }}>
+          User {userId}
+        </h1>
+        <p className="error-text" style={{ marginBottom: "20px" }}>
+          {loadError}
+        </p>
+        <Link href="/users" className="btn-secondary">
+          Back to users
+        </Link>
+      </section>
+    );
+  }
 
   // Calculate preferred genres based on history
   const genreCounts: Record<string, number> = {};

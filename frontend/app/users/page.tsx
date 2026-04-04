@@ -10,7 +10,13 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
   const currentPage = Number(searchParams.page) || 1;
   const offset = (currentPage - 1) * limit;
 
-  const data = await getUsers(limit, offset);
+  let data: Awaited<ReturnType<typeof getUsers>> = { items: [], total: 0 };
+  let loadError: string | null = null;
+  try {
+    data = await getUsers(limit, offset);
+  } catch (error) {
+    loadError = error instanceof Error ? error.message : "Failed to load users.";
+  }
   const totalPages = Math.ceil(data.total / limit);
 
   return (
@@ -22,6 +28,11 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
             Select a user profile to see their highly rated movies and customized recommendations.
             ({data.total} users total)
           </p>
+          {loadError && (
+            <p className="error-text" style={{ marginTop: "12px" }}>
+              {loadError}
+            </p>
+          )}
         </div>
 
         {totalPages > 1 && (

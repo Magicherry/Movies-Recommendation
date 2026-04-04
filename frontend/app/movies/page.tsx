@@ -33,7 +33,13 @@ export default async function MoviesPage({
   const limit = 48;
   const offset = (page - 1) * limit;
 
-  const data = await getMovies(limit, offset, q, genre, year, sortBy, sortOrder);
+  let data: Awaited<ReturnType<typeof getMovies>> = { items: [], total: 0 };
+  let loadError: string | null = null;
+  try {
+    data = await getMovies(limit, offset, q, genre, year, sortBy, sortOrder);
+  } catch (error) {
+    loadError = error instanceof Error ? error.message : "Failed to load movies.";
+  }
   const totalPages = Math.ceil(data.total / limit);
 
   // Common genres for the dropdown
@@ -49,6 +55,12 @@ export default async function MoviesPage({
       <h1 className="row-header" style={{ fontSize: "2.5rem", marginBottom: "30px", paddingLeft: "0" }}>
         Browse Movies
       </h1>
+
+      {loadError && (
+        <div className="error-text" style={{ marginBottom: "20px" }}>
+          {loadError}
+        </div>
+      )}
 
       <form action="/movies" method="GET" className="filter-form">
         <div className="filter-group-main">

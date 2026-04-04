@@ -72,7 +72,7 @@ const MODEL_METADATA: Record<string, { title: string; description: string }> = {
     description: "SVD latent factors calibrated with Lasso regression.",
   },
   option4: {
-    title: "MF-ALS Matrix Factorization",
+    title: "Matrix Factorization (ALS)",
     description:
       "An alternating least squares recommender that iteratively optimizes user and item latent factors with ridge-regularized closed-form updates.",
   },
@@ -87,7 +87,7 @@ export default function AlgorithmSettings() {
   const [chartsMounted, setChartsMounted] = useState(false);
   const fetchConfigSeqRef = useRef(0);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8001/api";
 
   const fetchModelConfig = useCallback(async () => {
     const seq = ++fetchConfigSeqRef.current;
@@ -423,7 +423,7 @@ export default function AlgorithmSettings() {
                                 }}
                                 title={MODEL_METADATA[modelName]?.description ?? modelName}
                               >
-                                {modelName === "option1" ? "SGD" : "MF-ALS"}
+                                {modelName === "option1" ? "SGD" : "ALS"}
                               </button>
                             );
                           })}

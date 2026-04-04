@@ -30,7 +30,7 @@ export default function AppNavbar() {
   const engineFetchSeqRef = useRef(0);
   const showBrandAlgorithm = useShowBrandAlgorithm();
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001/api";
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8001/api";
 
   useEffect(() => {
     setInputId(userId.toString());
