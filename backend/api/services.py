@@ -26,6 +26,7 @@ class RecommenderService:
 
         self.models = {}
         self.active_model_name = "option1"
+        self._active_model_data_loaded_for_name: str | None = None
         self.movies: pd.DataFrame | None = None
         self.movie_lookup: Dict[int, Dict[str, Any]] = {}
         self.movie_behavior_stats: pd.DataFrame = pd.DataFrame()
@@ -279,25 +280,27 @@ class RecommenderService:
             raise FileNotFoundError("Model-specific train_ratings.csv not found.")
 
         reference_path = self._resolve_reference_ratings_path(train_ratings_path)
-        # Optimization: Skip expensive csv reloading if source paths are identical.
+        
+        # Load model-specific train ratings
+        if getattr(self, "_last_train_ratings_path", None) != train_ratings_path:
+            model_ratings = pd.read_csv(
+                train_ratings_path,
+                usecols=["user_id", "item_id", "rating"],
+                dtype={"user_id": "int32", "item_id": "int32", "rating": "float32"},
+            )
+            self._model_train_user_ids = set(model_ratings["user_id"].astype(int).unique().tolist())
+            self._model_train_item_ids = set(model_ratings["item_id"].astype(int).unique().tolist())
+            self._last_train_ratings_path = train_ratings_path
+
+        # Optimization: Skip expensive reference csv reloading if source path is identical.
         if (
-            getattr(self, "_last_train_ratings_path", None) == train_ratings_path
-            and getattr(self, "_last_reference_ratings_path", None) == reference_path
+            getattr(self, "_last_reference_ratings_path", None) == reference_path
             and hasattr(self, "ratings_df")
         ):
             return
 
-        model_ratings = pd.read_csv(
-            train_ratings_path,
-            usecols=["user_id", "item_id", "rating"],
-            dtype={"user_id": "int32", "item_id": "int32", "rating": "float32"},
-        )
-        self._model_train_user_ids = set(model_ratings["user_id"].astype(int).unique().tolist())
-        self._model_train_item_ids = set(model_ratings["item_id"].astype(int).unique().tolist())
-
         ratings = self._read_ratings_any_format(reference_path)
         self.reference_ratings_path = reference_path
-        self._last_train_ratings_path = train_ratings_path
         self._last_reference_ratings_path = reference_path
         self.users = sorted(ratings["user_id"].astype(int).unique().tolist())
 
@@ -441,8 +444,13 @@ class RecommenderService:
         assert enriched_write_path is not None
         self._movies_write_path = enriched_write_path
         source_path = enriched_source_path if enriched_source_path is not None and enriched_source_path.exists() else movies_path
-        self._load_movies_from_path(source_path)
+        
+        # Optimization: Skip expensive movies.csv reloading if source path is identical
+        if getattr(self, "_movies_loaded_path", None) != source_path or self.movies is None:
+            self._load_movies_from_path(source_path)
+            
         self._load_ratings_from_path(train_ratings_path)
+        self._active_model_data_loaded_for_name = self.active_model_name
 
     def _load_active_model_from_disk(self) -> None:
         path = self._active_model_state_path
@@ -468,37 +476,36 @@ class RecommenderService:
         except OSError:
             self._active_model_mtime_ns = None
 
-    def _ensure_active_model_fresh(self) -> None:
+    def _ensure_active_model_fresh(self, load_data: bool = True) -> None:
         self._ensure_loaded()
         path = self._active_model_state_path
-        if not path.exists():
-            return
-        try:
-            mtime_ns = path.stat().st_mtime_ns
-        except OSError:
-            return
-        if self._active_model_mtime_ns is not None and mtime_ns <= self._active_model_mtime_ns:
+        needs_check = False
+        
+        if path.exists():
+            try:
+                mtime_ns = path.stat().st_mtime_ns
+                if self._active_model_mtime_ns is None or mtime_ns > self._active_model_mtime_ns:
+                    needs_check = True
+            except OSError:
+                pass
+                
+        if not needs_check and (not load_data or self.active_model_name == self._active_model_data_loaded_for_name):
             return
 
         with self._lock:
-            if not path.exists():
-                return
-            try:
-                mtime_ns = path.stat().st_mtime_ns
-            except OSError:
-                return
-            if self._active_model_mtime_ns is not None and mtime_ns <= self._active_model_mtime_ns:
-                return
-            try:
-                model_name = path.read_text(encoding="utf-8").strip()
-            except OSError:
-                return
-            if model_name in self.models:
-                model_changed = model_name != self.active_model_name
-                self.active_model_name = model_name
-                if model_changed:
-                    self._load_active_model_data()
-            self._active_model_mtime_ns = mtime_ns
+            if path.exists():
+                try:
+                    mtime_ns = path.stat().st_mtime_ns
+                    if self._active_model_mtime_ns is None or mtime_ns > self._active_model_mtime_ns:
+                        model_name = path.read_text(encoding="utf-8").strip()
+                        if model_name in self.models:
+                            self.active_model_name = model_name
+                        self._active_model_mtime_ns = mtime_ns
+                except OSError:
+                    pass
+            
+            if load_data and self.active_model_name != self._active_model_data_loaded_for_name:
+                self._load_active_model_data()
 
     def _resolve_active_movies_path(self) -> Path | None:
         if self._movies_write_path and self._movies_write_path.exists():
@@ -580,8 +587,8 @@ class RecommenderService:
         query: str | None = None,
         genre: str | None = None,
         year: str | None = None,
-        sort_by: str = "item_id",
-        sort_order: str = "asc",
+        sort_by: str = "year",
+        sort_order: str = "desc",
     ) -> Dict[str, Any]:
         self._ensure_movie_data_fresh()
         assert self.movies is not None
@@ -1019,6 +1026,12 @@ class RecommenderService:
             return None
         model = self.models.get(self.active_model_name)
         if model is None:
+            try:
+                self._lazy_load_model(self.active_model_name)
+                model = self.models.get(self.active_model_name)
+            except FileNotFoundError:
+                return None
+        if model is None:
             return None
 
         user_factors = getattr(model, "user_factors", None)
@@ -1106,7 +1119,7 @@ class RecommenderService:
             return None
 
     def get_model_config(self) -> Dict[str, Any]:
-        self._ensure_active_model_fresh()
+        self._ensure_active_model_fresh(load_data=False)
 
         # Try to load metrics and history for the active model.
         available_models = sorted(getattr(self, "_available_model_names", set(self.models.keys())))
@@ -1137,6 +1150,27 @@ class RecommenderService:
             "history": active_history,
             "diagnostics": diagnostics,
         }
+
+    def preload_active_model(self) -> Dict[str, Any]:
+        """
+        Preload active model data and model weights into memory.
+        This removes first-request cold start spikes after app open or model switch.
+        """
+        self._ensure_active_model_fresh(load_data=True)
+        with self._lock:
+            model = self.models.get(self.active_model_name)
+            if model is None:
+                self._lazy_load_model(self.active_model_name)
+            ready = (
+                self._active_model_data_loaded_for_name == self.active_model_name
+                and self.models.get(self.active_model_name) is not None
+            )
+            return {
+                "active_model": self.active_model_name,
+                "active_model_load_status": "ready" if ready else "error",
+                "active_model_ready": ready,
+            }
+
     def _lazy_load_model(self, name: str) -> None:
         import pickle
         candidates = [
@@ -1161,7 +1195,8 @@ class RecommenderService:
                 return True
             self.active_model_name = model_name
             self._persist_active_model_to_disk()
-            self._load_active_model_data()
+            # Intentionally skip loading the data here so the API responds instantly.
+            # The next request that needs data will call _ensure_active_model_fresh(True) and load it.
         return True
 
     def update_movie_enriched(

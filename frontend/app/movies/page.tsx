@@ -16,7 +16,7 @@ export default async function MoviesPage({
   const q = typeof searchParams.q === "string" ? searchParams.q : undefined;
   const genre = typeof searchParams.genre === "string" ? searchParams.genre : undefined;
   const year = typeof searchParams.year === "string" ? searchParams.year : undefined;
-  const sort = typeof searchParams.sort === "string" ? searchParams.sort : "item_id_asc";
+  const sort = typeof searchParams.sort === "string" ? searchParams.sort : "year_desc";
   const sortOptions = new Set([
     "item_id_asc",
     "item_id_desc",
@@ -25,7 +25,7 @@ export default async function MoviesPage({
     "year_asc",
     "year_desc",
   ]);
-  const currentSort = sortOptions.has(sort) ? sort : "item_id_asc";
+  const currentSort = sortOptions.has(sort) ? sort : "year_desc";
   const sortSplitIdx = currentSort.lastIndexOf("_");
   const sortBy = currentSort.slice(0, sortSplitIdx);
   const sortOrder = currentSort.slice(sortSplitIdx + 1);
@@ -91,12 +91,12 @@ export default async function MoviesPage({
               name="sort" 
               defaultValue={currentSort} 
               options={[
-                { value: "item_id_asc", label: "Default (Oldest ID)" },
+                { value: "year_desc", label: "Year New-Old" },
+                { value: "year_asc", label: "Year Old-New" },
+                { value: "item_id_asc", label: "Oldest ID" },
                 { value: "item_id_desc", label: "Newest ID" },
                 { value: "title_asc", label: "Title A-Z" },
                 { value: "title_desc", label: "Title Z-A" },
-                { value: "year_desc", label: "Year New-Old" },
-                { value: "year_asc", label: "Year Old-New" }
               ]}
             />
           </div>
@@ -114,8 +114,8 @@ export default async function MoviesPage({
             />
           </div>
           
-          {(q || genre || year || currentSort !== "item_id_asc") && (
-            <Link href="/movies?page=1&sort=item_id_asc" className="btn-clear-filter">
+          {(q || genre || year || currentSort !== "year_desc") && (
+            <Link href="/movies?page=1&sort=year_desc" className="btn-clear-filter">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>

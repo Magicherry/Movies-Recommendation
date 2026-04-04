@@ -14,6 +14,7 @@ urlpatterns = [
     path("search", views.search, name="search"),
     path("stats", views.db_stats, name="db-stats"),
     path("model-config", views.model_config, name="model-config"),
+    path("model-preload", views.model_preload, name="model-preload"),
     path("scrape/start", views.scrape_start, name="scrape-start"),
     path("scrape/cancel", views.scrape_cancel, name="scrape-cancel"),
     path("scrape/status", views.scrape_status, name="scrape-status"),

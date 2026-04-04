@@ -21,6 +21,7 @@ function useShowBrandAlgorithm(): boolean {
 export default function AppNavbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isUpdatingRecs, setIsUpdatingRecs] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -76,7 +77,30 @@ export default function AppNavbar() {
     window.addEventListener('storage', handleStorageChange);
     
     // Listen for the custom event dispatched in the same tab
-    window.addEventListener('streamx-engine-changed', fetchModel);
+    const handleEngineChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ activeModel?: string; loadStatus?: string }>;
+      if (customEvent.detail?.activeModel) {
+        const model = customEvent.detail.activeModel;
+        if (model === 'option1') setActiveEngine('MF-SGD');
+        else if (model === 'option2') setActiveEngine('NCF');
+        else if (model === 'option3_ridge') setActiveEngine('SVD-Ridge');
+        else if (model === 'option3_lasso') setActiveEngine('SVD-Lasso');
+        else if (model === 'option4') setActiveEngine('MF-ALS');
+        else setActiveEngine(model);
+      } else {
+        fetchModel();
+      }
+      
+      if (customEvent.detail?.loadStatus === 'loading') {
+        setIsUpdatingRecs(true);
+      }
+    };
+    
+    window.addEventListener('streamx-engine-changed', handleEngineChange);
+    
+    // Listen for recommendations finishing update
+    const handleRecsUpdated = () => setIsUpdatingRecs(false);
+    window.addEventListener('streamx-recs-updated', handleRecsUpdated);
     
     // Also poll occasionally just in case
     const interval = setInterval(fetchModel, 30000);
@@ -84,7 +108,8 @@ export default function AppNavbar() {
     return () => {
       disposed = true;
       window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('streamx-engine-changed', fetchModel);
+      window.removeEventListener('streamx-engine-changed', handleEngineChange);
+      window.removeEventListener('streamx-recs-updated', handleRecsUpdated);
       clearInterval(interval);
     };
   }, [API_BASE]);
@@ -154,8 +179,38 @@ export default function AppNavbar() {
   };
 
   return (
-    <header className={`top-nav ${isScrolled ? "scrolled" : ""}`}>
-      <div className="simple-nav">
+    <>
+      {/* Global Notification Banner (Pill Shape) */}
+      <div style={{
+        position: 'fixed',
+        top: '80px',
+        left: '50%',
+        transform: isUpdatingRecs ? 'translate(-50%, 0)' : 'translate(-50%, -20px)',
+        opacity: isUpdatingRecs ? 1 : 0,
+        transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+        zIndex: 9990,
+        background: 'var(--bg-elevated, #1f2937)',
+        border: '1px solid var(--border-soft, #374151)',
+        color: 'var(--text-main, #f3f4f6)',
+        padding: '10px 24px',
+        borderRadius: '9999px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+        fontSize: '0.9rem',
+        fontWeight: 500,
+        pointerEvents: 'none'
+      }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand, #6366f1)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'streamx-spin 1s linear infinite' }}>
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+        </svg>
+        <style>{`@keyframes streamx-spin { 100% { transform: rotate(360deg); } }`}</style>
+        <span>Applying <strong style={{ color: 'var(--brand, #6366f1)' }}>{activeEngine}</strong> to your recommendations...</span>
+      </div>
+
+      <header className={`top-nav ${isScrolled ? "scrolled" : ""}`}>
+        <div className="simple-nav">
         <div className="brand-wrap">
           <div className={`nav-back-btn-wrapper ${shouldShowBackButton ? 'visible' : ''}`}>
             <button
@@ -265,5 +320,6 @@ export default function AppNavbar() {
         </div>
       </div>
     </header>
+    </>
   );
 }

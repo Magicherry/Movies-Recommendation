@@ -221,8 +221,8 @@ def movies(request: HttpRequest) -> JsonResponse:
     query = request.GET.get("q")
     genre = request.GET.get("genre")
     year = request.GET.get("year")
-    sort_by = request.GET.get("sort_by", "item_id")
-    sort_order = request.GET.get("sort_order", "asc")
+    sort_by = request.GET.get("sort_by", "year")
+    sort_order = request.GET.get("sort_order", "desc")
     try:
         data = service.list_movies(
             limit=limit,
@@ -363,6 +363,15 @@ def model_config(request: HttpRequest) -> JsonResponse:
                     return _error(f"Model '{model_name}' not found or not loaded", status=404)
             except json.JSONDecodeError:
                 return _error("Invalid JSON", status=400)
+    except FileNotFoundError as exc:
+        return _error(str(exc), status=500)
+
+
+@require_GET
+def model_preload(_: HttpRequest) -> JsonResponse:
+    try:
+        payload = service.preload_active_model()
+        return JsonResponse(payload)
     except FileNotFoundError as exc:
         return _error(str(exc), status=500)
 

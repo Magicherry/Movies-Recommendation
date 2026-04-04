@@ -95,8 +95,8 @@ export async function getMovies(
   query?: string,
   genre?: string,
   year?: string,
-  sortBy = "item_id",
-  sortOrder = "asc"
+  sortBy = "year",
+  sortOrder = "desc"
 ): Promise<{ items: Movie[]; total: number }> {
   const params = new URLSearchParams({ limit: limit.toString(), offset: offset.toString() });
   if (query) params.append("q", query);
@@ -187,6 +187,21 @@ export async function getRecommendations(userId: number, n: number = 10): Promis
     title: formatTitle(r.title),
     scraped_title: r.scraped_title ? formatTitle(r.scraped_title) : "",
   }));
+}
+
+export type ModelPreloadResponse = {
+  active_model: string;
+  active_model_load_status: "ready" | "error";
+  active_model_ready: boolean;
+};
+
+export async function preloadActiveModel(): Promise<ModelPreloadResponse> {
+  const res = await devFetch(`${API_BASE}/model-preload`, { cache: "no-store" }, "/model-preload");
+  if (!res.ok) {
+    const errData = await res.json().catch(() => null);
+    throw new Error(errData?.error || "Failed to preload active model.");
+  }
+  return res.json();
 }
 
 export async function searchMovies(query: string): Promise<Movie[]> {

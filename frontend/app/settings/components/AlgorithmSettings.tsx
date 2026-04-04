@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { dispatchActiveModelChange } from "../../../lib/model-engine";
+import { preloadActiveModel } from "../../../lib/api";
 import {
   LineChart,
   Line,
@@ -142,9 +144,12 @@ const getRadarModelColor = (modelName: string, activeModel: string, index: numbe
   return finalPalette[index % finalPalette.length];
 };
 
+let cachedModelConfig: ModelConfig | null = null;
+
 export default function AlgorithmSettings() {
-  const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
+  const [modelConfig, setModelConfig] = useState<ModelConfig | null>(cachedModelConfig);
   const [isChangingModel, setIsChangingModel] = useState(false);
+  const isChangingModelRef = useRef(false);
   const [chartsMounted, setChartsMounted] = useState(false);
   const [radarDisplayMode, setRadarDisplayMode] = useState<"current" | "all">("current");
   const [brandColor, setBrandColor] = useState("#6ae100");
@@ -170,7 +175,9 @@ export default function AlgorithmSettings() {
         const data = await res.json();
         if (seq !== fetchConfigSeqRef.current) return;
         const availableModels = Array.isArray(data.available_models) ? data.available_models : [];
-        setModelConfig({ ...data, available_models: availableModels });
+        const newConfig = { ...data, available_models: availableModels };
+        cachedModelConfig = newConfig;
+        setModelConfig(newConfig);
       }
     } catch (err) {
       console.error("Failed to fetch model config", err);
@@ -189,8 +196,9 @@ export default function AlgorithmSettings() {
   }, []);
 
   const handleModelChange = useCallback(async (modelName: string) => {
-    if (isChangingModel || modelName === modelConfig?.active_model) return;
+    if (isChangingModelRef.current || modelName === modelConfig?.active_model) return;
     
+    isChangingModelRef.current = true;
     setIsChangingModel(true);
     try {
       const res = await fetch(`${API_BASE}/model-config`, {
@@ -203,11 +211,29 @@ export default function AlgorithmSettings() {
       
       if (res.ok) {
         // Optimistically update the UI
-        setModelConfig(prev => prev ? { ...prev, active_model: modelName } : null);
-        // Force home page to refresh recommendations
+        setModelConfig(prev => {
+          const next = prev ? { ...prev, active_model: modelName } : null;
+          cachedModelConfig = next;
+          return next;
+        });
+        // Dispatch immediately so UI can show loading state for the newly selected model.
+        dispatchActiveModelChange(modelName, { loadStatus: "loading" });
+
+        try {
+          const preloadResult = await preloadActiveModel();
+          const readyModel = preloadResult.active_model || modelName;
+          if (preloadResult.active_model_ready) {
+            dispatchActiveModelChange(readyModel, { ready: true });
+          } else {
+            dispatchActiveModelChange(readyModel, { loadStatus: "error" });
+          }
+        } catch (preloadError) {
+          console.warn("Model preload failed before recommendation refresh", preloadError);
+          dispatchActiveModelChange(modelName, { loadStatus: "error" });
+        }
+
+        // Force home page to refresh recommendations after preload finishes.
         localStorage.setItem("streamx-force-refresh", Date.now().toString());
-        // Dispatch a custom event so the navbar in the same tab updates immediately
-        window.dispatchEvent(new Event('streamx-engine-changed'));
         // Fetch full config to get new metrics
         await fetchModelConfig();
       } else {
@@ -216,9 +242,10 @@ export default function AlgorithmSettings() {
     } catch (err) {
       console.error("Failed to change model", err);
     } finally {
+      isChangingModelRef.current = false;
       setIsChangingModel(false);
     }
-  }, [isChangingModel, modelConfig?.active_model, API_BASE, fetchModelConfig]);
+  }, [modelConfig?.active_model, API_BASE, fetchModelConfig]);
 
   const activeModel = modelConfig?.active_model ?? "";
   const isOption3StaticFit = OPTION3_MODEL_KEYS.has(activeModel);

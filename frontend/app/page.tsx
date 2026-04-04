@@ -48,8 +48,22 @@ export default function HomePage() {
       globalCarouselSourceNote = "Personalized feed unavailable. Showing trending picks.";
       setMetadataVersion((v) => v + 1);
     };
+    
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'streamx-force-refresh') {
+        handler();
+      }
+    };
+
     window.addEventListener("streamx-metadata-updated", handler);
-    return () => window.removeEventListener("streamx-metadata-updated", handler);
+    window.addEventListener("streamx-engine-changed", handler);
+    window.addEventListener("storage", handleStorageChange);
+    
+    return () => {
+      window.removeEventListener("streamx-metadata-updated", handler);
+      window.removeEventListener("streamx-engine-changed", handler);
+      window.removeEventListener("storage", handleStorageChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -175,6 +189,7 @@ export default function HomePage() {
       } finally {
         if (cancelled) return;
         setLoading(false);
+        window.dispatchEvent(new Event("streamx-recs-updated"));
       }
     }
     
