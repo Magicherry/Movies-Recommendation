@@ -17,14 +17,16 @@ export type Recommendation = Movie & {
   is_fallback_score?: boolean;
 };
 
-const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8001/api";
+const DEFAULT_API_BASE = "http://127.0.0.1:8001/api";
+const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || DEFAULT_API_BASE;
 
 function resolveApiBase(rawBase: string): string {
+  const normalizedBase = (rawBase || DEFAULT_API_BASE).trim().replace(/\/+$/, "") || DEFAULT_API_BASE;
   // On Windows + Node SSR, localhost may resolve to ::1 while Django listens on 127.0.0.1.
   if (typeof window === "undefined") {
-    return rawBase.replace(/^http:\/\/localhost(?=[:/]|$)/i, "http://127.0.0.1");
+    return normalizedBase.replace(/^http:\/\/localhost(?=[:/]|$)/i, "http://127.0.0.1");
   }
-  return rawBase;
+  return normalizedBase;
 }
 
 const API_BASE = resolveApiBase(RAW_API_BASE);
