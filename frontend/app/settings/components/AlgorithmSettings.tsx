@@ -103,10 +103,43 @@ const RADAR_MODEL_LABELS: Record<string, string> = {
   option4: "MF-ALS",
 };
 
-const getRadarModelColor = (modelName: string, activeModel: string, index: number) => {
+const parseColor = (color: string) => {
+  const c = color.trim().toLowerCase();
+  if (c.startsWith('rgb')) {
+    const match = c.match(/\d+/g);
+    if (match && match.length >= 3) {
+      return [parseInt(match[0]), parseInt(match[1]), parseInt(match[2])];
+    }
+  }
+  if (c.startsWith('#')) {
+    const hex = c.replace('#', '');
+    if (hex.length === 3) return [parseInt(hex[0]+hex[0], 16), parseInt(hex[1]+hex[1], 16), parseInt(hex[2]+hex[2], 16)];
+    if (hex.length === 6) return [parseInt(hex.substring(0,2), 16), parseInt(hex.substring(2,4), 16), parseInt(hex.substring(4,6), 16)];
+  }
+  return [0, 0, 0];
+};
+
+const colorDistance = (c1: string, c2: string) => {
+  const [r1, g1, b1] = parseColor(c1);
+  const [r2, g2, b2] = parseColor(c2);
+  return Math.sqrt((r1-r2)**2 + (g1-g2)**2 + (b1-b2)**2);
+};
+
+const getRadarModelColor = (modelName: string, activeModel: string, index: number, brandColor: string) => {
   if (modelName === activeModel) return "var(--brand)";
-  const palette = ["#ec4899", "#14b8a6", "#f59e0b", "#8b5cf6", "#06b6d4"];
-  return palette[index % palette.length];
+  const palette = [
+    "#ec4899", // pink
+    "#14b8a6", // teal
+    "#f59e0b", // amber
+    "#8b5cf6", // violet
+    "#06b6d4", // cyan
+    "#ef4444", // red
+    "#84cc16", // lime
+    "#3b82f6", // blue
+  ];
+  const safePalette = palette.filter(c => colorDistance(c, brandColor) > 80);
+  const finalPalette = safePalette.length > 0 ? safePalette : palette;
+  return finalPalette[index % finalPalette.length];
 };
 
 export default function AlgorithmSettings() {
@@ -114,7 +147,18 @@ export default function AlgorithmSettings() {
   const [isChangingModel, setIsChangingModel] = useState(false);
   const [chartsMounted, setChartsMounted] = useState(false);
   const [radarDisplayMode, setRadarDisplayMode] = useState<"current" | "all">("current");
+  const [brandColor, setBrandColor] = useState("#6ae100");
   const fetchConfigSeqRef = useRef(0);
+
+  useEffect(() => {
+    const updateBrandColor = () => {
+      const computed = getComputedStyle(document.documentElement).getPropertyValue("--brand").trim();
+      if (computed) setBrandColor(computed);
+    };
+    updateBrandColor();
+    window.addEventListener("streamx-settings-changed", updateBrandColor);
+    return () => window.removeEventListener("streamx-settings-changed", updateBrandColor);
+  }, []);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8001/api";
 
@@ -699,7 +743,7 @@ export default function AlgorithmSettings() {
                         <>
                           {radarModelMetrics.map(({ modelName }, index) => {
                             const isActive = modelName === activeModel;
-                            const color = getRadarModelColor(modelName, activeModel, index);
+                            const color = getRadarModelColor(modelName, activeModel, index, brandColor);
                             return (
                               <Radar
                                 key={modelName}
