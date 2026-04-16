@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "../context/user-context";
+import { getLongModelLabel } from "../lib/model-engine";
 
 export default function PredictionDisplay({ itemId }: { itemId: number }) {
   const { userId } = useUser();
@@ -33,19 +34,7 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
         if (modelRes.ok) {
           const modelData = await modelRes.json();
           if (disposed || seq !== fetchSeqRef.current) return;
-          if (modelData.active_model === 'option1') {
-            setActiveEngine('Matrix Factorization');
-          } else if (modelData.active_model === 'option2') {
-            setActiveEngine('Deep Neural CF');
-          } else if (modelData.active_model === 'option3_ridge') {
-            setActiveEngine('Matrix SVD + Ridge');
-          } else if (modelData.active_model === 'option3_lasso') {
-            setActiveEngine('Matrix SVD + Lasso');
-          } else if (modelData.active_model === 'option4') {
-            setActiveEngine('MF-ALS Matrix Factorization');
-          } else {
-            setActiveEngine(modelData.active_model);
-          }
+          setActiveEngine(getLongModelLabel(modelData.active_model));
         }
       } catch (err) {
         console.error("Failed to fetch prediction", err);

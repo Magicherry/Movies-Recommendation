@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import NextLink from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "../context/user-context";
+import { getShortModelLabel } from "../lib/model-engine";
 
 function useShowBrandAlgorithm(): boolean {
   const [show, setShow] = useState<boolean>(() => {
@@ -46,19 +47,7 @@ export default function AppNavbar() {
         if (res.ok) {
           const data = await res.json();
           if (disposed || seq !== engineFetchSeqRef.current) return;
-          if (data.active_model === 'option1') {
-            setActiveEngine('MF-SGD');
-          } else if (data.active_model === 'option2') {
-            setActiveEngine('NCF');
-          } else if (data.active_model === 'option3_ridge') {
-            setActiveEngine('SVD-Ridge');
-          } else if (data.active_model === 'option3_lasso') {
-            setActiveEngine('SVD-Lasso');
-          } else if (data.active_model === 'option4') {
-            setActiveEngine('MF-ALS');
-          } else {
-            setActiveEngine(data.active_model);
-          }
+          setActiveEngine(getShortModelLabel(data.active_model));
         }
       } catch (err) {
         console.error("Failed to fetch model config", err);
@@ -80,13 +69,7 @@ export default function AppNavbar() {
     const handleEngineChange = (e: Event) => {
       const customEvent = e as CustomEvent<{ activeModel?: string; loadStatus?: string }>;
       if (customEvent.detail?.activeModel) {
-        const model = customEvent.detail.activeModel;
-        if (model === 'option1') setActiveEngine('MF-SGD');
-        else if (model === 'option2') setActiveEngine('NCF');
-        else if (model === 'option3_ridge') setActiveEngine('SVD-Ridge');
-        else if (model === 'option3_lasso') setActiveEngine('SVD-Lasso');
-        else if (model === 'option4') setActiveEngine('MF-ALS');
-        else setActiveEngine(model);
+        setActiveEngine(getShortModelLabel(customEvent.detail.activeModel));
       } else {
         fetchModel();
       }
@@ -302,6 +285,7 @@ export default function AppNavbar() {
                   className="user-id-input"
                   min="1"
                   max={maxUserId.toString()}
+                  style={{ width: `${Math.max(inputId.length, 1) + 2.5}ch` }}
                 />
                 <button type="submit" style={{ display: 'none' }}>Set</button>
               </form>

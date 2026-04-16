@@ -97,16 +97,16 @@ python -m scripts.train_and_evaluate `
 python -m scripts.train_and_evaluate `
   --model-type option3_ridge `
   --dataset-dir dataset/ml-latest `
-  --n-factors 200 `
-  --option3-reg-alpha 0.08 `
-  --option3-bias-reg 12.0
+  --n-factors 48 `
+  --option3-reg-alpha 0.1 `
+  --option3-bias-reg 10.0
 ```
 
 | Parameter | Value | Reason |
 |---|---|---|
-| `n_factors` | 200 | Truncated SVD on a 331K×83K sparse matrix; CUDA randomized SVD is fast at this rank |
-| `reg_alpha` | 0.08 | Ridge penalty on the calibration layer; prevents overfitting to SVD noise |
-| `bias_reg` | 12.0 | Shrinkage for user/item biases: bias = Σresid / (count + 12) |
+| `n_factors` | 48 | Lower rank keeps the calibration layer well-conditioned vs. user observation counts |
+| `reg_alpha` | 0.1 | Ridge penalty on the calibration layer; prevents overfitting to SVD noise |
+| `bias_reg` | 10.0 | Shrinkage for user/item biases: bias = Σresid / (count + 10) |
 
 ### Option 3 Lasso — SVD + Lasso Calibration
 
@@ -114,20 +114,35 @@ python -m scripts.train_and_evaluate `
 python -m scripts.train_and_evaluate `
   --model-type option3_lasso `
   --dataset-dir dataset/ml-latest `
-  --n-factors 200 `
-  --option3-reg-alpha 0.008 `
+  --n-factors 48 `
+  --option3-reg-alpha 0.1 `
   --option3-lasso-max-iter 2000 `
   --option3-lasso-tol 0.00001 `
+  --option3-bias-reg 10.0
+```
+
+| Parameter | Value | Reason |
+|---|---|---|
+| `n_factors` | 48 | Same SVD rank as Ridge; Lasso can zero out uninformative dimensions |
+| `reg_alpha` | 0.1 | L1 penalty on the calibration head (coordinate descent) |
+| `max_iter` | 2000 | Coordinate descent needs more iterations at tight tolerance |
+| `tol` | 1e-5 | Tighter convergence for stable feature selection |
+| `bias_reg` | 10.0 | Same as Ridge |
+
+### Option 3 KNN — SVD + KNN-style latent scoring
+
+```powershell
+python -m scripts.train_and_evaluate `
+  --model-type option3_knn `
+  --dataset-dir dataset/ml-latest `
+  --n-factors 48 `
   --option3-bias-reg 12.0
 ```
 
 | Parameter | Value | Reason |
 |---|---|---|
-| `n_factors` | 200 | Same SVD rank as Ridge; Lasso will zero out uninformative dimensions |
-| `reg_alpha` | 0.008 | L1 penalty — lighter than Ridge since sparsity itself regularizes |
-| `max_iter` | 2000 | Coordinate descent needs more iterations at tight tolerance |
-| `tol` | 1e-5 | Tighter convergence for stable feature selection |
-| `bias_reg` | 12.0 | Same as Ridge |
+| `n_factors` | 48 | Same truncated-SVD basis as other Option 3 heads |
+| `bias_reg` | 12.0 | Bias shrinkage for the hybrid scorer (KNN head does not use `reg_alpha`) |
 
 ### Option 4 — MF-ALS (Numba)
 
@@ -186,12 +201,15 @@ python -m scripts.train_and_evaluate `
 
 Held-out test set on **ml-latest** with the cached split (`seed` 42, `test_ratio` 0.2, `split_hash` `953d2ab2ad4a80f3396cb9261a27f38219f5532614704e44539fad6535be63aa`). Top-N metrics use **K = 10** and `--topn-relevance all_test` (same as below). Values are read from `models/artifacts/<model>/metrics.json` after the last full training run.
 
+Active API model (see `models/artifacts/active_model.txt`): **option3_knn**.
+
 | Model | MAE | RMSE | P@10 | R@10 | F1 | NDCG@10 | Best epoch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Option 1 (MF-SGD) | 0.6020 | 0.8061 | 0.0367 | 0.0294 | 0.0218 | 0.0509 | 3 |
 | Option 2 (Deep Hybrid NCF) | 0.6005 | 0.8148 | 0.0533 | 0.0480 | 0.0331 | 0.0722 | 48 |
-| Option 3 Ridge | 0.6651 | 0.8637 | 0.0174 | 0.0030 | 0.0044 | 0.0196 | 1 |
-| Option 3 Lasso | 0.6961 | 0.9008 | 0.0282 | 0.0063 | 0.0087 | 0.0324 | 1 |
+| Option 3 Ridge | 0.6286 | 0.8312 | 0.0520 | 0.0240 | 0.0212 | 0.0671 | 1 |
+| Option 3 Lasso | 0.6714 | 0.8747 | 0.0152 | 0.0099 | 0.0063 | 0.0177 | 1 |
+| Option 3 KNN | 0.6810 | 0.9058 | 0.0159 | 0.0200 | 0.0127 | 0.0230 | 1 |
 | Option 4 (MF-ALS) | 0.7303 | 0.9786 | 0.0072 | 0.0038 | 0.0034 | 0.0091 | 6 |
 
 ## Evaluation Mode
@@ -210,7 +228,7 @@ Threshold-based relevance (only test items with rating >= 4.0 count as relevant)
 
 ## Troubleshooting
 
-- Option 3 may appear to hang during the sparse SVD step — this is normal for 200 factors.
+- Option 3 may appear to hang during the sparse SVD step — this is normal at higher ranks; 48 factors is relatively fast.
 - Option 4's first epoch may be slow due to Numba JIT compilation.
 - If PowerShell reports format errors, ensure each continued line ends with a backtick `` ` ``.
 - If a newly trained model is not reflected in API responses, restart the backend process.

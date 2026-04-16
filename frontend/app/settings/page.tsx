@@ -201,7 +201,7 @@ export default function SettingsPage() {
                     <ul className="about-list">
                       <li><strong className="about-label">Matrix Factorization:</strong> Custom implementations trained with Stochastic Gradient Descent (SGD) and Alternating Least Squares (MF-ALS).</li>
                       <li><strong className="about-label">Deep Neural CF:</strong> Hybrid deep learning model with Text CNN for title feature extraction.</li>
-                      <li><strong className="about-label">Matrix SVD:</strong> Closed-form SVD latent factors calibrated with Ridge/Lasso regression.</li>
+                      <li><strong className="about-label">Matrix SVD:</strong> Closed-form SVD latent factors paired with Ridge, Lasso, or KNN-style latent scoring.</li>
                     </ul>
                   </div>
                   <div className="about-section">

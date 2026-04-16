@@ -323,11 +323,11 @@ body {
 .nav-link:hover {
   opacity: 1;
   background: rgba(255, 255, 255, 0.05);
-  transform: scale(1.05);
 }
 
 .nav-link:active {
-  transform: scale(0.95);
+  transform: scale(0.94);
+  transition-duration: 0.12s;
 }
 
 .nav-link.active {
@@ -354,11 +354,11 @@ body {
 .nav-icon-link:hover {
   opacity: 1;
   background: rgba(255, 255, 255, 0.1);
-  transform: scale(1.05);
 }
 
 .nav-icon-link:active {
-  transform: scale(0.95);
+  transform: scale(0.94);
+  transition-duration: 0.12s;
 }
 
 .nav-right {
@@ -616,6 +616,22 @@ body {
   transform: scale(0.98);
 }
 
+/* Hero CTAs: no hover zoom; clearer press */
+.hero-actions .btn-primary:hover,
+.hero-actions .btn-secondary:hover {
+  transform: none;
+}
+.hero-actions .btn-primary:active {
+  transform: scale(0.94) translateY(1px);
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.18);
+  transition-duration: 0.12s;
+}
+.hero-actions .btn-secondary:active {
+  transform: scale(0.94) translateY(1px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  transition-duration: 0.12s;
+}
+
 .btn-secondary {
   background: rgba(109, 109, 110, 0.7);
   color: white;
@@ -798,6 +814,20 @@ body {
   outline: 2px solid rgba(147, 197, 253, 0.95);
   outline-offset: 2px;
 }
+
+/* Card ⋯: clear hover zoom (base rule sets transform:none; icon svg scale is disabled so only the button scales) */
+:is(.movie-card-wrapper:hover, .movie-card-wrapper--menu-open) .movie-context-menu-trigger--card:hover {
+  transform: scale(1.1);
+  box-shadow: var(--glass-icon-btn-shadow-hover);
+}
+:is(.movie-card-wrapper:hover, .movie-card-wrapper--menu-open) .movie-context-menu-trigger--card:active {
+  transform: scale(0.95);
+  box-shadow: var(--glass-icon-btn-shadow-active);
+}
+.movie-card-wrapper .movie-context-menu-trigger--card:hover svg {
+  transform: none;
+}
+
 .card-grid .movie-card-wrapper .poster-card {
   flex: 1 1 0;
   min-width: 0;
@@ -1660,7 +1690,7 @@ body {
 }
 
 .user-id-input {
-  width: 50px;
+  min-width: 3ch;
   padding: 4px 8px;
   border-radius: 6px;
   border: none;
@@ -1669,7 +1699,7 @@ body {
   font-weight: 600;
   font-size: 0.95rem;
   text-align: center;
-  transition: background 0.2s;
+  transition: background 0.2s, width 0.1s ease;
   outline: none;
 }
 
@@ -1894,7 +1924,7 @@ body {
   }
 
   .user-id-input {
-    width: 80px;
+    min-width: 3ch;
     padding: 10px 16px;
     font-size: 1.2rem;
     text-align: center;
@@ -3391,7 +3421,8 @@ body {
 
 /* Change Image: scrollable content + fixed footer */
 .change-image-body {
-  gap: 24px;
+  padding: 0;
+  gap: 0;
   min-height: 0;
   overflow: hidden;
 }
@@ -3416,7 +3447,7 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 0;
   opacity: 0;
   pointer-events: none;
   transform: scale(0.97) translateY(8px);
@@ -3442,12 +3473,12 @@ body {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  padding: 32px;
 }
 .change-image-footer-fixed {
   flex-shrink: 0;
   margin-top: 0;
-  padding-top: 20px;
-  padding-right: 10px;
+  padding: 20px 32px 32px;
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-surface);
 }
@@ -3931,7 +3962,7 @@ body {
   color: var(--text-subtle);
   text-align: left;
   padding: 12px 16px;
-  border-radius: var(--radius-panel);
+  border-radius: 10px;
   font-size: 1.05rem;
   font-weight: 500;
   cursor: pointer;
@@ -4028,7 +4059,7 @@ body {
   }
   
   .settings-nav-item {
-    border-radius: 12px;
+    border-radius: 10px;
     padding: 16px 20px;
     border-bottom: none;
     background: transparent;
@@ -4421,6 +4452,12 @@ input:checked + .toggle-slider {
 }
 input:checked + .toggle-slider:before {
   transform: translateX(24px);
+}
+.toggle-switch:hover input:not(:checked) + .toggle-slider:before {
+  transform: scale(1.08);
+}
+.toggle-switch:hover input:checked + .toggle-slider:before {
+  transform: translateX(24px) scale(1.08);
 }
 
 .range-slider {

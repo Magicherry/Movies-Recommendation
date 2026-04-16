@@ -38,7 +38,7 @@ plt.rcParams.update(
         "figure.dpi": 300,
     }
 )
-COLORS = ["#2563eb", "#dc2626", "#16a34a", "#ea580c", "#7c3aed"]
+COLORS = ["#2563eb", "#dc2626", "#16a34a", "#ea580c", "#7c3aed", "#0891b2"]
 
 
 def _epochs(df: pd.DataFrame) -> np.ndarray:
@@ -182,8 +182,8 @@ def plot_all_history_extras() -> None:
 
 
 def plot_metrics_summary() -> None:
-    model_keys = ["option1", "option2", "option3_ridge", "option3_lasso", "option4"]
-    labels = ["MF-SGD", "Deep Hybrid", "SVD-Ridge", "SVD-Lasso", "MF-ALS"]
+    model_keys = ["option1", "option2", "option3_ridge", "option3_lasso", "option3_knn", "option4"]
+    labels = ["MF-SGD", "Deep Hybrid", "SVD-Ridge", "SVD-Lasso", "SVD-KNN", "MF-ALS"]
     loaded: list[dict | None] = []
     for k in model_keys:
         path = ARTIFACTS / k / "metrics.json"

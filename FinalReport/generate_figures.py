@@ -38,7 +38,7 @@ def load_json(path):
 
 # ── Load all metrics ───────────────────────────────────────────────────
 metrics = {}
-for variant in ["option1", "option2", "option3_ridge", "option3_lasso", "option4"]:
+for variant in ["option1", "option2", "option3_ridge", "option3_lasso", "option3_knn", "option4"]:
     p = os.path.join(ARTIFACTS, variant, "metrics.json")
     if os.path.exists(p):
         metrics[variant] = load_json(p)
@@ -176,27 +176,31 @@ print("  training_als.pdf")
 # ═══════════════════════════════════════════════════════════════════════
 # Figure 6: Model comparison – Rating Prediction (MAE + RMSE)
 # ═══════════════════════════════════════════════════════════════════════
-model_names = ["MF-SGD", "Deep Hybrid", "SVD-Ridge", "SVD-Lasso", "MF-ALS"]
-model_keys = ["option1", "option2", "option3_ridge", "option3_lasso", "option4"]
+all_model_names = ["MF-SGD", "Deep Hybrid", "SVD-Ridge", "SVD-Lasso", "SVD-KNN", "MF-ALS"]
+all_model_keys  = ["option1", "option2", "option3_ridge", "option3_lasso", "option3_knn", "option4"]
+# Keep only models for which metrics.json was loaded
+model_names = [n for n, k in zip(all_model_names, all_model_keys) if k in metrics]
+model_keys  = [k for k in all_model_keys if k in metrics]
+
 mae_vals = [metrics[k]["mae"] for k in model_keys]
 rmse_vals = [metrics[k]["rmse"] for k in model_keys]
 
 x = np.arange(len(model_names))
 width = 0.35
-fig, ax = plt.subplots(figsize=(5.0, 2.8))
+fig, ax = plt.subplots(figsize=(5.8, 2.8))
 bars1 = ax.bar(x - width/2, mae_vals, width, label="MAE", color=COLORS[0], edgecolor="white")
 bars2 = ax.bar(x + width/2, rmse_vals, width, label="RMSE", color=COLORS[1], edgecolor="white")
 ax.set_ylabel("Error")
 ax.set_title("Rating Prediction Performance")
 ax.set_xticks(x)
-ax.set_xticklabels(model_names, rotation=15, ha="right")
+ax.set_xticklabels(model_names, rotation=20, ha="right")
 ax.legend()
 ax.set_ylim(0, 1.4)
 for bars in [bars1, bars2]:
     for bar in bars:
         h = bar.get_height()
         ax.annotate(f"{h:.3f}", xy=(bar.get_x() + bar.get_width()/2, h),
-                    xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=6.5)
+                    xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=6.0)
 fig.tight_layout()
 fig.savefig(os.path.join(FIGURES, "model_comparison_rating.pdf"), bbox_inches="tight")
 plt.close(fig)
@@ -210,14 +214,14 @@ rec_vals = [metrics[k]["recall"] for k in model_keys]
 f1_vals = [metrics[k]["f_measure"] for k in model_keys]
 ndcg_vals = [metrics[k]["ndcg"] for k in model_keys]
 
-fig, axes = plt.subplots(1, 2, figsize=(6.2, 2.8))
+fig, axes = plt.subplots(1, 2, figsize=(6.8, 2.8))
 width = 0.35
 axes[0].bar(x - width/2, prec_vals, width, label="Precision@10", color=COLORS[2])
 axes[0].bar(x + width/2, rec_vals, width, label="Recall@10", color=COLORS[3])
 axes[0].set_ylabel("Score")
 axes[0].set_title("Precision & Recall @10")
 axes[0].set_xticks(x)
-axes[0].set_xticklabels(model_names, rotation=20, ha="right", fontsize=7)
+axes[0].set_xticklabels(model_names, rotation=25, ha="right", fontsize=7)
 axes[0].legend(fontsize=7)
 
 axes[1].bar(x - width/2, f1_vals, width, label="F1@10", color=COLORS[4])
@@ -225,7 +229,7 @@ axes[1].bar(x + width/2, ndcg_vals, width, label="NDCG@10", color=COLORS[5])
 axes[1].set_ylabel("Score")
 axes[1].set_title("F1 & NDCG @10")
 axes[1].set_xticks(x)
-axes[1].set_xticklabels(model_names, rotation=20, ha="right", fontsize=7)
+axes[1].set_xticklabels(model_names, rotation=25, ha="right", fontsize=7)
 axes[1].legend(fontsize=7)
 fig.tight_layout()
 fig.savefig(os.path.join(FIGURES, "model_comparison_topn.pdf"), bbox_inches="tight")

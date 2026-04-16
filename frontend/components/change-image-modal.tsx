@@ -119,15 +119,22 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
   const handleApplyUrl = useCallback(() => {
     if (level2Mode === "poster") {
       setSelectedPosterUrl(urlInput.trim());
+      setPosterSize(null);
     } else {
       setSelectedBackdropUrl(urlInput.trim());
+      setBackdropSize(null);
     }
     setLevel(1);
   }, [level2Mode, urlInput]);
 
-  const handlePickImage = useCallback((url: string) => {
-    if (level2Mode === "poster") setSelectedPosterUrl(url);
-    else setSelectedBackdropUrl(url);
+  const handlePickImage = useCallback((item: TMDBImageItem) => {
+    if (level2Mode === "poster") {
+      setSelectedPosterUrl(item.url);
+      setPosterSize({ w: item.width, h: item.height });
+    } else {
+      setSelectedBackdropUrl(item.url);
+      setBackdropSize({ w: item.width, h: item.height });
+    }
     setLevel(1);
   }, [level2Mode]);
 
@@ -143,22 +150,28 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
   const onPosterLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
     setPosterLoadError(false);
-    if (img.naturalWidth && img.naturalHeight) setPosterSize({ w: img.naturalWidth, h: img.naturalHeight });
+    setPosterSize(prev => {
+      if (prev) return prev;
+      if (img.naturalWidth && img.naturalHeight) return { w: img.naturalWidth, h: img.naturalHeight };
+      return null;
+    });
   }, []);
   const onBackdropLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
     setBackdropLoadError(false);
-    if (img.naturalWidth && img.naturalHeight) setBackdropSize({ w: img.naturalWidth, h: img.naturalHeight });
+    setBackdropSize(prev => {
+      if (prev) return prev;
+      if (img.naturalWidth && img.naturalHeight) return { w: img.naturalWidth, h: img.naturalHeight };
+      return null;
+    });
   }, []);
 
   useEffect(() => {
     setPosterLoadError(false);
-    if (!displayPoster.trim()) setPosterSize(null);
   }, [displayPoster]);
 
   useEffect(() => {
     setBackdropLoadError(false);
-    if (!displayBackdrop.trim()) setBackdropSize(null);
   }, [displayBackdrop]);
 
   useEffect(() => {
@@ -292,7 +305,7 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
                   <div className="change-image-card change-image-card-ref">
                     <div className="change-image-card-preview change-image-card-poster">
                       {displayPoster && !posterLoadError ? (
-                        <img src={displayPoster} alt="Cover" onLoad={onPosterLoad} onError={() => { setPosterLoadError(true); setPosterSize(null); }} />
+                        <img key={displayPoster} src={displayPoster} alt="Cover" onLoad={onPosterLoad} onError={() => { setPosterLoadError(true); setPosterSize(null); }} />
                       ) : (
                         <span className="change-image-card-empty">No cover</span>
                       )}
@@ -332,7 +345,7 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
                   <div className="change-image-card change-image-card-ref">
                     <div className="change-image-card-preview change-image-card-backdrop">
                       {displayBackdrop && !backdropLoadError ? (
-                        <img src={displayBackdrop} alt="Backdrop" onLoad={onBackdropLoad} onError={() => { setBackdropLoadError(true); setBackdropSize(null); }} />
+                        <img key={displayBackdrop} src={displayBackdrop} alt="Backdrop" onLoad={onBackdropLoad} onError={() => { setBackdropLoadError(true); setBackdropSize(null); }} />
                       ) : (
                         <span className="change-image-card-empty">No backdrop</span>
                       )}
@@ -408,7 +421,7 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
                     <button
                       type="button"
                       className="change-image-picker-thumb"
-                      onClick={() => handlePickImage(item.url)}
+                      onClick={() => handlePickImage(item)}
                       title={`Vote: ${item.vote_average.toFixed(1)}`}
                     >
                       <img src={item.url} alt="" />

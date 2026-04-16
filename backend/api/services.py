@@ -38,7 +38,7 @@ class RecommenderService:
 
     def _select_default_active_model(self) -> str:
         available = getattr(self, "_available_model_names", set())
-        for candidate in ("option1", "option2", "option3_ridge", "option3_lasso", "option4"):
+        for candidate in ("option1", "option2", "option3_ridge", "option3_lasso", "option3_knn", "option4"):
             if candidate in available:
                 return candidate
         return sorted(available)[0]
@@ -557,11 +557,13 @@ class RecommenderService:
                          (self.artifacts_dir / "option2" / "model.pkl", "option2"),
                          (self.artifacts_dir / "option3_ridge" / "model.pkl", "option3_ridge"),
                          (self.artifacts_dir / "option3_lasso" / "model.pkl", "option3_lasso"),
+                         (self.artifacts_dir / "option3_knn" / "model.pkl", "option3_knn"),
                          (self.artifacts_dir / "option4" / "model.pkl", "option4"),
                          (self.artifacts_dir / "model_option1.pkl", "option1"),
                          (self.artifacts_dir / "model_option2.pkl", "option2"),
                          (self.artifacts_dir / "model_option3_ridge.pkl", "option3_ridge"),
                          (self.artifacts_dir / "model_option3_lasso.pkl", "option3_lasso"),
+                         (self.artifacts_dir / "model_option3_knn.pkl", "option3_knn"),
                          (self.artifacts_dir / "model_option4.pkl", "option4"),
                          (self.artifacts_dir / "model.pkl", "option1")]:
                 if path[0].exists():

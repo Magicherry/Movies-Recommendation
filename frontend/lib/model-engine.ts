@@ -16,6 +16,7 @@ export const SHORT_MODEL_LABELS: Record<string, string> = {
   option2: "NCF",
   option3_ridge: "SVD-Ridge",
   option3_lasso: "SVD-Lasso",
+  option3_knn: "SVD-KNN",
   option4: "MF-ALS",
 };
 
@@ -24,6 +25,7 @@ export const LONG_MODEL_LABELS: Record<string, string> = {
   option2: "Deep Neural CF",
   option3_ridge: "Matrix SVD + Ridge",
   option3_lasso: "Matrix SVD + Lasso",
+  option3_knn: "Matrix SVD + KNN",
   option4: "MF-ALS Matrix Factorization",
 };
 

@@ -40,10 +40,10 @@
 \maketitle
 
 \begin{abstract}
-Recommender systems are central to modern online platforms, yet choosing the right collaborative filtering strategy for a given dataset remains an open practical question. We implement and compare four collaborative filtering methods for movie recommendation on the \textbf{MovieLens Latest} corpus: biased matrix factorization with SGD (PyTorch), a deep hybrid model with CNN title and genre encoders, truncated-SVD with Ridge/Lasso calibration, and alternating least squares.
+Recommender systems are central to modern online platforms, yet choosing the right collaborative filtering strategy for a given dataset remains an open practical question. We implement and compare five collaborative filtering methods for movie recommendation on the \textbf{MovieLens Latest} corpus: biased matrix factorization with SGD (PyTorch), a deep hybrid model with CNN title and genre encoders, truncated-SVD with Ridge calibration, truncated-SVD with a KNN-style latent scoring head, and alternating least squares.
 All models are evaluated on rating prediction (MAE, RMSE) and top-10 recommendation under an identical per-user 80/20 holdout split.
-The deep hybrid model achieves the strongest overall profile, while tuned MF-SGD becomes a close second and attains the lowest RMSE.
-SVD-Ridge/Lasso remain competitive linear baselines, and MF-ALS still underperforms mainly on top-10 ranking quality under our current explicit-feedback configuration.
+The deep hybrid model achieves the strongest overall profile (MAE\,=\,0.6005, NDCG@10\,=\,0.0722), while tuned MF-SGD attains the lowest RMSE (0.8061).
+SVD-Ridge is the strongest linear baseline with notable top-10 ranking quality (P@10\,=\,0.0520, NDCG@10\,=\,0.0671), and MF-ALS still underperforms mainly on top-10 ranking quality under our current explicit-feedback configuration.
 We provide training-dynamics analysis, auxiliary feature-block ablation on a smaller subset, and latent-factor discussion, and we ship a full-stack web demo (\textit{StreamX}) that serves the retrained checkpoints.
 \end{abstract}
 
@@ -64,7 +64,7 @@ How these choices interact in practice---especially on a moderately sized, long-
 In this project, we address that gap by implementing four distinct collaborative filtering models from scratch, training all of them on the identical MovieLens Latest split, and evaluating them with the same metrics suite.
 Our contributions are threefold:
 \begin{itemize}
-\item We provide a controlled comparison of four CF models---MF-SGD, a deep hybrid CNN model, SVD with linear calibration (Ridge/Lasso), and MF-ALS---under identical data conditions.
+\item We provide a controlled comparison of five CF models---MF-SGD, a deep hybrid CNN model, SVD-Ridge, SVD with a KNN-style latent scoring head, and MF-ALS---under identical data conditions.
 \item We analyze not only aggregate accuracy (MAE, RMSE) and ranking quality (Precision, Recall, F1, NDCG@10) but also training dynamics, latent factor semantics, and feature-block ablation.
 \item We build \textit{StreamX}, an end-to-end web application (Django\,+\,Next.js) that serves real-time recommendations from the trained models, demonstrating practical deployment.
 \end{itemize}
@@ -131,7 +131,10 @@ They differ in how the parameters are estimated and whether additional content f
 
 This model directly optimizes the $L_2$-regularized squared-error objective:
 \begin{equation}
-\min_{\mathbf{p},\mathbf{q},b} \sum_{(u,i)\in\mathcal{D}_\text{train}} \!\!\bigl(r_{ui} - \hat{r}_{ui}\bigr)^2 + \lambda\bigl(\|\mathbf{p}_u\|^2 + \|\mathbf{q}_i\|^2 + b_u^2 + b_i^2\bigr),
+\begin{split}
+\min_{\mathbf{p},\mathbf{q},b} \sum_{(u,i)\in\mathcal{D}_\text{train}} \!\!\bigl(r_{ui} - \hat{r}_{ui}\bigr)^2 \\
++\; \lambda\bigl(\|\mathbf{p}_u\|^2 + \|\mathbf{q}_i\|^2 + b_u^2 + b_i^2\bigr),
+\end{split}
 \label{eq:mfsgd}
 \end{equation}
 via element-wise SGD.
@@ -174,9 +177,25 @@ Finally, a linear calibration layer is trained on top of the latent features:
 where $\phi(u,i) = [\mathbf{p}_u \odot \mathbf{q}_i;\; b_u;\; b_i] \in \mathbb{R}^{k+2}$ concatenates the element-wise product of latent factors with bias terms.
 The weight vector $\mathbf{w}$ is estimated by either Ridge regression (closed-form) or Lasso regression (coordinate descent).
 
-We experiment with two configurations: \textbf{SVD-Ridge} ($k{=}200$, $\alpha{=}0.08$) and \textbf{SVD-Lasso} ($k{=}200$, $\alpha{=}0.008$, coordinate descent with up to 2000 iterations, tolerance $10^{-5}$).
-Both use bias regularization $\lambda_b{=}12$.
-On MovieLens Latest, moderate $\alpha$ balances calibration stability with the high effective rank of the interaction matrix after centering.
+We experiment with two configurations: \textbf{SVD-Ridge} ($k{=}48$, $\alpha{=}0.1$, bias regularization $\lambda_b{=}10$) and \textbf{SVD-Lasso} ($k{=}48$, $\alpha{=}0.1$, coordinate descent with up to 2000 iterations, tolerance $10^{-5}$, $\lambda_b{=}10$).
+The lower SVD rank ($k{=}48$) keeps the calibration layer well-conditioned relative to the per-user observation count, while the Ridge penalty prevents overfitting to SVD noise.
+
+\subsection{SVD with KNN-Style Latent Scoring}
+
+This variant extends the SVD pipeline with a KNN-inspired user representation that replaces the standard SVD user vectors.
+After the truncated SVD decomposition and bias estimation, each item factor $\mathbf{q}_i$ is L2-normalized to unit length, yielding $\hat{\mathbf{q}}_i = \mathbf{q}_i / \|\mathbf{q}_i\|$.
+Rather than using the SVD-derived user factor $\mathbf{p}_u$ directly, the user profile is recomputed as the \emph{mean of normalized item factors} for all items the user has rated:
+\begin{equation}
+\mathbf{p}_u^{\text{KNN}} = \frac{1}{|\mathcal{I}_u|}\sum_{i \in \mathcal{I}_u} \hat{\mathbf{q}}_i,
+\end{equation}
+where $\mathcal{I}_u$ denotes the set of items rated by user $u$ in the training split.
+This profile represents the user's \emph{average item-factor direction} in the latent space and is geometrically equivalent to an unweighted item-based neighborhood centroid.
+A scale factor of $2.0$ is applied to $\mathbf{p}_u^{\text{KNN}}$ to align the dynamic range of predicted scores with the rating distribution, while item factors are set to the normalized vectors $\hat{\mathbf{q}}_i$.
+Prediction follows the same form as Equation~\eqref{eq:base}: $\hat{r}_{ui} = \mu + b_u + b_i + (\mathbf{p}_u^{\text{KNN}})^\top \hat{\mathbf{q}}_i$, which becomes a shifted cosine similarity between the user centroid and the target item.
+No calibration regression is applied in this variant; the bias terms are estimated via the same regularized residual averaging as in SVD-Ridge/Lasso.
+
+Key parameters: $k{=}48$ (SVD rank), bias regularization $\lambda_b{=}12$.
+The KNN head trades rating accuracy for a representation that is more directly aligned with item-neighborhood geometry in the latent space.
 
 \subsection{Alternating Least Squares}
 
@@ -263,7 +282,7 @@ All models share exactly the same split, identified by a deterministic hash for 
 
 All models are implemented in Python~3.11 with a shared tabular data pipeline.
 \textbf{Option~1} (MF-SGD) and \textbf{Option~2} (deep hybrid) were migrated from the earlier NumPy and TensorFlow stack to \textbf{PyTorch}: training uses GPU acceleration when available, Adam-family optimizers with gradient clipping, and large minibatches so that tens of millions of ratings remain tractable in wall-clock time.
-\textbf{Option~3} (SVD + Ridge/Lasso) relies on sparse linear algebra and calibrated linear regressors from a standard machine-learning library; \textbf{Option~4} (MF-ALS) is a NumPy-based alternating least-squares loop with validation-based early stopping.
+\textbf{Option~3} (SVD + Ridge/Lasso/KNN) relies on sparse linear algebra and calibrated linear regressors from a standard machine-learning library; \textbf{Option~4} (MF-ALS) is a NumPy-based alternating least-squares loop with validation-based early stopping.
 
 Compared with the earlier small-dataset workflow, we now train and evaluate through one consolidated driver in the repository: MovieLens Latest is the default data source, the per-user 80/20 split is built once and reused for every model so that results are directly comparable, and each training run persists evaluation metrics, serialized parameters, and per-epoch history alongside the corresponding model variant.
 Recommended batch sizes for GPU memory and other practical presets are written up separately in the project documentation.
@@ -282,26 +301,26 @@ Table~\ref{tab:hparams} summarizes the key hyperparameters for each model, chose
 
 \begin{table}[t]
 \centering
-\footnotesize
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{lcccc}
+\resizebox{\columnwidth}{!}{%
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccc}
 \toprule
- & \textbf{MF-SGD} & \textbf{Deep} & \textbf{SVD-R/L} & \textbf{MF-ALS} \\
+ & \textbf{MF-SGD} & \textbf{Deep} & \textbf{SVD-R/L} & \textbf{SVD-KNN} & \textbf{MF-ALS} \\
 \midrule
-$k$ (factors) & 64 & 96 & 200 / 200 & 96 \\
-Epochs & 150 & 50 & 1 & 40 \\
-Batch size & 131k & 65k & -- & -- \\
-Learning rate & 0.0050 & 0.0008 & -- & -- \\
-LR decay & $0.99\times$ & plateau & -- & -- \\
-Reg.\ $\lambda$ / $\alpha$ & 0.05 & $10^{-5}$ $L_2$ & 0.08 / 0.008 & 0.16 \\
-Bias reg. & -- & -- & 12.0 & 6.0 \\
-Dropout & -- & 0.18 & -- & -- \\
-Val.\ split & 0.10 & 0.10 & -- & 0.10 \\
-Early stop & pat.\ 6 & best ckpt & -- & pat.\ 6 \\
-Loss & MSE & Huber & -- & MSE \\
+$k$ (factors) & 64 & 96 & 48\,/\,48 & 48 & 96 \\
+Epochs        & 150 & 50 & 1 & 1 & 40 \\
+Batch size    & 131k & 65k & -- & -- & -- \\
+LR            & 0.0050 & 0.0008 & -- & -- & -- \\
+LR decay      & $0.99\times$ & plateau & -- & -- & -- \\
+Reg.\ $\lambda$/$\alpha$ & 0.05 & $10^{-5}$ & 0.1\,/\,0.1 & -- & 0.16 \\
+Bias reg.     & -- & -- & 10.0 & 12.0 & 6.0 \\
+Dropout       & -- & 0.18 & -- & -- & -- \\
+Val.\ split   & 0.10 & 0.10 & -- & -- & 0.10 \\
+Early stop    & pat.\,6 & best ckpt & -- & -- & pat.\,6 \\
+Loss          & MSE & Huber & -- & -- & MSE \\
 \bottomrule
-\end{tabular}
-\caption{Key hyperparameter settings for each model on MovieLens Latest; full command-line presets are in \texttt{docs/TRAINING\_PARAMETERS.md}.}
+\end{tabular}}
+\caption{Key hyperparameter settings for each model on MovieLens Latest; full presets in \texttt{docs/TRAINING\_PARAMETERS.md}. $L_2$ reg for Deep model.}
 \label{tab:hparams}
 \end{table}
 
@@ -312,7 +331,8 @@ Loss & MSE & Huber & -- & MSE \\
 
 Table~\ref{tab:rating_results} reports rating prediction on the 6.77M held-out ratings.
 The \textbf{Deep Hybrid} model achieves the best MAE (0.6005), while \textbf{MF-SGD} is a strong runner-up and attains the best RMSE (0.8061).
-\textbf{SVD-Ridge} remains the stronger linear-calibration baseline, \textbf{SVD-Lasso} is less accurate under the current sparse calibration settings, and \textbf{MF-ALS} still trails the top two models.
+\textbf{SVD-Ridge} is the strongest linear baseline after retuning ($k{=}48$, MAE\,=\,0.6286, RMSE\,=\,0.8312), substantially improving over earlier presets.
+\textbf{SVD-KNN} achieves slightly higher rating error (MAE\,=\,0.6810) due to its non-calibrated cosine-similarity scoring, and \textbf{MF-ALS} still trails the other models.
 
 \begin{table}[t]
 \centering
@@ -323,8 +343,9 @@ The \textbf{Deep Hybrid} model achieves the best MAE (0.6005), while \textbf{MF-
 \midrule
 Deep Hybrid        & \textbf{0.6005} & 0.8148 \\
 MF-SGD             & 0.6020 & \textbf{0.8061} \\
-SVD-Ridge          & 0.6651 & 0.8637 \\
-SVD-Lasso          & 0.6961 & 0.9008 \\
+SVD-Ridge          & 0.6286 & 0.8312 \\
+SVD-KNN            & 0.6810 & 0.9058 \\
+SVD-Lasso          & 0.6714 & 0.8747 \\
 MF-ALS             & 0.7303 & 0.9786 \\
 \bottomrule
 \end{tabular}
@@ -356,9 +377,10 @@ MF-ALS exhibits the same train--validation divergence pattern under the present 
 \textbf{Model} & \textbf{P@10}$\uparrow$ & \textbf{R@10}$\uparrow$ & \textbf{F1@10}$\uparrow$ & \textbf{NDCG@10}$\uparrow$ \\
 \midrule
 Deep Hybrid & \textbf{0.0533} & \textbf{0.0480} & \textbf{0.0331} & \textbf{0.0722} \\
+SVD-Ridge   & 0.0520 & 0.0240 & 0.0212 & 0.0671 \\
 MF-SGD      & 0.0367 & 0.0294 & 0.0218 & 0.0509 \\
-SVD-Lasso   & 0.0282 & 0.0063 & 0.0087 & 0.0324 \\
-SVD-Ridge   & 0.0174 & 0.0030 & 0.0044 & 0.0196 \\
+SVD-KNN     & 0.0159 & 0.0200 & 0.0127 & 0.0230 \\
+SVD-Lasso   & 0.0152 & 0.0099 & 0.0063 & 0.0177 \\
 MF-ALS      & 0.0072 & 0.0038 & 0.0034 & 0.0091 \\
 \bottomrule
 \end{tabular}
@@ -368,8 +390,11 @@ MF-ALS      & 0.0072 & 0.0038 & 0.0034 & 0.0091 \\
 
 Table~\ref{tab:topn_results} and Figure~\ref{fig:topn_comparison} summarize ranking metrics.
 On this corpus and protocol, the \textbf{Deep Hybrid} model ranks best across Precision, Recall, F1, and NDCG@10.
-MF-SGD is now a clear second tier and substantially narrows the gap to Deep Hybrid on all top-10 metrics.
-SVD-Lasso slightly edges SVD-Ridge on NDCG, while MF-ALS remains far behind.
+\textbf{SVD-Ridge} emerges as a surprisingly strong second on ranking quality after retuning (P@10\,=\,0.0520, NDCG@10\,=\,0.0671), closely trailing Deep Hybrid and substantially outperforming MF-SGD on top-$N$ metrics.
+\textbf{MF-SGD} ranks third on most ranking metrics despite its better rating error, confirming that squared-error minimization alone does not guarantee good item ranking.
+\textbf{SVD-KNN} achieves middling ranking scores (NDCG@10\,=\,0.0230): its cosine-similarity-based user profile captures neighborhood direction but, without a calibration layer, fails to resolve fine-grained score differences needed for high-precision top-10 lists.
+\textbf{SVD-Lasso} shows weaker top-$N$ performance than SVD-Ridge under the current $\alpha{=}0.1$ setting, as aggressive L1 sparsification reduces the diversity of item scores in the latent calibration.
+MF-ALS remains far behind on all ranking metrics.
 
 The very low MF-ALS top-$N$ scores are consistent with its poor point-wise calibration: when predicted scores poorly separate relevant and irrelevant items, fixed cutoffs at $N{=}10$ collapse precision-oriented metrics.
 This is \emph{not} a claim that MF-ALS is inherently unsuitable at scale---only that the present hyperparameters and stopping criterion do not yield competitive scores relative to the deep and SVD-hybrid baselines under identical data conditions.
@@ -478,15 +503,17 @@ At full scale ($k{=}64$, $|\mathcal{I}|{\approx}8{\times}10^4$ rated items), the
 \section{Discussion}
 
 \paragraph{Rating Accuracy vs.\ Ranking Quality.}
-On MovieLens Latest with our evaluation protocol, the Deep Hybrid model leads on \emph{overall} quality: best MAE and best top-10 metrics.
-MF-SGD is now close on point-wise error and slightly better on RMSE, but still trails on ranking quality.
-This contrasts with our earlier MovieLens-Small study, where stronger regularization on low-rank MF-ALS and SVD hybrids improved NDCG disproportionately.
+On MovieLens Latest with our evaluation protocol, the Deep Hybrid model leads on \emph{overall} quality: best MAE (0.6005) and best top-10 metrics (NDCG@10\,=\,0.0722).
+MF-SGD is close on point-wise error and achieves the best RMSE (0.8061), but ranks third on top-$N$ metrics, confirming that squared-error minimization alone does not guarantee good ranking.
+SVD-Ridge, by contrast, exhibits a complementary profile: it ranks second on NDCG@10 (0.0671) despite a somewhat weaker RMSE (0.8312), suggesting that the linear calibration head aligns predicted scores with user preferences more effectively than pure gradient descent on MSE at this scale.
+This contrasts with our earlier MovieLens-Small study, where stronger regularization on low-rank MF-ALS improved NDCG disproportionately.
 At tens of millions of ratings, expressive architectures with content channels and GPU-scale optimization can align the two objectives more closely, though MAE/RMSE and ranking metrics still measure different aspects of user utility \cite{rendle2009bpr}.
 
 \paragraph{Classical baselines at scale.}
-SVD-Ridge and SVD-Lasso remain attractive: they require only a sparse SVD plus a shallow calibration step, yet achieve MAE below 0.67.
-After retuning, MF-SGD is competitive and provides a strong fallback baseline.
-MF-ALS remains the weakest model in top-$N$ ranking on this split, which suggests that this explicit-feedback MF-ALS setup still needs deeper rank/regularization redesign.
+SVD-Ridge is an attractive practical choice: it requires only a sparse SVD ($k{=}48$) plus a shallow Ridge calibration step, achieves MAE\,=\,0.6286, and delivers strong ranking quality (P@10\,=\,0.0520), making it competitive with the deep model for applications where interpretability and training speed are priorities.
+SVD-Lasso uses the same SVD rank but L1 penalization reduces calibration weight diversity, resulting in weaker top-$N$ scores (NDCG@10\,=\,0.0177) despite reasonable rating error (MAE\,=\,0.6714).
+The SVD-KNN variant demonstrates that item-neighborhood centroids in SVD latent space carry meaningful geometric structure: ranking a user's preferences by cosine proximity to their aggregated item profile yields moderate NDCG@10 (0.0230) with no explicit regression, at the cost of higher rating error.
+MF-ALS remains the weakest model in top-$N$ ranking on this split.
 
 \paragraph{Depth vs.\ data scale.}
 On $\sim$34M interactions, the Deep Hybrid's additional capacity is no longer a pure liability: title CNNs and genre pooling help denoise tail items and improve both RMSE and NDCG relative to the classical runs we report.
@@ -506,18 +533,24 @@ The frontend provides movie browsing, personalized recommendations, TMDB-enriche
 \section{Limitations}
 
 MovieLens Latest is labeled a \emph{development} dataset by GroupLens; snapshots can change, so exact metrics are tied to our July~2023-era checkout.
-While we tuned presets documented in the repository, we did not run large-scale automated hyperparameter search for every model; in particular, MF-ALS likely has better operating points than those reported here.
+While we tuned presets documented in the repository, we did not run large-scale automated hyperparameter search for every model; in particular, MF-ALS and SVD-KNN likely have better operating points than those reported here.
 The top-$N$ evaluation uses the \texttt{all\_test} relevance definition (all held-out items are relevant), which yields small absolute Precision/NDCG values when users have many test ratings.
+The SVD-KNN user profile uses unweighted averaging over rated items; incorporating rating values or temporal recency as weights could improve ranking quality.
 We do not explore temporal dynamics, implicit feedback, or review text beyond titles and genres.
 Finally, training deep models assumes GPU availability; CPU-only runs are supported but substantially slower.
 
 
 \section{Conclusion}
 
-We presented a controlled comparison of four collaborative filtering approaches after migrating from MovieLens-Small to \textbf{MovieLens Latest} and retraining all checkpoints on a shared per-user 80/20 split (27.1M / 6.77M ratings).
-Our updated experiments show that (1) the Deep Hybrid model achieves the best overall results (MAE\,=\,0.6005, NDCG@10\,=\,0.0722); (2) tuned MF-SGD becomes a close second and achieves the best RMSE (0.8061 vs.\ 0.8148 for Deep); (3) SVD-Ridge remains a solid low-complexity baseline (MAE\,=\,0.6651), while SVD-Lasso is weaker under the current calibration setting (MAE\,=\,0.6961); and (4) MF-ALS improves in rating error versus earlier presets but remains weak in top-$N$ ranking.
+We presented a controlled comparison of five collaborative filtering approaches trained on a shared per-user 80/20 split of \textbf{MovieLens Latest} (27.1M / 6.77M ratings).
+Our updated experiments show that:
+(1) the \textbf{Deep Hybrid} model achieves the best overall profile (MAE\,=\,0.6005, NDCG@10\,=\,0.0722);
+(2) tuned \textbf{MF-SGD} achieves the best RMSE (0.8061 vs.\ 0.8148 for Deep) and ranks third on top-$N$ metrics;
+(3) \textbf{SVD-Ridge} ($k{=}48$) is the strongest linear baseline, offering strong ranking quality (P@10\,=\,0.0520, NDCG@10\,=\,0.0671) at low computational cost;
+(4) the \textbf{SVD-KNN} variant demonstrates that cosine-similarity-based user profiles in SVD latent space produce interpretable, geometry-aware recommendations (NDCG@10\,=\,0.0230) without any regression calibration;
+and (5) \textbf{MF-ALS} improves in rating error versus earlier presets but remains weak in top-$N$ ranking under the current configuration.
 
-Future work includes dedicated MF-ALS and MF-SGD sweeps at web scale, benchmarking on frozen MovieLens \emph{benchmark} splits for publication-grade comparability, and learning-to-rank objectives that align training with NDCG.
+Future work includes dedicated MF-ALS and MF-SGD sweeps at web scale, benchmarking on frozen MovieLens \emph{benchmark} splits for publication-grade comparability, learning-to-rank objectives that align training with NDCG, and incorporating rating-weighted KNN profiles or attention-based item aggregation into the SVD-KNN head.
 
 \bibliography{references}
 

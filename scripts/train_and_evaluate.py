@@ -24,10 +24,11 @@ def parse_args() -> argparse.Namespace:
         "--model-type",
         type=str,
         default="option1",
-        choices=["option1", "option2", "option3_ridge", "option3_lasso", "option4"],
+        choices=["option1", "option2", "option3_ridge", "option3_lasso", "option3_knn", "option4"],
         help=(
             "Which model to train: option1 (MF SGD), option2 (Deep NCF), "
-            "option3_ridge (SVD + Ridge), option3_lasso (SVD + Lasso), or option4 (MF-ALS)."
+            "option3_ridge (SVD + Ridge), option3_lasso (SVD + Lasso), "
+            "option3_knn (SVD + KNN), or option4 (MF-ALS)."
         ),
     )
     parser.add_argument(
@@ -176,8 +177,8 @@ def parse_args() -> argparse.Namespace:
         "--option3-regressor",
         type=str,
         default="ridge",
-        choices=["ridge", "lasso"],
-        help="Regression head for option3 variants over SVD latent features.",
+        choices=["ridge", "lasso", "knn"],
+        help="Scoring head for option3 variants over SVD latent features.",
     )
     parser.add_argument(
         "--option3-reg-alpha",
@@ -333,7 +334,7 @@ def _auto_tune_model_hparams(args: argparse.Namespace) -> list[str]:
                 args.batch_size = 4096
                 notes.append("option2 batch_size -> 4096 (CPU fallback)")
 
-    elif model_type in {"option3_ridge", "option3_lasso"}:
+    elif model_type in {"option3_ridge", "option3_lasso", "option3_knn"}:
         if not _flag_was_provided("--n-factors"):
             args.n_factors = 200
             notes.append("option3 n_factors -> 200")
@@ -345,7 +346,7 @@ def _auto_tune_model_hparams(args: argparse.Namespace) -> list[str]:
             if not _flag_was_provided("--option3-reg-alpha"):
                 args.option3_reg_alpha = 0.08
                 notes.append("option3_ridge reg_alpha -> 0.08")
-        else:
+        elif model_type == "option3_lasso":
             if not _flag_was_provided("--option3-reg-alpha"):
                 args.option3_reg_alpha = 0.008
                 notes.append("option3_lasso reg_alpha -> 0.008")
@@ -355,6 +356,8 @@ def _auto_tune_model_hparams(args: argparse.Namespace) -> list[str]:
             if not _flag_was_provided("--option3-lasso-tol"):
                 args.option3_lasso_tol = 1e-5
                 notes.append("option3_lasso tol -> 1e-5")
+        else:
+            notes.append("option3_knn reuses SVD factors with KNN-style latent scoring")
 
         if has_cuda:
             notes.append("option3 uses CUDA sparse randomized SVD when available")
@@ -482,6 +485,8 @@ def main() -> None:
         effective_option3_regressor = "ridge"
     elif effective_model_type == "option3_lasso":
         effective_option3_regressor = "lasso"
+    elif effective_model_type == "option3_knn":
+        effective_option3_regressor = "knn"
 
     model_artifacts_dir = artifacts_dir / effective_model_type
     model_artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -541,7 +546,7 @@ def main() -> None:
             early_stopping_patience=args.option4_early_stopping_patience,
             seed=args.seed,
         )
-    elif effective_model_type in {"option3_ridge", "option3_lasso"}:
+    elif effective_model_type in {"option3_ridge", "option3_lasso", "option3_knn"}:
         model = Option3SVDHybridRecommender(
             n_factors=args.n_factors,
             regressor=effective_option3_regressor,
@@ -611,15 +616,17 @@ def main() -> None:
             "validation_split": float(args.option4_validation_split),
             "early_stopping_patience": int(args.option4_early_stopping_patience),
         }
-    elif effective_model_type in {"option3_ridge", "option3_lasso"}:
+    elif effective_model_type in {"option3_ridge", "option3_lasso", "option3_knn"}:
         model_hparams = {
             "n_factors": int(args.n_factors),
             "regressor": str(effective_option3_regressor),
-            "reg_alpha": float(args.option3_reg_alpha),
-            "lasso_max_iter": int(args.option3_lasso_max_iter),
-            "lasso_tol": float(args.option3_lasso_tol),
             "bias_reg": float(args.option3_bias_reg),
         }
+        if effective_option3_regressor in {"ridge", "lasso"}:
+            model_hparams["reg_alpha"] = float(args.option3_reg_alpha)
+        if effective_option3_regressor == "lasso":
+            model_hparams["lasso_max_iter"] = int(args.option3_lasso_max_iter)
+            model_hparams["lasso_tol"] = float(args.option3_lasso_tol)
     else:
         raise ValueError(f"Unsupported model type: {effective_model_type}")
 

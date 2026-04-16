@@ -79,6 +79,10 @@ const MODEL_METADATA: Record<string, { title: string; description: string }> = {
     title: "Option3 Lasso",
     description: "SVD latent factors calibrated with Lasso regression.",
   },
+  option3_knn: {
+    title: "Option3 KNN",
+    description: "SVD latent factors projected into an item-similarity KNN space.",
+  },
   option4: {
     title: "Matrix Factorization (ALS)",
     description:
@@ -86,7 +90,8 @@ const MODEL_METADATA: Record<string, { title: string; description: string }> = {
   },
 };
 
-const OPTION3_MODEL_KEYS = new Set(["option3_ridge", "option3_lasso"]);
+const OPTION3_MODEL_ORDER = ["option3_ridge", "option3_lasso", "option3_knn"];
+const OPTION3_MODEL_KEYS = new Set(OPTION3_MODEL_ORDER);
 const OPTION1_MODEL_KEYS = new Set(["option1", "option4"]);
 const RADAR_VISUAL_FLOOR = 0.12;
 const RADAR_METRIC_DEFS = [
@@ -102,6 +107,7 @@ const RADAR_MODEL_LABELS: Record<string, string> = {
   option2: "Deep Hybrid",
   option3_ridge: "SVD-Ridge",
   option3_lasso: "SVD-Lasso",
+  option3_knn: "SVD-KNN",
   option4: "MF-ALS",
 };
 
@@ -152,7 +158,29 @@ export default function AlgorithmSettings() {
   const isChangingModelRef = useRef(false);
   const [chartsMounted, setChartsMounted] = useState(false);
   const [radarDisplayMode, setRadarDisplayMode] = useState<"current" | "all">("current");
+  const [animatedCx, setAnimatedCx] = useState(50);
   const [brandColor, setBrandColor] = useState("#6ae100");
+
+  useEffect(() => {
+    const targetCx = radarDisplayMode === "all" ? 65 : 50;
+    if (animatedCx === targetCx) return;
+
+    let start = performance.now();
+    const duration = 350; // ms
+    const initialCx = animatedCx;
+    let frameId: number;
+
+    const animate = (time: number) => {
+      const progress = Math.min((time - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+      setAnimatedCx(initialCx + (targetCx - initialCx) * ease);
+      if (progress < 1) {
+        frameId = requestAnimationFrame(animate);
+      }
+    };
+    frameId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frameId);
+  }, [radarDisplayMode]);
   const fetchConfigSeqRef = useRef(0);
 
   useEffect(() => {
@@ -376,13 +404,13 @@ export default function AlgorithmSettings() {
   }, [availableModels]);
 
   const option3VariantModels = useMemo(() => {
-    const ordered = ["option3_ridge", "option3_lasso"];
+    const ordered = OPTION3_MODEL_ORDER;
     return ordered.filter((name) => availableModels.includes(name));
   }, [availableModels]);
 
   const primaryModelOptions = useMemo(() => {
     return availableModels.filter((name) => {
-      if (["option3_ridge", "option3_lasso"].includes(name)) return false;
+      if (OPTION3_MODEL_KEYS.has(name)) return false;
       if (["option1", "option4"].includes(name)) return false;
       return true;
     });
@@ -594,9 +622,9 @@ export default function AlgorithmSettings() {
                 <div
                   className={`model-option ${OPTION3_MODEL_KEYS.has(modelConfig.active_model) ? "active" : ""}`}
                   onClick={() => {
-                    // If clicking the main card while it's not active, default to option3_ridge
-                    if (!OPTION3_MODEL_KEYS.has(modelConfig.active_model)) {
-                      handleModelChange("option3_ridge");
+                    // If clicking the main card while it's not active, default to the first available Option3 variant.
+                    if (!OPTION3_MODEL_KEYS.has(modelConfig.active_model) && option3VariantModels.length > 0) {
+                      handleModelChange(option3VariantModels[0]);
                     }
                   }}
                   style={{
@@ -612,7 +640,7 @@ export default function AlgorithmSettings() {
                     </div>
                     <div className="model-info" style={{ flex: 1 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                        <h3 style={{ margin: 0 }}>Matrix SVD + Ridge/Lasso</h3>
+                        <h3 style={{ margin: 0 }}>Matrix SVD + Ridge/Lasso/KNN</h3>
                         <div
                           style={{
                             display: "flex",
@@ -654,7 +682,7 @@ export default function AlgorithmSettings() {
                           })}
                         </div>
                       </div>
-                      <p>A robust linear algebra model that extracts latent factors using Singular Value Decomposition, calibrated with Ridge or Lasso regression for stable generalization.</p>
+                      <p>A robust linear algebra model that extracts latent factors with Singular Value Decomposition, then applies Ridge, Lasso, or KNN-style scoring in the learned latent space.</p>
                     </div>
                   </div>
                 </div>
@@ -724,7 +752,7 @@ export default function AlgorithmSettings() {
                 {chartsMounted && (radarDisplayMode === "all" ? allModelsRadarChartData.length > 0 : radarChartData.length > 0) && (
                   <ResponsiveContainer width="100%" height="100%">
                     <RadarChart
-                      cx="50%"
+                      cx={`${animatedCx}%`}
                       cy="48%"
                       outerRadius={100}
                       margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
@@ -783,7 +811,7 @@ export default function AlgorithmSettings() {
                               />
                             );
                           })}
-                          <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: "12px", paddingTop: "16px" }} />
+                          <Legend layout="vertical" verticalAlign="top" align="left" wrapperStyle={{ fontSize: "12px", left: "10px", top: "10px" }} />
                         </>
                       ) : (
                         <Radar
@@ -817,7 +845,7 @@ export default function AlgorithmSettings() {
         <div className="model-history">
           <h4 style={{ marginBottom: "8px" }}>Training fit vs holdout test</h4>
           <p className="setting-desc" style={{ marginBottom: "20px" }}>
-            Matrix SVD runs one closed-form pipeline (truncated SVD, biases, optional Ridge/Lasso). There is no per-epoch loss curve. Bars compare
+            Matrix SVD runs one closed-form pipeline (truncated SVD, biases, then optional Ridge/Lasso calibration or KNN projection). There is no per-epoch loss curve. Bars compare
             in-sample error on the training split to MAE/RMSE on the held-out test split from metrics.
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: "24px" }}>
