@@ -65,9 +65,9 @@ ax.set_xticks([0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0])
 ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x/1000:.0f}k"))
 ax.set_title("Rating Distribution")
 fig.tight_layout()
-fig.savefig(os.path.join(FIGURES, "rating_dist.pdf"), bbox_inches="tight")
+fig.savefig(os.path.join(FIGURES, "rating_dist.png"), bbox_inches="tight")
 plt.close(fig)
-print("  rating_dist.pdf")
+print("  rating_dist.png")
 
 # ═══════════════════════════════════════════════════════════════════════
 # Figure 2: User activity & item popularity (log-log histograms)
@@ -87,9 +87,9 @@ axes[1].set_ylabel("Number of Movies")
 axes[1].set_title("Item Popularity Distribution")
 axes[1].set_yscale("log")
 fig.tight_layout()
-fig.savefig(os.path.join(FIGURES, "user_item_dist.pdf"), bbox_inches="tight")
+fig.savefig(os.path.join(FIGURES, "user_item_dist.png"), bbox_inches="tight")
 plt.close(fig)
-print("  user_item_dist.pdf")
+print("  user_item_dist.png")
 
 # ═══════════════════════════════════════════════════════════════════════
 # Figure 3: MF-SGD training curves (train vs validation)
@@ -111,9 +111,9 @@ axes[1].set_ylabel("RMSE")
 axes[1].set_title("MF-SGD: RMSE Convergence")
 axes[1].legend()
 fig.tight_layout()
-fig.savefig(os.path.join(FIGURES, "training_mf_sgd.pdf"), bbox_inches="tight")
+fig.savefig(os.path.join(FIGURES, "training_mf_sgd.png"), bbox_inches="tight")
 plt.close(fig)
-print("  training_mf_sgd.pdf")
+print("  training_mf_sgd.png")
 
 # ═══════════════════════════════════════════════════════════════════════
 # Figure 4: Deep Hybrid training curves
@@ -135,9 +135,9 @@ axes[1].set_ylabel("Error")
 axes[1].set_title("Deep Hybrid: Validation Error")
 axes[1].legend()
 fig.tight_layout()
-fig.savefig(os.path.join(FIGURES, "training_deep.pdf"), bbox_inches="tight")
+fig.savefig(os.path.join(FIGURES, "training_deep.png"), bbox_inches="tight")
 plt.close(fig)
-print("  training_deep.pdf")
+print("  training_deep.png")
 
 # ═══════════════════════════════════════════════════════════════════════
 # Figure 5: MF-ALS training curves (with optional validation)
@@ -169,9 +169,9 @@ else:
     ax.set_title("MF-ALS: Training Convergence")
     ax.legend()
     fig.tight_layout()
-fig.savefig(os.path.join(FIGURES, "training_als.pdf"), bbox_inches="tight")
+fig.savefig(os.path.join(FIGURES, "training_als.png"), bbox_inches="tight")
 plt.close(fig)
-print("  training_als.pdf")
+print("  training_als.png")
 
 # ═══════════════════════════════════════════════════════════════════════
 # Figure 6: Model comparison – Rating Prediction (MAE + RMSE)
@@ -202,9 +202,9 @@ for bars in [bars1, bars2]:
         ax.annotate(f"{h:.3f}", xy=(bar.get_x() + bar.get_width()/2, h),
                     xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=6.0)
 fig.tight_layout()
-fig.savefig(os.path.join(FIGURES, "model_comparison_rating.pdf"), bbox_inches="tight")
+fig.savefig(os.path.join(FIGURES, "model_comparison_rating.png"), bbox_inches="tight")
 plt.close(fig)
-print("  model_comparison_rating.pdf")
+print("  model_comparison_rating.png")
 
 # ═══════════════════════════════════════════════════════════════════════
 # Figure 7: Model comparison – Top-N Recommendation
@@ -232,9 +232,9 @@ axes[1].set_xticks(x)
 axes[1].set_xticklabels(model_names, rotation=25, ha="right", fontsize=7)
 axes[1].legend(fontsize=7)
 fig.tight_layout()
-fig.savefig(os.path.join(FIGURES, "model_comparison_topn.pdf"), bbox_inches="tight")
+fig.savefig(os.path.join(FIGURES, "model_comparison_topn.png"), bbox_inches="tight")
 plt.close(fig)
-print("  model_comparison_topn.pdf")
+print("  model_comparison_topn.png")
 
 # ═══════════════════════════════════════════════════════════════════════
 # Figure 8: Genre distribution (top 10)
@@ -257,9 +257,9 @@ ax.invert_yaxis()
 ax.set_xlabel("Number of Movies")
 ax.set_title("Genre Distribution (Top 12)")
 fig.tight_layout()
-fig.savefig(os.path.join(FIGURES, "genre_dist.pdf"), bbox_inches="tight")
+fig.savefig(os.path.join(FIGURES, "genre_dist.png"), bbox_inches="tight")
 plt.close(fig)
-print("  genre_dist.pdf")
+print("  genre_dist.png")
 
 # ═══════════════════════════════════════════════════════════════════════
 # Print dataset statistics for LaTeX tables

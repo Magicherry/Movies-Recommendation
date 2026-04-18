@@ -216,9 +216,9 @@ def plot_metrics_summary() -> None:
         ax.set_title("Rating error vs ranking quality")
         ax.grid(True, linestyle=":", alpha=0.6)
         fig.tight_layout()
-        fig.savefig(FIGURES / "metrics_scatter_mae_ndcg.pdf", bbox_inches="tight")
+        fig.savefig(FIGURES / "metrics_scatter_mae_ndcg.png", bbox_inches="tight")
         plt.close(fig)
-        print(f"  {FIGURES / 'metrics_scatter_mae_ndcg.pdf'}")
+        print(f"  {FIGURES / 'metrics_scatter_mae_ndcg.png'}")
 
     axis_keys = [
         ("MAE", "mae", "lower"),
@@ -266,9 +266,9 @@ def plot_metrics_summary() -> None:
     ax.set_title("Model comparison (normalized per metric)", y=1.08, fontsize=10)
     ax.legend(loc="upper right", bbox_to_anchor=(1.25, 1.05), fontsize=7)
     fig.tight_layout()
-    fig.savefig(FIGURES / "metrics_radar.pdf", bbox_inches="tight")
+    fig.savefig(FIGURES / "metrics_radar.png", bbox_inches="tight")
     plt.close(fig)
-    print(f"  {FIGURES / 'metrics_radar.pdf'}")
+    print(f"  {FIGURES / 'metrics_radar.png'}")
 
 
 def _mf_like_batch_predict(model, user_ids: np.ndarray, item_ids: np.ndarray) -> np.ndarray:
