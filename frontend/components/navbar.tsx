@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import NextLink from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "../context/user-context";
@@ -21,10 +21,12 @@ function useShowBrandAlgorithm(): boolean {
   return show;
 }
 
+type EngineBannerState = "idle" | "loading" | "success" | "error";
+
 export default function AppNavbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isUpdatingRecs, setIsUpdatingRecs] = useState(false);
+  const [engineBannerState, setEngineBannerState] = useState<EngineBannerState>("idle");
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -32,9 +34,38 @@ export default function AppNavbar() {
   const [inputId, setInputId] = useState(userId.toString());
   const [activeEngine, setActiveEngine] = useState<string>("Demo");
   const engineFetchSeqRef = useRef(0);
+  const engineBannerStateRef = useRef<EngineBannerState>("idle");
+  const bannerHideTimeoutRef = useRef<number | null>(null);
   const showBrandAlgorithm = useShowBrandAlgorithm();
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8001/api";
+
+  const updateEngineBannerState = useCallback((nextState: EngineBannerState) => {
+    engineBannerStateRef.current = nextState;
+    setEngineBannerState(nextState);
+  }, []);
+
+  const clearBannerHideTimeout = useCallback(() => {
+    if (bannerHideTimeoutRef.current !== null) {
+      window.clearTimeout(bannerHideTimeoutRef.current);
+      bannerHideTimeoutRef.current = null;
+    }
+  }, []);
+
+  const showTransientBanner = useCallback((nextState: Extract<EngineBannerState, "success" | "error">) => {
+    clearBannerHideTimeout();
+    updateEngineBannerState(nextState);
+    bannerHideTimeoutRef.current = window.setTimeout(() => {
+      updateEngineBannerState("idle");
+      bannerHideTimeoutRef.current = null;
+    }, nextState === "error" ? 2600 : 1600);
+  }, [clearBannerHideTimeout, updateEngineBannerState]);
+
+  useEffect(() => {
+    return () => {
+      clearBannerHideTimeout();
+    };
+  }, [clearBannerHideTimeout]);
 
   useEffect(() => {
     setInputId(userId.toString());
@@ -75,16 +106,31 @@ export default function AppNavbar() {
       } else {
         fetchModel();
       }
-      
-      if (customEvent.detail?.loadStatus === 'loading') {
-        setIsUpdatingRecs(true);
+
+      if (customEvent.detail?.loadStatus === "loading") {
+        clearBannerHideTimeout();
+        updateEngineBannerState("loading");
+        return;
+      }
+
+      if (customEvent.detail?.loadStatus === "error") {
+        showTransientBanner("error");
+        return;
+      }
+
+      if (customEvent.detail?.loadStatus === "ready" && pathname !== "/") {
+        showTransientBanner("success");
       }
     };
     
     window.addEventListener('streamx-engine-changed', handleEngineChange);
     
     // Listen for recommendations finishing update
-    const handleRecsUpdated = () => setIsUpdatingRecs(false);
+    const handleRecsUpdated = () => {
+      if (engineBannerStateRef.current === "loading") {
+        showTransientBanner("success");
+      }
+    };
     window.addEventListener('streamx-recs-updated', handleRecsUpdated);
     
     // Also poll occasionally just in case
@@ -97,7 +143,7 @@ export default function AppNavbar() {
       window.removeEventListener('streamx-recs-updated', handleRecsUpdated);
       clearInterval(interval);
     };
-  }, [API_BASE]);
+  }, [API_BASE, clearBannerHideTimeout, pathname, showTransientBanner, updateEngineBannerState]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -160,6 +206,20 @@ export default function AppNavbar() {
     router.push("/");
   };
 
+  const isEngineBannerVisible = engineBannerState !== "idle";
+  const engineBannerAccentColor =
+    engineBannerState === "error"
+      ? "#ef4444"
+      : engineBannerState === "success"
+        ? "#22c55e"
+        : "var(--brand, #6366f1)";
+  const engineBannerMessage =
+    engineBannerState === "error"
+      ? <>Failed to apply <strong style={{ color: engineBannerAccentColor }}>{activeEngine}</strong>. Please try again.</>
+      : engineBannerState === "success"
+        ? <><strong style={{ color: engineBannerAccentColor }}>{activeEngine}</strong> is ready.</>
+        : <>Applying <strong style={{ color: engineBannerAccentColor }}>{activeEngine}</strong> to your recommendations...</>;
+
   return (
     <>
       {/* Global Notification Banner (Pill Shape) */}
@@ -167,8 +227,8 @@ export default function AppNavbar() {
         position: 'fixed',
         top: '80px',
         left: '50%',
-        transform: isUpdatingRecs ? 'translate(-50%, 0)' : 'translate(-50%, -20px)',
-        opacity: isUpdatingRecs ? 1 : 0,
+        transform: isEngineBannerVisible ? 'translate(-50%, 0)' : 'translate(-50%, -20px)',
+        opacity: isEngineBannerVisible ? 1 : 0,
         transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
         zIndex: 9990,
         background: 'var(--bg-elevated, #1f2937)',
@@ -184,11 +244,23 @@ export default function AppNavbar() {
         fontWeight: 500,
         pointerEvents: 'none'
       }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand, #6366f1)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'streamx-spin 1s linear infinite' }}>
-          <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
-        </svg>
+        {engineBannerState === "loading" ? (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={engineBannerAccentColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'streamx-spin 1s linear infinite' }}>
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+          </svg>
+        ) : engineBannerState === "success" ? (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={engineBannerAccentColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6 9 17l-5-5"></path>
+          </svg>
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={engineBannerAccentColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 8v5"></path>
+            <circle cx="12" cy="16.5" r="0.6" fill={engineBannerAccentColor} stroke="none"></circle>
+          </svg>
+        )}
         <style>{`@keyframes streamx-spin { 100% { transform: rotate(360deg); } }`}</style>
-        <span>Applying <strong style={{ color: 'var(--brand, #6366f1)' }}>{activeEngine}</strong> to your recommendations...</span>
+        <span>{engineBannerMessage}</span>
       </div>
 
       <header className={`top-nav ${isScrolled ? "scrolled" : ""}`}>
