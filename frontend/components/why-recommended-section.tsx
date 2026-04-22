@@ -29,6 +29,56 @@ function getSourceClassName(source: string): string {
   return source.replace(/_/g, "-");
 }
 
+function getSourceIcon(source: string): ReactNode {
+  if (source === "collaborative_similarity") {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M16 18a4 4 0 0 0-8 0"></path>
+        <circle cx="12" cy="11" r="3"></circle>
+        <path d="M19 18a3 3 0 0 0-2.2-2.88"></path>
+        <path d="M7.2 15.12A3 3 0 0 0 5 18"></path>
+      </svg>
+    );
+  }
+
+  if (source === "content_match") {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H20"></path>
+        <path d="M4 12.5A2.5 2.5 0 0 1 6.5 10H20"></path>
+        <path d="M4 17.5A2.5 2.5 0 0 1 6.5 15H20"></path>
+      </svg>
+    );
+  }
+
+  if (source === "behavior_signal") {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 19h16"></path>
+        <path d="M7 16V9"></path>
+        <path d="M12 16V5"></path>
+        <path d="M17 16v-3"></path>
+      </svg>
+    );
+  }
+
+  if (source === "personal_match") {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="m12 3 2.7 5.47 6.03.88-4.36 4.25 1.03 6-5.4-2.84-5.4 2.84 1.03-6L3.27 9.35l6.03-.88Z"></path>
+      </svg>
+    );
+  }
+
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="8"></circle>
+      <path d="M12 8v4"></path>
+      <path d="M12 16h.01"></path>
+    </svg>
+  );
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -246,7 +296,7 @@ export default function WhyRecommendedSection({
       </div>
 
       <div className="why-recommended-grid">
-        {visibleReasons.map((reason, index) => {
+        {visibleReasons.map((reason) => {
           const sourceClassName = getSourceClassName(reason.source);
 
           return (
@@ -261,7 +311,7 @@ export default function WhyRecommendedSection({
                   {getSourceLabel(reason.source)}
                 </span>
                 <span className="why-recommended-card-index" aria-hidden="true">
-                  {String(index + 1).padStart(2, "0")}
+                  {getSourceIcon(reason.source)}
                 </span>
               </div>
               <div className="why-recommended-card-body">

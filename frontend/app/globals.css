@@ -672,11 +672,15 @@ body {
 
 .why-recommended-card-index {
   flex: 0 0 auto;
-  color: rgba(248, 250, 252, 0.34);
-  font-size: 1.55rem;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(248, 250, 252, 0.72);
+}
+
+.why-recommended-card-index svg {
+  width: 28px;
+  height: 28px;
 }
 
 .why-recommended-card-title {
@@ -777,7 +781,7 @@ body {
   }
 
   .why-recommended-card-index {
-    font-size: 1.25rem;
+    transform: scale(0.95);
   }
 
   .why-recommended-card-text {
