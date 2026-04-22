@@ -44,7 +44,7 @@
 
 | User Profile | Actor Detail | Settings |
 | :---: | :---: | :---: |
-| ![User Profile](preview/UserDetail.png) | ![Actor Detail](preview/ActorDetail.png) | ![Settings](preview/Settings.png) |
+| ![User Profile](preview/UserProfile.png) | ![Actor Detail](preview/ActorDetail.png) | ![Engines](preview/Engines.png) |
 
 ## Project Structure
 
