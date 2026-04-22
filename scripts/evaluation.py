@@ -279,7 +279,7 @@ def evaluate_top_n(
                 int(k),
                 float(getattr(model, "min_rating", 0.5)),
                 float(getattr(model, "max_rating", 5.0)),
-                True,
+                False,
             )
 
             return {

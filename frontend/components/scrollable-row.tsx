@@ -12,6 +12,7 @@ type ScrollableRowProps = {
   children: ReactNode;
   listStyle?: React.CSSProperties;
   containerStyle?: React.CSSProperties;
+  resetKey?: string | number;
 };
 
 export default function ScrollableRow({
@@ -24,6 +25,7 @@ export default function ScrollableRow({
   children,
   listStyle,
   containerStyle,
+  resetKey,
 }: ScrollableRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -67,6 +69,13 @@ export default function ScrollableRow({
       window.cancelAnimationFrame(rafId);
     };
   }, [updateScrollState, children]);
+
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    row.scrollTo({ left: 0, behavior: "auto" });
+    updateScrollState();
+  }, [resetKey, updateScrollState]);
 
   const scrollLeft = useCallback(() => {
     if (rowRef.current) {

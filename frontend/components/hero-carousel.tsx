@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Movie, displayMovieName } from "../lib/api";
+import { buildMovieDetailHref } from "../lib/movie-detail-context";
 
 export type HeroCarouselSource = "personalized" | "trending";
 
@@ -12,9 +13,17 @@ type HeroCarouselProps = {
   sourceNote?: string;
   autoAdvanceMs?: number;
   onExploreMore?: () => void;
+  detailUserId?: number;
 };
 
-export default function HeroCarousel({ movies, source, sourceNote, autoAdvanceMs = 30000, onExploreMore }: HeroCarouselProps) {
+export default function HeroCarousel({
+  movies,
+  source,
+  sourceNote,
+  autoAdvanceMs = 30000,
+  onExploreMore,
+  detailUserId,
+}: HeroCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const intervalMs = Math.min(120000, Math.max(5000, autoAdvanceMs));
@@ -45,6 +54,10 @@ export default function HeroCarousel({ movies, source, sourceNote, autoAdvanceMs
 
   const featured = movies[currentIndex];
   const sourceLabel = source === "personalized" ? "Personalized Picks" : "Trending Picks";
+  const detailHref = buildMovieDetailHref(featured.item_id, {
+    context: source === "personalized" ? "recommended" : "neutral",
+    userId: source === "personalized" ? detailUserId : undefined,
+  });
 
   // We can use a deterministic gradient for background based on item_id to make each slide look unique
   const getGradient = (id: number) => {
@@ -123,7 +136,7 @@ export default function HeroCarousel({ movies, source, sourceNote, autoAdvanceMs
           {featured.overview || "Experience the magic of cinema with our personalized recommendations. Powered by advanced Matrix Factorization algorithms to find exactly what you want to watch."}
         </p>
         <div className="hero-actions">
-          <Link href={`/movies/${featured.item_id}`} className="btn-primary">
+          <Link href={detailHref} className="btn-primary">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
             </svg>

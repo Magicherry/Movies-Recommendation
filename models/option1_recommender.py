@@ -340,27 +340,29 @@ class Option1MatrixFactorizationSGD:
 
         u_idx = self.user_to_idx[user_id]
         user_vector = self.user_factors[u_idx]  # (k,)
-        preds = self.global_mean + self.user_bias[u_idx] + self.item_bias + self.item_factors @ user_vector
-        preds = np.clip(preds, self.min_rating, self.max_rating).astype(np.float32)
+        ranking_scores = (
+            self.global_mean + self.user_bias[u_idx] + self.item_bias + self.item_factors @ user_vector
+        ).astype(np.float32)
+        display_scores = np.clip(ranking_scores, self.min_rating, self.max_rating).astype(np.float32)
 
         if exclude_seen:
             seen_item_ids = self.user_seen_items.get(user_id, set())
-            preds = preds.copy()
+            ranking_scores = ranking_scores.copy()
             for item_id in seen_item_ids:
                 i_idx = self.item_to_idx.get(item_id)
                 if i_idx is not None:
-                    preds[i_idx] = -np.inf
+                    ranking_scores[i_idx] = -np.inf
 
         if n <= 0:
             return []
-        n = min(n, len(preds))
-        candidate_idx = np.argpartition(-preds, n - 1)[:n]
-        top_idx = candidate_idx[np.argsort(-preds[candidate_idx])]
+        n = min(n, len(ranking_scores))
+        candidate_idx = np.argpartition(-ranking_scores, n - 1)[:n]
+        top_idx = candidate_idx[np.argsort(-ranking_scores[candidate_idx])]
 
         recs: List[Recommendation] = []
         for idx in top_idx:
-            if np.isfinite(preds[idx]):
-                recs.append(Recommendation(item_id=self.idx_to_item[int(idx)], score=float(preds[idx])))
+            if np.isfinite(ranking_scores[idx]):
+                recs.append(Recommendation(item_id=self.idx_to_item[int(idx)], score=float(display_scores[idx])))
         return recs
 
     def similar_items(self, item_id: int, n: int = 10) -> List[Recommendation]:

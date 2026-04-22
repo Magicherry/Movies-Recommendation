@@ -25,6 +25,8 @@ export default function ClientRecommendations({ initialRecommendations, userId }
       scoreLabel="Match Score"
       emptyMessage="No recommendations generated for this user."
       rowMode={true}
+      detailContext="recommended"
+      detailUserId={userId}
     />
   );
 }

@@ -7,6 +7,7 @@ import MovieCardContextMenu from "./movie-card-context-menu";
 import ScrapeMetadataModal from "./scrape-metadata-modal";
 import ChangeImageModal from "./change-image-modal";
 import { movieRefreshMetadata, displayMovieName } from "../lib/api";
+import { buildMovieDetailHref, type MovieDetailContextMode, type MovieDetailLinkOptions } from "../lib/movie-detail-context";
 
 export type MovieCardItem = {
   item_id: number;
@@ -28,6 +29,10 @@ type MovieCardGridProps = {
   scoreLabel?: string;
   emptyMessage?: string;
   rowMode?: boolean;
+  detailContext?: MovieDetailContextMode;
+  detailUserId?: number;
+  detailSourceItemId?: number;
+  rowResetKey?: string | number;
 };
 
 // Generates a deterministic gradient based on item_id
@@ -52,12 +57,14 @@ const MovieCard = memo(function MovieCard({
   showScore,
   isRefreshing = false,
   isFading = false,
+  href,
 }: {
   movie: MovieCardItem;
   scoreLabel: string;
   showScore: boolean;
   isRefreshing?: boolean;
   isFading?: boolean;
+  href: string;
 }) {
   const metaText = (() => {
     const year = getMovieYear(movie.title);
@@ -65,7 +72,7 @@ const MovieCard = memo(function MovieCard({
     return year && topGenre ? `${year} · ${topGenre}` : year || topGenre;
   })();
   return (
-    <NextLink href={`/movies/${movie.item_id}`} className="poster-card">
+    <NextLink href={href} className="poster-card">
       <div
         className="poster-bg"
         style={{ background: movie.poster_url ? "none" : getGradient(movie.item_id) }}
@@ -138,7 +145,11 @@ export default function MovieCardGrid({
   items,
   scoreLabel = "Match",
   emptyMessage = "No movies to display.",
-  rowMode = false
+  rowMode = false,
+  detailContext = "neutral",
+  detailUserId,
+  detailSourceItemId,
+  rowResetKey,
 }: MovieCardGridProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -217,13 +228,22 @@ export default function MovieCardGrid({
   const handleCollectionClick = useCallback(() => {
     if (typeof window !== "undefined") {
       const itemsForCollection = items.map(withImageOverrides);
-      sessionStorage.setItem("collectionData", JSON.stringify({ title, items: itemsForCollection, scoreLabel }));
+      const detailLinkOptions: MovieDetailLinkOptions =
+        detailContext === "recommended"
+          ? { context: detailContext, userId: detailUserId }
+          : detailContext === "similar"
+            ? { context: detailContext, sourceItemId: detailSourceItemId }
+            : { context: "neutral" };
+      sessionStorage.setItem(
+        "collectionData",
+        JSON.stringify({ title, items: itemsForCollection, scoreLabel, detailLinkOptions })
+      );
       let fromPath = "/";
       if (pathname.startsWith("/movies")) fromPath = "/movies";
       else if (pathname.startsWith("/users")) fromPath = "/users";
       router.push(`/collection?from=${fromPath}`);
     }
-  }, [title, items, scoreLabel, pathname, router, withImageOverrides]);
+  }, [title, items, scoreLabel, pathname, router, withImageOverrides, detailContext, detailUserId, detailSourceItemId]);
 
   if (items.length === 0) {
     return <p style={{ color: "var(--text-subtle)", padding: "0 4vw" }}>{emptyMessage}</p>;
@@ -232,6 +252,11 @@ export default function MovieCardGrid({
   const renderCardWrapper = (movie: MovieCardItem) => {
     const mergedMovie = withImageOverrides(movie);
     const isMenuOpen = contextMenu?.movie.item_id === movie.item_id;
+    const href = buildMovieDetailHref(mergedMovie.item_id, {
+      context: detailContext,
+      userId: detailUserId,
+      sourceItemId: detailSourceItemId,
+    });
     return (
       <div
         key={movie.item_id}
@@ -269,6 +294,7 @@ export default function MovieCardGrid({
           showScore={showCardScores && typeof movie.score === "number"}
           isRefreshing={refreshingItemId === movie.item_id}
           isFading={fadingItemId === movie.item_id}
+          href={href}
         />
       </div>
     );
@@ -279,6 +305,7 @@ export default function MovieCardGrid({
       <>
         <ScrollableRow
           title={title}
+          resetKey={rowResetKey}
           onHeaderClick={handleCollectionClick}
           headerTitle={title ? `View all in ${title}` : undefined}
           headerIcon={

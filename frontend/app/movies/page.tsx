@@ -1,6 +1,7 @@
 import { getMovies } from "../../lib/api";
 import MovieCardGrid from "../../components/movie-card-grid";
 import Link from "next/link";
+import AdaptiveNumberInput from "../../components/adaptive-number-input";
 
 import CustomSelect from "../../components/custom-select";
 import CustomMultiSelect from "../../components/custom-multi-select";
@@ -156,8 +157,7 @@ export default async function MoviesPage({
               <input type="hidden" name="sort" value={currentSort} />
               
               <span className="page-indicator">Page</span>
-              <input 
-                type="number" 
+              <AdaptiveNumberInput
                 name="page" 
                 defaultValue={page} 
                 min={1}
@@ -210,8 +210,7 @@ export default async function MoviesPage({
             <input type="hidden" name="sort" value={currentSort} />
             
             <span className="page-indicator">Page</span>
-            <input 
-              type="number" 
+            <AdaptiveNumberInput
               name="page" 
               defaultValue={page} 
               min={1}

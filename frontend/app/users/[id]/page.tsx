@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { getUserHistory, getRecommendations, displayMovieName } from "../../../lib/api";
+import { getUserAvatarBackground } from "../../../lib/avatar-colors";
 import MovieCardGrid from "../../../components/movie-card-grid";
 import UserProfileActions from "../../../components/user-profile-actions";
+import RefreshOnEngineChange from "../../../components/refresh-on-engine-change";
 import ClientRecommendations from "./client-recommendations";
 
 type UserDetailPageProps = {
@@ -107,12 +109,16 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
 
   return (
     <div className="page-transition" style={{ position: "relative" }}>
+      <RefreshOnEngineChange />
       <div className="content-padding" style={{ paddingTop: "90px", paddingBottom: "80px" }}>
         <div className="user-profile-glass-card">
           
           {/* Section 1: User Identity (Full Width) */}
           <div className="user-profile-header">
-            <div className="user-profile-avatar">
+            <div
+              className="user-profile-avatar"
+              style={{ backgroundColor: getUserAvatarBackground(userId) }}
+            >
               <img 
                 src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${userId}`} 
                 alt={`User ${userId}`}

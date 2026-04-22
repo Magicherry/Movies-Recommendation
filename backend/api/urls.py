@@ -7,6 +7,7 @@ urlpatterns = [
     path("health", views.health, name="health"),
     path("movies", views.movies, name="movies"),
     path("movie/<int:item_id>", views.movie_detail, name="movie-detail"),
+    path("movie/<int:item_id>/why-recommended", views.movie_why_recommended, name="movie-why-recommended"),
     path("users", views.users, name="users"),
     path("user/<int:user_id>/history", views.user_history, name="user-history"),
     path("recommend/<int:user_id>", views.recommend, name="recommend"),

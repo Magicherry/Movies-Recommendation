@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import NextLink from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "../context/user-context";
+import { clampPositiveInteger, sanitizePositiveInteger } from "./adaptive-number-input";
 import { getShortModelLabel } from "../lib/model-engine";
+import { getUserAvatarBackground } from "../lib/avatar-colors";
 
 function useShowBrandAlgorithm(): boolean {
   const [show, setShow] = useState<boolean>(() => {
@@ -136,14 +138,11 @@ export default function AppNavbar() {
 
   const handleUserChange = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = parseInt(inputId, 10);
-    if (!isNaN(parsed) && parsed > 0 && parsed <= maxUserId) {
-      if (parsed !== userId) setUserId(parsed);
-      setIsMenuOpen(false);
-    } else {
-      // Revert to current valid userId if input is invalid
-      setInputId(userId.toString());
-    }
+    const parsed = Number.parseInt(inputId, 10);
+    const nextUserId = clampPositiveInteger(parsed, 1, maxUserId);
+    setInputId(String(nextUserId));
+    if (nextUserId !== userId) setUserId(nextUserId);
+    setIsMenuOpen(false);
   };
 
   const shouldShowBackButton =
@@ -278,20 +277,26 @@ export default function AppNavbar() {
               <form onSubmit={handleUserChange} className="user-id-form">
                 <span className="user-id-label">ID:</span>
                 <input 
-                  type="number" 
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[1-9][0-9]*"
                   value={inputId} 
-                  onChange={e => setInputId(e.target.value)}
+                  onChange={(e) => setInputId(sanitizePositiveInteger(e.target.value))}
+                  onBlur={() => setInputId(String(clampPositiveInteger(Number.parseInt(inputId, 10), 1, maxUserId)))}
                   onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
                   className="user-id-input"
-                  min="1"
-                  max={maxUserId.toString()}
+                  aria-label="User ID"
+                  autoComplete="off"
                   style={{ width: `${Math.max(inputId.length, 1) + 2.5}ch` }}
                 />
                 <button type="submit" style={{ display: 'none' }}>Set</button>
               </form>
               <div className="widget-divider"></div>
               <NextLink href={`/users/${userId}`} title="My Profile" className="nav-avatar-link" onClick={() => setIsMenuOpen(false)}>
-                <div className={`nav-avatar ${isActive(`/users/${userId}`) || (pathname === "/settings" && searchParams.get("tab") === "account") ? "active" : ""}`} style={{ background: 'var(--bg-hover-soft)', overflow: 'hidden' }}>
+                <div
+                  className={`nav-avatar ${isActive(`/users/${userId}`) || (pathname === "/settings" && searchParams.get("tab") === "account") ? "active" : ""}`}
+                  style={{ backgroundColor: getUserAvatarBackground(userId), overflow: "hidden" }}
+                >
                   <img 
                     src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${userId}`} 
                     alt={`User ${userId}`}

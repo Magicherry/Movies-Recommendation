@@ -120,6 +120,10 @@ class Option3SVDHybridRecommender:
         self.feature_scale: np.ndarray | None = None
         self.regression_coef: np.ndarray | None = None
         self.regression_intercept: float = 0.0
+        self._reg_factor_coef: np.ndarray | None = None
+        self._reg_user_bias_coef: float = 1.0
+        self._reg_item_bias_coef: float = 1.0
+        self._reg_intercept: float = 0.0
 
         self.training_history: Dict[str, List[float]] = {}
 
@@ -171,16 +175,19 @@ class Option3SVDHybridRecommender:
         intercept_unnorm = y_mean - float(np.dot(x_mean, w_unnorm))
 
         k = self.user_factors.shape[1]
-        latent_weights = w_unnorm[:k]
-        self.item_factors = (self.item_factors * latent_weights[np.newaxis, :]).astype(np.float32)
-        self.user_bias = (self.user_bias * w_unnorm[k]).astype(np.float32)
-        self.item_bias = (self.item_bias * w_unnorm[k+1]).astype(np.float32)
-        self.global_mean = float(intercept_unnorm)
+        self._reg_factor_coef = w_unnorm[:k].astype(np.float32, copy=False)
+        self._reg_user_bias_coef = float(w_unnorm[k])
+        self._reg_item_bias_coef = float(w_unnorm[k + 1])
+        self._reg_intercept = float(intercept_unnorm)
 
-        self.feature_mean = None
-        self.feature_scale = None
-        self.regression_coef = None
-        self.regression_intercept = 0.0
+        self.feature_mean = x_mean.astype(np.float32, copy=False)
+        self.feature_scale = x_scale.astype(np.float32, copy=False)
+        self.regression_coef = w_unnorm.astype(np.float32, copy=False)
+        self.regression_intercept = float(intercept_unnorm)
+
+    def _has_regression_calibration(self) -> bool:
+        reg_coef = getattr(self, "_reg_factor_coef", None)
+        return isinstance(reg_coef, np.ndarray) and reg_coef.ndim == 1 and self.regressor in {"ridge", "lasso"}
 
     def _predict_known_pairs(self, user_idx: np.ndarray, item_idx: np.ndarray) -> np.ndarray:
         if (
@@ -191,8 +198,20 @@ class Option3SVDHybridRecommender:
         ):
             raise RuntimeError("Model is not fitted.")
 
-        dot_scores = np.sum(self.user_factors[user_idx] * self.item_factors[item_idx], axis=1)
-        baseline = self.global_mean + self.user_bias[user_idx] + self.item_bias[item_idx] + dot_scores
+        if self._has_regression_calibration():
+            reg_coef = self._reg_factor_coef
+            assert reg_coef is not None
+            weighted_user_factors = self.user_factors[user_idx] * reg_coef[np.newaxis, :]
+            dot_scores = np.sum(weighted_user_factors * self.item_factors[item_idx], axis=1)
+            baseline = (
+                self._reg_intercept
+                + self._reg_user_bias_coef * self.user_bias[user_idx]
+                + self._reg_item_bias_coef * self.item_bias[item_idx]
+                + dot_scores
+            )
+        else:
+            dot_scores = np.sum(self.user_factors[user_idx] * self.item_factors[item_idx], axis=1)
+            baseline = self.global_mean + self.user_bias[user_idx] + self.item_bias[item_idx] + dot_scores
 
         return baseline.astype(np.float32)
 
@@ -295,6 +314,10 @@ class Option3SVDHybridRecommender:
             self.feature_scale = None
             self.regression_coef = None
             self.regression_intercept = 0.0
+            self._reg_factor_coef = None
+            self._reg_user_bias_coef = 1.0
+            self._reg_item_bias_coef = 1.0
+            self._reg_intercept = float(self.global_mean)
 
         item_norms = np.linalg.norm(self.item_factors, axis=1, keepdims=True)
         self.normalized_item_factors = np.divide(
@@ -344,10 +367,16 @@ class Option3SVDHybridRecommender:
         item_known = i_idx >= 0
         both_known = user_known & item_known
 
-        if np.any(user_known):
-            preds[user_known] += self.user_bias[u_idx[user_known]]
-        if np.any(item_known):
-            preds[item_known] += self.item_bias[i_idx[item_known]]
+        if self._has_regression_calibration():
+            if np.any(user_known):
+                preds[user_known] = self._reg_intercept + self._reg_user_bias_coef * self.user_bias[u_idx[user_known]]
+            if np.any(item_known):
+                preds[item_known] += self._reg_item_bias_coef * self.item_bias[i_idx[item_known]]
+        else:
+            if np.any(user_known):
+                preds[user_known] += self.user_bias[u_idx[user_known]]
+            if np.any(item_known):
+                preds[item_known] += self.item_bias[i_idx[item_known]]
         if np.any(both_known):
             known_u = u_idx[both_known]
             known_i = i_idx[both_known]
@@ -374,11 +403,18 @@ class Option3SVDHybridRecommender:
             pred = float(self._predict_known_pairs(np.array([u_idx]), np.array([i_idx]))[0])
             return float(np.clip(pred, self.min_rating, self.max_rating))
 
-        pred = self.global_mean
-        if user_known:
-            pred += float(self.user_bias[self.user_to_idx[user_id]])
-        if item_known:
-            pred += float(self.item_bias[self.item_to_idx[item_id]])
+        if self._has_regression_calibration():
+            pred = float(self._reg_intercept)
+            if user_known:
+                pred += float(self._reg_user_bias_coef * self.user_bias[self.user_to_idx[user_id]])
+            if item_known:
+                pred += float(self._reg_item_bias_coef * self.item_bias[self.item_to_idx[item_id]])
+        else:
+            pred = self.global_mean
+            if user_known:
+                pred += float(self.user_bias[self.user_to_idx[user_id]])
+            if item_known:
+                pred += float(self.item_bias[self.item_to_idx[item_id]])
         return float(np.clip(pred, self.min_rating, self.max_rating))
 
     def recommend_top_n(self, user_id: int, n: int = 10, exclude_seen: bool = True, seen_items: set[int] | None = None) -> List[Recommendation]:
@@ -400,37 +436,46 @@ class Option3SVDHybridRecommender:
             return [Recommendation(item_id=self.idx_to_item[i], score=float(item_scores[i])) for i in order]
 
         u_idx = self.user_to_idx[user_id]
-        n_items = len(self.item_factors)
-
         user_vector = self.user_factors[u_idx]
-        preds = (
-            self.global_mean
-            + self.user_bias[u_idx]
-            + self.item_bias
-            + (self.item_factors @ user_vector)
-        ).astype(np.float32)
+        if self._has_regression_calibration():
+            reg_coef = self._reg_factor_coef
+            assert reg_coef is not None
+            weighted_user_vector = user_vector * reg_coef
+            ranking_scores = (
+                self._reg_intercept
+                + self._reg_user_bias_coef * self.user_bias[u_idx]
+                + self._reg_item_bias_coef * self.item_bias
+                + (self.item_factors @ weighted_user_vector)
+            ).astype(np.float32)
+        else:
+            ranking_scores = (
+                self.global_mean
+                + self.user_bias[u_idx]
+                + self.item_bias
+                + (self.item_factors @ user_vector)
+            ).astype(np.float32)
 
-        preds = np.clip(preds, self.min_rating, self.max_rating)
+        display_scores = np.clip(ranking_scores, self.min_rating, self.max_rating).astype(np.float32)
 
         if exclude_seen:
-            preds = preds.copy()
+            ranking_scores = ranking_scores.copy()
             if seen_items is None:
                 seen_items = self.user_seen_items.get(user_id, set())
             for seen_item in seen_items:
                 seen_idx = self.item_to_idx.get(seen_item)
                 if seen_idx is not None:
-                    preds[seen_idx] = -np.inf
+                    ranking_scores[seen_idx] = -np.inf
 
         if n <= 0:
             return []
-        top_count = min(n, len(preds))
-        candidate_idx = np.argpartition(-preds, top_count - 1)[:top_count]
-        top_idx = candidate_idx[np.argsort(-preds[candidate_idx])]
+        top_count = min(n, len(ranking_scores))
+        candidate_idx = np.argpartition(-ranking_scores, top_count - 1)[:top_count]
+        top_idx = candidate_idx[np.argsort(-ranking_scores[candidate_idx])]
 
         recs: List[Recommendation] = []
         for idx in top_idx:
-            if np.isfinite(preds[idx]):
-                recs.append(Recommendation(item_id=self.idx_to_item[int(idx)], score=float(preds[idx])))
+            if np.isfinite(ranking_scores[idx]):
+                recs.append(Recommendation(item_id=self.idx_to_item[int(idx)], score=float(display_scores[idx])))
         return recs
 
     def similar_items(self, item_id: int, n: int = 10) -> List[Recommendation]:

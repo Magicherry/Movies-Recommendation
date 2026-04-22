@@ -210,7 +210,15 @@ export default function HomePage() {
   const handleExploreMore = () => {
     if (typeof window !== "undefined") {
       if (recommendations.length > 0) {
-        sessionStorage.setItem("collectionData", JSON.stringify({ title: "Top Picks for You", items: recommendations, scoreLabel: "Match" }));
+        sessionStorage.setItem(
+          "collectionData",
+          JSON.stringify({
+            title: "Top Picks for You",
+            items: recommendations,
+            scoreLabel: "Match",
+            detailLinkOptions: { context: "recommended", userId },
+          })
+        );
       } else {
         sessionStorage.setItem("collectionData", JSON.stringify({ title: "Trending Now", items: trending, scoreLabel: undefined }));
       }
@@ -226,6 +234,7 @@ export default function HomePage() {
         sourceNote={carouselSourceNote} 
         autoAdvanceMs={carouselIntervalMs} 
         onExploreMore={handleExploreMore}
+        detailUserId={carouselSource === "personalized" ? userId : undefined}
       />
 
       <section id="browse" className="content-padding" style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
@@ -236,7 +245,10 @@ export default function HomePage() {
               title="Top Picks for You" 
               items={recommendations} 
               scoreLabel="Match" 
-              rowMode={true} 
+              rowMode={true}
+              rowResetKey={userId}
+              detailContext="recommended"
+              detailUserId={userId}
             />
           </div>
         )}

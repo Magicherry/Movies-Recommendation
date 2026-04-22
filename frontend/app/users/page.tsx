@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getUsers } from "../../lib/api";
+import { getUserAvatarBackground } from "../../lib/avatar-colors";
+import AdaptiveNumberInput from "../../components/adaptive-number-input";
 
 type UsersPageProps = {
   searchParams: { page?: string };
@@ -60,8 +62,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
               style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}
             >
               <span className="page-indicator">Page</span>
-              <input 
-                type="number" 
+              <AdaptiveNumberInput
                 name="page" 
                 defaultValue={currentPage} 
                 min={1}
@@ -93,7 +94,10 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       <div className="user-grid">
         {data.items.map((user) => (
           <Link key={user.user_id} href={`/users/${user.user_id}`} className="user-card">
-            <div className="user-avatar">
+            <div
+              className="user-avatar"
+              style={{ backgroundColor: getUserAvatarBackground(user.user_id) }}
+            >
               <img 
                 src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${user.user_id}`} 
                 alt={`User ${user.user_id}`}
@@ -133,8 +137,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
             style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "nowrap" }}
           >
             <span className="page-indicator">Page</span>
-            <input 
-              type="number" 
+            <AdaptiveNumberInput
               name="page" 
               defaultValue={currentPage} 
               min={1}

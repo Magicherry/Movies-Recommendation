@@ -209,6 +209,24 @@ def _error(message: str, status: int = 400) -> JsonResponse:
     return JsonResponse({"error": message}, status=status)
 
 
+def _resolve_reason_payload(request: HttpRequest, item_id: int, similar: list[dict] | None = None) -> list[dict]:
+    mode = (request.GET.get("mode") or "recommended").strip().lower()
+    if mode == "neutral":
+        return []
+    if mode == "similar":
+        reference_item_id = _int_param(request, "reference_item_id", 0)
+        if reference_item_id > 0:
+            return service.get_movie_similarity_reasons(item_id=item_id, reference_item_id=reference_item_id)
+        return []
+
+    user_id = _int_param(request, "user_id", 0)
+    return service.get_movie_recommendation_reasons(
+        item_id=item_id,
+        user_id=user_id if user_id > 0 else None,
+        similar_candidates=similar,
+    )
+
+
 @require_GET
 def health(_: HttpRequest) -> JsonResponse:
     return JsonResponse({"status": "ok"})
@@ -246,9 +264,22 @@ def movie_detail(request: HttpRequest, item_id: int) -> JsonResponse:
             return _error(f"Movie {item_id} not found", status=404)
         n = max(1, min(_int_param(request, "n", 100), 200))
         similar = service.similar_for_item(item_id=item_id, n=n)
+        why_recommended = _resolve_reason_payload(request, item_id=item_id, similar=similar)
     except FileNotFoundError as exc:
         return _error(str(exc), status=500)
-    return JsonResponse({"movie": movie, "similar": similar})
+    return JsonResponse({"movie": movie, "similar": similar, "why_recommended": why_recommended})
+
+
+@require_GET
+def movie_why_recommended(request: HttpRequest, item_id: int) -> JsonResponse:
+    try:
+        movie = service.get_movie(item_id)
+        if movie is None:
+            return _error(f"Movie {item_id} not found", status=404)
+        reasons = _resolve_reason_payload(request, item_id=item_id)
+    except FileNotFoundError as exc:
+        return _error(str(exc), status=500)
+    return JsonResponse({"item_id": item_id, "why_recommended": reasons})
 
 
 @require_GET

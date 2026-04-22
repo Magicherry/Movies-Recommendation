@@ -201,16 +201,16 @@ python -m scripts.train_and_evaluate `
 
 Held-out test set on **ml-latest** with the cached split (`seed` 42, `test_ratio` 0.2, `split_hash` `953d2ab2ad4a80f3396cb9261a27f38219f5532614704e44539fad6535be63aa`). Top-N metrics use **K = 10** and `--topn-relevance all_test` (same as below). Values are read from `models/artifacts/<model>/metrics.json` after the last full training run.
 
-Active API model (see `models/artifacts/active_model.txt`): **option3_knn**.
+Active API model (see `models/artifacts/active_model.txt`): **option2**.
 
 | Model | MAE | RMSE | P@10 | R@10 | F1 | NDCG@10 | Best epoch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Option 1 (MF-SGD) | 0.6020 | 0.8061 | 0.0367 | 0.0294 | 0.0218 | 0.0509 | 3 |
-| Option 2 (Deep Hybrid NCF) | 0.6005 | 0.8148 | 0.0533 | 0.0480 | 0.0331 | 0.0722 | 48 |
-| Option 3 Ridge | 0.6286 | 0.8312 | 0.0520 | 0.0240 | 0.0212 | 0.0671 | 1 |
-| Option 3 Lasso | 0.6714 | 0.8747 | 0.0152 | 0.0099 | 0.0063 | 0.0177 | 1 |
-| Option 3 KNN | 0.6810 | 0.9058 | 0.0159 | 0.0200 | 0.0127 | 0.0230 | 1 |
-| Option 4 (MF-ALS) | 0.7303 | 0.9786 | 0.0072 | 0.0038 | 0.0034 | 0.0091 | 6 |
+| Option 1 (MF-SGD) | 0.6020 | 0.8061 | 0.0349 | 0.0284 | 0.0208 | 0.0480 | 3 |
+| Option 2 (Deep Hybrid NCF) | 0.5994 | 0.8130 | 0.0545 | 0.0491 | 0.0339 | 0.0761 | 50 |
+| Option 3 Ridge | 0.6286 | 0.8312 | 0.0516 | 0.0237 | 0.0209 | 0.0662 | 1 |
+| Option 3 Lasso | 0.6714 | 0.8747 | 0.0152 | 0.0099 | 0.0063 | 0.0176 | 1 |
+| Option 3 KNN | 0.6810 | 0.9058 | 0.0141 | 0.0190 | 0.0115 | 0.0200 | 1 |
+| Option 4 (MF-ALS) | 0.7303 | 0.9786 | 0.0003 | 0.0012 | 0.0003 | 0.0008 | 6 |
 
 ## Evaluation Mode
 

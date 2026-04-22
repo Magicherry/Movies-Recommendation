@@ -17,6 +17,32 @@ export type Recommendation = Movie & {
   is_fallback_score?: boolean;
 };
 
+export type RecommendationReasonMention = {
+  item_id: number;
+  title: string;
+};
+
+export type RecommendationReason = {
+  id: string;
+  source: "collaborative_similarity" | "content_match" | "behavior_signal" | "personal_match" | string;
+  title: string;
+  short_explanation: string;
+  score?: number;
+  metadata?: Record<string, unknown>;
+};
+
+export type MovieDetailResponse = {
+  movie: Movie;
+  similar: Recommendation[];
+  why_recommended: RecommendationReason[];
+};
+
+export type MovieReasonRequestOptions = {
+  userId?: number;
+  mode?: "recommended" | "similar" | "neutral";
+  referenceItemId?: number;
+};
+
 const DEFAULT_API_BASE = "http://127.0.0.1:8001/api";
 const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || DEFAULT_API_BASE;
 
@@ -122,9 +148,33 @@ export async function getMovies(
   return { items, total: data.total ?? 0 };
 }
 
-export async function getMovieDetail(itemId: number, similarLimit: number = 100): Promise<{ movie: Movie; similar: Recommendation[] }> {
+export async function getMovieDetail(
+  itemId: number,
+  similarLimit: number = 100,
+  options: MovieReasonRequestOptions = {}
+): Promise<MovieDetailResponse> {
   const safeLimit = Number.isFinite(similarLimit) ? Math.max(1, Math.min(200, Math.floor(similarLimit))) : 100;
-  const res = await devFetch(`${API_BASE}/movie/${itemId}?n=${safeLimit}`, { cache: "no-store" }, `/movie/${itemId}`, { n: safeLimit });
+  const params = new URLSearchParams({ n: safeLimit.toString() });
+  if (options.mode === "neutral") {
+    params.set("mode", "neutral");
+  } else if (options.mode === "similar" && Number.isInteger(options.referenceItemId) && Number(options.referenceItemId) > 0) {
+    params.set("mode", "similar");
+    params.set("reference_item_id", String(options.referenceItemId));
+  } else if (Number.isInteger(options.userId) && Number(options.userId) > 0) {
+    params.set("user_id", String(options.userId));
+  }
+  const res = await devFetch(
+    `${API_BASE}/movie/${itemId}?${params.toString()}`,
+    { cache: "no-store" },
+    `/movie/${itemId}`,
+    options.mode === "neutral"
+      ? { n: safeLimit, mode: "neutral" }
+      : options.mode === "similar" && options.referenceItemId
+      ? { n: safeLimit, mode: "similar", reference_item_id: options.referenceItemId }
+      : options.userId
+        ? { n: safeLimit, user_id: options.userId }
+        : { n: safeLimit }
+  );
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
     const message =
@@ -147,7 +197,49 @@ export async function getMovieDetail(itemId: number, similarLimit: number = 100)
       scraped_title: m.scraped_title ? formatTitle(m.scraped_title) : "",
     }));
   }
+  data.why_recommended = Array.isArray(data.why_recommended) ? data.why_recommended : [];
   return data;
+}
+
+export async function getMovieRecommendationReasons(
+  itemId: number,
+  options: MovieReasonRequestOptions = {}
+): Promise<RecommendationReason[]> {
+  const params = new URLSearchParams();
+  if (options.mode === "neutral") {
+    params.set("mode", "neutral");
+  } else if (options.mode === "similar" && Number.isInteger(options.referenceItemId) && Number(options.referenceItemId) > 0) {
+    params.set("mode", "similar");
+    params.set("reference_item_id", String(options.referenceItemId));
+  } else if (Number.isInteger(options.userId) && Number(options.userId) > 0) {
+    params.set("user_id", String(options.userId));
+  }
+
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const res = await devFetch(
+    `${API_BASE}/movie/${itemId}/why-recommended${suffix}`,
+    { cache: "no-store" },
+    `/movie/${itemId}/why-recommended`,
+    options.mode === "neutral"
+      ? { mode: "neutral" }
+      : options.mode === "similar" && options.referenceItemId
+      ? { mode: "similar", reference_item_id: options.referenceItemId }
+      : options.userId
+        ? { user_id: options.userId }
+        : undefined
+  );
+
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    const message =
+      (errBody as { error?: string; message?: string }).error ||
+      (errBody as { error?: string; message?: string }).message ||
+      "Failed to fetch recommendation reasons.";
+    throw new Error(message);
+  }
+
+  const data = await res.json();
+  return Array.isArray(data.why_recommended) ? data.why_recommended : [];
 }
 
 export async function getUsers(limit = 50, offset = 0): Promise<{ items: { user_id: number; history_count: number }[]; total: number }> {

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import MovieCardGrid, { MovieCardItem } from "./movie-card-grid";
+import type { MovieDetailContextMode } from "../lib/movie-detail-context";
 
 const DEFAULT_COUNT = 15;
 const MIN_COL = 5;
@@ -35,6 +36,9 @@ type CollectionLimitGridProps = {
   scoreLabel?: string;
   emptyMessage?: string;
   rowMode?: boolean;
+  detailContext?: MovieDetailContextMode;
+  detailUserId?: number;
+  detailSourceItemId?: number;
 };
 
 /** Renders a movie grid with items limited by the user's setting for this collection. */
@@ -60,6 +64,9 @@ export default function CollectionLimitGrid(props: CollectionLimitGridProps) {
       scoreLabel={gridProps.scoreLabel}
       emptyMessage={gridProps.emptyMessage}
       rowMode={gridProps.rowMode}
+      detailContext={gridProps.detailContext}
+      detailUserId={gridProps.detailUserId}
+      detailSourceItemId={gridProps.detailSourceItemId}
     />
   );
 }

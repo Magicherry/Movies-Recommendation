@@ -3,10 +3,16 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import MovieCardGrid, { MovieCardItem } from "../../components/movie-card-grid";
+import type { MovieDetailLinkOptions } from "../../lib/movie-detail-context";
 
 export default function CollectionPage() {
   const router = useRouter();
-  const [data, setData] = useState<{ title: string; items: MovieCardItem[]; scoreLabel?: string } | null>(null);
+  const [data, setData] = useState<{
+    title: string;
+    items: MovieCardItem[];
+    scoreLabel?: string;
+    detailLinkOptions?: MovieDetailLinkOptions;
+  } | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -32,7 +38,14 @@ export default function CollectionPage() {
       <div style={{ marginBottom: '30px' }}>
         <h1 style={{ fontSize: '2rem', margin: 0, fontWeight: 700 }}>{data.title}</h1>
       </div>
-      <MovieCardGrid items={data.items} scoreLabel={data.scoreLabel} rowMode={false} />
+      <MovieCardGrid
+        items={data.items}
+        scoreLabel={data.scoreLabel}
+        rowMode={false}
+        detailContext={data.detailLinkOptions?.context}
+        detailUserId={data.detailLinkOptions?.userId}
+        detailSourceItemId={data.detailLinkOptions?.sourceItemId}
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import pickle
 import json
+import re
 from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List
@@ -30,11 +31,19 @@ class RecommenderService:
         self.movies: pd.DataFrame | None = None
         self.movie_lookup: Dict[int, Dict[str, Any]] = {}
         self.movie_behavior_stats: pd.DataFrame = pd.DataFrame()
+        self._movie_behavior_index: pd.DataFrame = pd.DataFrame()
+        self.behavior_sorted_item_ids: List[int] = []
         self.users: List[int] = []
         self.user_history: Dict[int, List[Dict[str, Any]]] = {}
+        self.user_ratings_by_user: Dict[int, List[tuple[int, float]]] = {}
         self.reference_ratings_path: Path | None = None
+        self.ratings_df: pd.DataFrame | None = None
         self._model_train_user_ids: set[int] = set()
         self._model_train_item_ids: set[int] = set()
+        self._active_reference_source_key: str | None = None
+        self._ratings_cache_by_source_key: Dict[str, Dict[str, Any]] = {}
+        self._movies_cache_by_source_key: Dict[str, Dict[str, Any]] = {}
+        self._runtime_cache_artifact_by_model: Dict[str, Dict[str, Any] | None] = {}
 
     def _select_default_active_model(self) -> str:
         available = getattr(self, "_available_model_names", set())
@@ -118,7 +127,157 @@ class RecommenderService:
 
         raise ValueError(f"Unsupported ratings schema in {path}")
 
+    @staticmethod
+    def _build_source_fingerprint(path: Path) -> Dict[str, Any]:
+        resolved = path.resolve()
+        stat = resolved.stat()
+        return {
+            "path": str(resolved),
+            "size_bytes": int(stat.st_size),
+            "mtime_ns": int(stat.st_mtime_ns),
+        }
+
+    @staticmethod
+    def _fingerprint_to_key(fingerprint: Dict[str, Any]) -> str:
+        return "|".join(
+            [
+                str(fingerprint.get("path", "")),
+                str(fingerprint.get("size_bytes", "")),
+                str(fingerprint.get("mtime_ns", "")),
+            ]
+        )
+
+    def _source_key_for_path(self, path: Path) -> str | None:
+        try:
+            return self._fingerprint_to_key(self._build_source_fingerprint(path))
+        except OSError:
+            return None
+
+    def _resolve_runtime_cache_path(self, model_name: str) -> Path:
+        return self.artifacts_dir / model_name / "runtime_cache.pkl"
+
+    def _resolve_shared_runtime_cache_path(self) -> Path:
+        return self.artifacts_dir / "runtime_cache_dataset.pkl"
+
+    def _load_shared_runtime_cache_artifact(self) -> Dict[str, Any] | None:
+        cache_key = "__shared_dataset__"
+        if cache_key in self._runtime_cache_artifact_by_model:
+            return self._runtime_cache_artifact_by_model[cache_key]
+
+        cache_path = self._resolve_shared_runtime_cache_path()
+        payload: Dict[str, Any] | None = None
+        if cache_path.exists():
+            try:
+                with open(cache_path, "rb") as f:
+                    loaded = pickle.load(f)
+                if isinstance(loaded, dict):
+                    payload = loaded
+            except (OSError, pickle.PickleError, ValueError):
+                payload = None
+
+        self._runtime_cache_artifact_by_model[cache_key] = payload
+        return payload
+
+    def _load_runtime_cache_artifact(self, model_name: str) -> Dict[str, Any] | None:
+        if model_name in self._runtime_cache_artifact_by_model:
+            return self._runtime_cache_artifact_by_model[model_name]
+
+        cache_path = self._resolve_runtime_cache_path(model_name)
+        payload: Dict[str, Any] | None = None
+        if cache_path.exists():
+            try:
+                with open(cache_path, "rb") as f:
+                    loaded = pickle.load(f)
+                if isinstance(loaded, dict):
+                    payload = loaded
+            except (OSError, pickle.PickleError, ValueError):
+                payload = None
+
+        self._runtime_cache_artifact_by_model[model_name] = payload
+        return payload
+
+    @staticmethod
+    def _normalize_behavior_stats_frame(frame: pd.DataFrame) -> pd.DataFrame:
+        if frame.empty:
+            return pd.DataFrame(columns=["item_id", "watched_count", "high_rating_count", "avg_rating", "behavior_score"])
+
+        normalized = frame.copy()
+        normalized["item_id"] = normalized["item_id"].astype(int)
+        normalized["watched_count"] = normalized["watched_count"].astype(int)
+        normalized["high_rating_count"] = normalized["high_rating_count"].astype(int)
+        normalized["avg_rating"] = normalized["avg_rating"].astype(float)
+        normalized["behavior_score"] = normalized["behavior_score"].astype(float)
+        return normalized
+
+    def _set_movie_behavior_stats(self, frame: pd.DataFrame, behavior_sorted_item_ids: List[int] | None = None) -> None:
+        normalized = self._normalize_behavior_stats_frame(frame)
+        self.movie_behavior_stats = normalized
+        self._movie_behavior_index = (
+            normalized.set_index("item_id")[["watched_count", "high_rating_count", "avg_rating", "behavior_score"]]
+            if not normalized.empty
+            else pd.DataFrame()
+        )
+        if behavior_sorted_item_ids is not None:
+            self.behavior_sorted_item_ids = [int(item_id) for item_id in behavior_sorted_item_ids]
+            return
+        if normalized.empty:
+            self.behavior_sorted_item_ids = []
+            return
+        self.behavior_sorted_item_ids = (
+            normalized.sort_values(
+                ["behavior_score", "avg_rating", "watched_count", "item_id"],
+                ascending=[False, False, False, True],
+                kind="mergesort",
+            )["item_id"].astype(int).tolist()
+        )
+
+    @staticmethod
+    def _normalize_movie_lookup_row(row: Any) -> Dict[str, Any]:
+        raw_tmdb_id = getattr(row, "tmdb_id", "")
+        if pd.isna(raw_tmdb_id):
+            norm_tmdb_id = ""
+        elif isinstance(raw_tmdb_id, float) and raw_tmdb_id.is_integer():
+            norm_tmdb_id = str(int(raw_tmdb_id))
+        else:
+            norm_tmdb_id = str(raw_tmdb_id).strip()
+
+        cast_str = getattr(row, "cast", "")
+        directors_str = getattr(row, "directors", "")
+
+        try:
+            cast_data = json.loads(cast_str) if cast_str else []
+        except json.JSONDecodeError:
+            cast_data = []
+
+        try:
+            directors_data = json.loads(directors_str) if directors_str else []
+        except json.JSONDecodeError:
+            directors_data = []
+
+        return {
+            "item_id": int(row.item_id),
+            "title": row.title,
+            "scraped_title": getattr(row, "scraped_title", ""),
+            "genres": row.genres,
+            "poster_url": getattr(row, "poster_url", ""),
+            "backdrop_url": getattr(row, "backdrop_url", ""),
+            "overview": getattr(row, "overview", ""),
+            "tmdb_id": norm_tmdb_id,
+            "cast": cast_data,
+            "directors": directors_data,
+        }
+
     def _load_movies_from_path(self, source_path: Path) -> None:
+        source_key = self._source_key_for_path(source_path)
+        if source_key and source_key in self._movies_cache_by_source_key:
+            cached = self._movies_cache_by_source_key[source_key]
+            self.movies = cached["movies"]
+            self.movie_lookup = cached["movie_lookup"]
+            self._movies_loaded_path = source_path
+            self._movies_mtime_ns = int(cached["mtime_ns"])
+            self._sync_user_history_metadata()
+            return
+
         frame = pd.read_csv(source_path)
         if "item_id" not in frame.columns and "movieId" in frame.columns:
             frame = frame.rename(columns={"movieId": "item_id"})
@@ -139,45 +298,20 @@ class RecommenderService:
         self.movies = frame
         self.movie_lookup = {}
         for row in frame.itertuples(index=False):
-            raw_tmdb_id = getattr(row, "tmdb_id", "")
-            if pd.isna(raw_tmdb_id):
-                norm_tmdb_id = ""
-            elif isinstance(raw_tmdb_id, float) and raw_tmdb_id.is_integer():
-                norm_tmdb_id = str(int(raw_tmdb_id))
-            else:
-                norm_tmdb_id = str(raw_tmdb_id).strip()
-            
-            cast_str = getattr(row, "cast", "")
-            directors_str = getattr(row, "directors", "")
-            
-            try:
-                cast_data = json.loads(cast_str) if cast_str else []
-            except json.JSONDecodeError:
-                cast_data = []
-                
-            try:
-                directors_data = json.loads(directors_str) if directors_str else []
-            except json.JSONDecodeError:
-                directors_data = []
-
-            self.movie_lookup[int(row.item_id)] = {
-                "item_id": int(row.item_id),
-                "title": row.title,
-                "scraped_title": getattr(row, "scraped_title", ""),
-                "genres": row.genres,
-                "poster_url": getattr(row, "poster_url", ""),
-                "backdrop_url": getattr(row, "backdrop_url", ""),
-                "overview": getattr(row, "overview", ""),
-                "tmdb_id": norm_tmdb_id,
-                "cast": cast_data,
-                "directors": directors_data,
-            }
+            self.movie_lookup[int(row.item_id)] = self._normalize_movie_lookup_row(row)
 
         self._movies_loaded_path = source_path
         try:
             self._movies_mtime_ns = source_path.stat().st_mtime_ns
         except OSError:
             self._movies_mtime_ns = None
+
+        if source_key and self._movies_mtime_ns is not None:
+            self._movies_cache_by_source_key[source_key] = {
+                "movies": self.movies,
+                "movie_lookup": self.movie_lookup,
+                "mtime_ns": int(self._movies_mtime_ns),
+            }
 
         self._sync_user_history_metadata()
 
@@ -275,6 +409,199 @@ class RecommenderService:
             "enriched_write_path": preferred_enriched_write_path,
         }
 
+    @staticmethod
+    def _build_user_ratings_by_user(ratings: pd.DataFrame) -> Dict[int, List[tuple[int, float]]]:
+        ordered = ratings.sort_values(["user_id", "rating", "item_id"], ascending=[True, False, True], kind="mergesort")
+        user_ratings: Dict[int, List[tuple[int, float]]] = {}
+        for row in ordered.itertuples(index=False):
+            user_ratings.setdefault(int(row.user_id), []).append((int(row.item_id), float(row.rating)))
+        return user_ratings
+
+    def _build_ratings_cache_entry(
+        self,
+        ratings: pd.DataFrame,
+        reference_path: Path,
+        *,
+        include_ratings_df: bool,
+    ) -> Dict[str, Any]:
+        normalized = ratings[["user_id", "item_id", "rating"]].copy()
+        normalized["user_id"] = normalized["user_id"].astype(int)
+        normalized["item_id"] = normalized["item_id"].astype(int)
+        normalized["rating"] = normalized["rating"].astype(float)
+
+        behavior_stats = normalized.groupby("item_id").agg(
+            watched_count=("user_id", "nunique"),
+            high_rating_count=("rating", lambda s: int((s >= 4.0).sum())),
+            avg_rating=("rating", "mean"),
+        )
+        behavior_stats["behavior_score"] = (
+            behavior_stats["high_rating_count"] * 2.0
+            + behavior_stats["watched_count"]
+            + behavior_stats["avg_rating"] / 5.0
+        )
+        behavior_stats = behavior_stats.reset_index()
+        behavior_stats = self._normalize_behavior_stats_frame(behavior_stats)
+        behavior_sorted_item_ids = (
+            behavior_stats.sort_values(
+                ["behavior_score", "avg_rating", "watched_count", "item_id"],
+                ascending=[False, False, False, True],
+                kind="mergesort",
+            )["item_id"].astype(int).tolist()
+            if not behavior_stats.empty
+            else []
+        )
+
+        rating_dist: Dict[float, int] = {}
+        for rating, count in normalized["rating"].value_counts().items():
+            rounded = round(float(rating) * 2) / 2
+            rating_dist[rounded] = rating_dist.get(rounded, 0) + int(count)
+
+        source_key = self._source_key_for_path(reference_path)
+        if source_key is None:
+            raise FileNotFoundError(f"Cannot fingerprint ratings source: {reference_path}")
+
+        return {
+            "source_key": source_key,
+            "users": sorted(normalized["user_id"].astype(int).unique().tolist()),
+            "user_rating_counts": {int(uid): int(count) for uid, count in normalized["user_id"].value_counts().items()},
+            "movie_rating_counts": {int(iid): int(count) for iid, count in normalized["item_id"].value_counts().items()},
+            "rating_distribution": [{"rating": str(k), "count": int(v)} for k, v in sorted(rating_dist.items())],
+            "total_ratings": int(len(normalized)),
+            "average_rating": float(normalized["rating"].mean()) if len(normalized) > 0 else 0.0,
+            "movie_behavior_stats": behavior_stats,
+            "behavior_sorted_item_ids": behavior_sorted_item_ids,
+            "user_ratings_by_user": self._build_user_ratings_by_user(normalized),
+            "ratings_df": normalized if include_ratings_df else None,
+        }
+
+    def _build_ratings_cache_entry_from_variant(self, variant: Dict[str, Any], reference_path: Path) -> Dict[str, Any] | None:
+        source = variant.get("source")
+        if not isinstance(source, dict):
+            return None
+
+        source_key = self._fingerprint_to_key(source)
+        behavior_raw = variant.get("movie_behavior_stats", [])
+        behavior_stats = self._normalize_behavior_stats_frame(pd.DataFrame(behavior_raw))
+
+        user_ratings_raw = variant.get("user_ratings_by_user", {})
+        if not isinstance(user_ratings_raw, dict):
+            return None
+
+        user_ratings_by_user: Dict[int, List[tuple[int, float]]] = {}
+        for raw_user_id, rows in user_ratings_raw.items():
+            try:
+                user_id = int(raw_user_id)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(rows, list):
+                continue
+            normalized_rows: List[tuple[int, float]] = []
+            for row in rows:
+                if not isinstance(row, (list, tuple)) or len(row) != 2:
+                    continue
+                try:
+                    normalized_rows.append((int(row[0]), float(row[1])))
+                except (TypeError, ValueError):
+                    continue
+            user_ratings_by_user[user_id] = normalized_rows
+
+        return {
+            "source_key": source_key,
+            "users": [int(user_id) for user_id in variant.get("users", [])],
+            "user_rating_counts": {
+                int(user_id): int(count)
+                for user_id, count in (variant.get("user_rating_counts", {}) or {}).items()
+            },
+            "movie_rating_counts": {
+                int(item_id): int(count)
+                for item_id, count in (variant.get("movie_rating_counts", {}) or {}).items()
+            },
+            "rating_distribution": list(variant.get("rating_distribution", [])),
+            "total_ratings": int(variant.get("total_ratings", 0) or 0),
+            "average_rating": float(variant.get("average_rating", 0.0) or 0.0),
+            "movie_behavior_stats": behavior_stats,
+            "behavior_sorted_item_ids": [int(item_id) for item_id in variant.get("behavior_sorted_item_ids", [])],
+            "user_ratings_by_user": user_ratings_by_user,
+            "ratings_df": None,
+        }
+
+    def _find_matching_runtime_cache_variant(
+        self,
+        payload: Dict[str, Any] | None,
+        source_key: str,
+    ) -> Dict[str, Any] | None:
+        if not payload:
+            return None
+
+        variants = payload.get("variants", [])
+        if not isinstance(variants, list):
+            return None
+
+        for variant in variants:
+            if not isinstance(variant, dict):
+                continue
+            source = variant.get("source")
+            if isinstance(source, dict) and self._fingerprint_to_key(source) == source_key:
+                return variant
+        return None
+
+    def _find_runtime_cache_variant(self, model_name: str, reference_path: Path) -> Dict[str, Any] | None:
+        source_key = self._source_key_for_path(reference_path)
+        if source_key is None:
+            return None
+
+        shared_variant = self._find_matching_runtime_cache_variant(
+            self._load_shared_runtime_cache_artifact(),
+            source_key,
+        )
+        if shared_variant is not None:
+            return shared_variant
+
+        return self._find_matching_runtime_cache_variant(
+            self._load_runtime_cache_artifact(model_name),
+            source_key,
+        )
+
+    def _apply_ratings_cache_entry(self, entry: Dict[str, Any], reference_path: Path) -> None:
+        self.reference_ratings_path = reference_path
+        self._last_reference_ratings_path = reference_path
+        self._active_reference_source_key = str(entry.get("source_key") or "")
+        self.users = list(entry.get("users", []))
+        self.user_rating_counts = dict(entry.get("user_rating_counts", {}))
+        self.movie_rating_counts = dict(entry.get("movie_rating_counts", {}))
+        self.rating_distribution = list(entry.get("rating_distribution", []))
+        self.total_ratings = int(entry.get("total_ratings", 0) or 0)
+        self.average_rating = float(entry.get("average_rating", 0.0) or 0.0)
+        self.user_ratings_by_user = dict(entry.get("user_ratings_by_user", {}))
+        self.ratings_df = entry.get("ratings_df")
+        self._set_movie_behavior_stats(
+            entry.get("movie_behavior_stats", pd.DataFrame()),
+            behavior_sorted_item_ids=entry.get("behavior_sorted_item_ids"),
+        )
+
+    def _ensure_full_reference_ratings_loaded(self) -> None:
+        reference_path = self.reference_ratings_path
+        if reference_path is None or not reference_path.exists():
+            return
+
+        source_key = self._active_reference_source_key or self._source_key_for_path(reference_path)
+        if source_key is None:
+            return
+
+        cached = self._ratings_cache_by_source_key.get(source_key)
+        if cached is not None and cached.get("ratings_df") is not None:
+            self._apply_ratings_cache_entry(cached, reference_path)
+            return
+
+        ratings = self._read_ratings_any_format(reference_path)
+        if cached is None:
+            cached = self._build_ratings_cache_entry(ratings, reference_path, include_ratings_df=True)
+        else:
+            cached = dict(cached)
+            cached["ratings_df"] = ratings[["user_id", "item_id", "rating"]].copy()
+        self._ratings_cache_by_source_key[source_key] = cached
+        self._apply_ratings_cache_entry(cached, reference_path)
+
     def _load_ratings_from_path(self, train_ratings_path: Path | None) -> None:
         if train_ratings_path is None or not train_ratings_path.exists():
             raise FileNotFoundError("Model-specific train_ratings.csv not found.")
@@ -295,46 +622,30 @@ class RecommenderService:
         # Optimization: Skip expensive reference csv reloading if source path is identical.
         if (
             getattr(self, "_last_reference_ratings_path", None) == reference_path
-            and hasattr(self, "ratings_df")
+            and self._active_reference_source_key == self._source_key_for_path(reference_path)
+            and self.users
         ):
             return
 
+        source_key = self._source_key_for_path(reference_path)
+        if source_key is not None:
+            cached_entry = self._ratings_cache_by_source_key.get(source_key)
+            if cached_entry is not None:
+                self._apply_ratings_cache_entry(cached_entry, reference_path)
+                return
+
+            runtime_variant = self._find_runtime_cache_variant(self.active_model_name, reference_path)
+            if runtime_variant is not None:
+                runtime_entry = self._build_ratings_cache_entry_from_variant(runtime_variant, reference_path)
+                if runtime_entry is not None:
+                    self._ratings_cache_by_source_key[source_key] = runtime_entry
+                    self._apply_ratings_cache_entry(runtime_entry, reference_path)
+                    return
+
         ratings = self._read_ratings_any_format(reference_path)
-        self.reference_ratings_path = reference_path
-        self._last_reference_ratings_path = reference_path
-        self.users = sorted(ratings["user_id"].astype(int).unique().tolist())
-
-        behavior_stats = ratings.groupby("item_id").agg(
-            watched_count=("user_id", "nunique"),
-            high_rating_count=("rating", lambda s: int((s >= 4.0).sum())),
-            avg_rating=("rating", "mean"),
-        )
-        behavior_stats["behavior_score"] = (
-            behavior_stats["high_rating_count"] * 2.0
-            + behavior_stats["watched_count"]
-            + behavior_stats["avg_rating"] / 5.0
-        )
-        behavior_stats = behavior_stats.reset_index()
-        behavior_stats["item_id"] = behavior_stats["item_id"].astype(int)
-        self.movie_behavior_stats = behavior_stats
-
-        self.ratings_df = ratings[["user_id", "item_id", "rating"]].copy()
-        self.user_rating_counts = ratings["user_id"].value_counts().to_dict()
-        
-        # Precompute db stats to avoid iterating over dataframe on the fly
-        self.total_ratings = len(ratings)
-        if self.total_ratings > 0:
-            self.average_rating = float(ratings["rating"].mean())
-        else:
-            self.average_rating = 0.0
-            
-        self.movie_rating_counts = ratings["item_id"].value_counts().to_dict()
-        
-        rating_dist = {}
-        for r, cnt in ratings["rating"].value_counts().items():
-            r_rounded = round(float(r) * 2) / 2
-            rating_dist[r_rounded] = rating_dist.get(r_rounded, 0) + cnt
-        self.rating_distribution = [{"rating": str(k), "count": int(v)} for k, v in sorted(rating_dist.items())]
+        entry = self._build_ratings_cache_entry(ratings, reference_path, include_ratings_df=True)
+        self._ratings_cache_by_source_key[entry["source_key"]] = entry
+        self._apply_ratings_cache_entry(entry, reference_path)
 
     def _fallback_popular_items(
         self,
@@ -349,7 +660,7 @@ class RecommenderService:
 
         exclude = exclude_items or set()
         genre_pref = preferred_genres or set()
-        behavior_map = self.movie_behavior_stats.set_index("item_id")
+        behavior_map = self._movie_behavior_index
 
         # Build a ranked candidate table from database-wide behavior signals.
         ranked = self.movies[["item_id", "title", "genres"]].copy()
@@ -577,9 +888,8 @@ class RecommenderService:
             if self.active_model_name not in getattr(self, '_available_model_names', set()):
                 self.active_model_name = self._select_default_active_model()
             self._persist_active_model_to_disk()
-
-            self._load_active_model_data()
-
+            # Leave movies / ratings lazy. They are loaded only when a request needs
+            # active-user recommendation data, not during generic engine setup.
             self._loaded = True
 
     def list_movies(
@@ -638,6 +948,29 @@ class RecommenderService:
         sort_order = sort_order.lower()
         ascending = sort_order != "desc"
 
+        if (
+            not query
+            and not genre
+            and not year
+            and sort_by == "behavior_score"
+            and not ascending
+            and self.behavior_sorted_item_ids
+        ):
+            total = len(self.behavior_sorted_item_ids)
+            page_ids = self.behavior_sorted_item_ids[offset : offset + limit]
+            if not page_ids:
+                return {"total": total, "items": []}
+
+            order_map = {int(item_id): idx for idx, item_id in enumerate(page_ids)}
+            page_frame = frame[frame["item_id"].isin(page_ids)].copy()
+            if not self._movie_behavior_index.empty:
+                for stat_col in ("watched_count", "high_rating_count", "avg_rating", "behavior_score"):
+                    page_frame[stat_col] = page_frame["item_id"].map(self._movie_behavior_index[stat_col]).fillna(0.0)
+            page_frame["_order"] = page_frame["item_id"].map(order_map)
+            page_frame = page_frame.sort_values("_order", kind="mergesort")
+            page_frame = page_frame[[c for c in page_frame.columns if c != "_order"]]
+            return {"total": total, "items": page_frame.to_dict(orient="records")}
+
         sortable = frame.copy()
         if not self.movie_behavior_stats.empty:
             sortable = sortable.merge(self.movie_behavior_stats, on="item_id", how="left")
@@ -692,6 +1025,647 @@ class RecommenderService:
     def get_movie(self, item_id: int) -> Dict[str, Any] | None:
         self._ensure_movie_data_fresh()
         return self.movie_lookup.get(item_id)
+
+    @staticmethod
+    def _parse_genres(raw: Any) -> List[str]:
+        parts = [part.strip() for part in str(raw or "").split("|")]
+        return [part for part in parts if part and part != "(no genres listed)"]
+
+    @staticmethod
+    def _reason_display_title(meta: Dict[str, Any] | None) -> str:
+        if not meta:
+            return "this title"
+        raw = str(meta.get("scraped_title") or meta.get("title") or "").strip()
+        if not raw:
+            return "this title"
+        cleaned = re.sub(r"\s*\(\d{4}\)\s*$", "", raw).strip()
+        return cleaned or "this title"
+
+    @staticmethod
+    def _reason_item_reference(meta: Dict[str, Any] | None) -> Dict[str, Any] | None:
+        if not meta:
+            return None
+        raw_item_id = meta.get("item_id")
+        try:
+            item_id = int(raw_item_id)
+        except (TypeError, ValueError):
+            return None
+        title = RecommenderService._reason_display_title(meta)
+        if not title or title == "this title":
+            return None
+        return {"item_id": item_id, "title": title}
+
+    @staticmethod
+    def _reason_mentioned_items(*metas: Dict[str, Any] | None) -> List[Dict[str, Any]]:
+        mentions: List[Dict[str, Any]] = []
+        seen_item_ids: set[int] = set()
+        for meta in metas:
+            reference = RecommenderService._reason_item_reference(meta)
+            if reference is None:
+                continue
+            item_id = int(reference["item_id"])
+            if item_id in seen_item_ids:
+                continue
+            seen_item_ids.add(item_id)
+            mentions.append(reference)
+        return mentions
+
+    @staticmethod
+    def _join_reason_labels(labels: List[str], limit: int = 2, fallback: str = "related titles") -> str:
+        unique: List[str] = []
+        for label in labels:
+            cleaned = str(label).strip()
+            if cleaned and cleaned not in unique:
+                unique.append(cleaned)
+            if len(unique) >= max(1, limit):
+                break
+        if not unique:
+            return fallback
+        if len(unique) == 1:
+            return unique[0]
+        if len(unique) == 2:
+            return f"{unique[0]} and {unique[1]}"
+        return f"{', '.join(unique[:-1])}, and {unique[-1]}"
+
+    def _behavior_stats_for_item(self, item_id: int) -> Dict[str, Any] | None:
+        if self._movie_behavior_index.empty:
+            return None
+        if item_id not in self._movie_behavior_index.index:
+            return None
+        stats = self._movie_behavior_index.loc[item_id]
+        return {
+            "watched_count": int(stats["watched_count"]),
+            "high_rating_count": int(stats["high_rating_count"]),
+            "avg_rating": float(stats["avg_rating"]) if pd.notna(stats["avg_rating"]) else 0.0,
+            "behavior_score": float(stats["behavior_score"]) if pd.notna(stats["behavior_score"]) else 0.0,
+        }
+
+    @staticmethod
+    def _minmax_scale(values: List[float], default: float = 0.0) -> List[float]:
+        if not values:
+            return []
+        arr = np.asarray(values, dtype=np.float64)
+        finite = np.isfinite(arr)
+        if not np.any(finite):
+            return [float(default)] * len(values)
+        min_v = float(np.min(arr[finite]))
+        max_v = float(np.max(arr[finite]))
+        if max_v - min_v <= 1e-12:
+            return [float(default)] * len(values)
+        scaled = (arr - min_v) / (max_v - min_v)
+        scaled = np.where(finite, scaled, float(default))
+        return scaled.astype(np.float64).tolist()
+
+    def _build_user_recommendation_profile(self, user_id: int) -> Dict[str, Any]:
+        rating_rows = list(self.user_ratings_by_user.get(user_id, []))
+        if not rating_rows:
+            return {"genre_weights": {}, "reference_items": []}
+
+        genre_weights: Dict[str, float] = {}
+        for item_id, rating in rating_rows[:50]:
+            weight = max(float(rating) - 2.5, 0.0)
+            if weight <= 0.0:
+                continue
+            meta = self.movie_lookup.get(int(item_id))
+            if meta is None:
+                continue
+            for genre in self._parse_genres(meta.get("genres", "")):
+                genre_weights[genre] = genre_weights.get(genre, 0.0) + weight
+
+        reference_items = [
+            (int(item_id), max(float(rating) - 3.0, 0.0))
+            for item_id, rating in rating_rows
+            if float(rating) >= 4.0
+        ][:12]
+        if not reference_items:
+            reference_items = [
+                (int(item_id), max(float(rating) - 2.5, 0.1))
+                for item_id, rating in rating_rows[:12]
+            ]
+
+        return {
+            "genre_weights": genre_weights,
+            "reference_items": reference_items,
+        }
+
+    def _rerank_model_recommendations(
+        self,
+        user_id: int,
+        candidates: List[Dict[str, Any]],
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        if limit <= 0 or not candidates:
+            return []
+
+        profile = self._build_user_recommendation_profile(user_id)
+        genre_weights = profile["genre_weights"]
+        reference_items = profile["reference_items"]
+        if not genre_weights and not reference_items:
+            return candidates[:limit]
+
+        model_scores = [float(candidate.get("score", 0.0) or 0.0) for candidate in candidates]
+        popularity_raw: List[float] = []
+        genre_raw: List[float] = []
+        history_similarity_raw: List[float] = []
+
+        for candidate in candidates:
+            item_id = int(candidate.get("item_id", -1))
+            stats = self._behavior_stats_for_item(item_id) or {}
+            watched_count = float(stats.get("watched_count", 0.0) or 0.0)
+            avg_rating = float(stats.get("avg_rating", 0.0) or 0.0)
+            popularity_raw.append(float(np.log1p(watched_count) + 0.25 * avg_rating))
+
+            candidate_genres = self._parse_genres(candidate.get("genres", ""))
+            genre_raw.append(sum(float(genre_weights.get(genre, 0.0)) for genre in candidate_genres))
+
+            best_similarity = 0.0
+            for reference_item_id, reference_weight in reference_items:
+                if reference_item_id == item_id:
+                    continue
+                similarity = self._get_model_item_similarity(item_id=item_id, reference_item_id=reference_item_id)
+                if similarity is None or similarity <= 0.0:
+                    continue
+                best_similarity = max(best_similarity, float(similarity) * float(reference_weight))
+            history_similarity_raw.append(best_similarity)
+
+        model_norm = self._minmax_scale(model_scores, default=0.5)
+        popularity_norm = self._minmax_scale(popularity_raw, default=0.5)
+        genre_norm = self._minmax_scale(genre_raw, default=0.0)
+        history_norm = self._minmax_scale(history_similarity_raw, default=0.0)
+
+        ranked: List[tuple[float, float, int, Dict[str, Any]]] = []
+        for idx, candidate in enumerate(candidates):
+            rank_score = (
+                0.62 * float(model_norm[idx])
+                + 0.23 * float(history_norm[idx])
+                + 0.15 * float(genre_norm[idx])
+                - 0.12 * float(popularity_norm[idx])
+            )
+            if candidate.get("is_fallback_score"):
+                rank_score -= 0.10
+            if history_similarity_raw[idx] > 0.0:
+                rank_score += 0.03
+            ranked.append((rank_score, model_scores[idx], int(candidate.get("item_id", 0)), candidate))
+
+        ranked.sort(key=lambda row: (-row[0], -row[1], row[2]))
+        return [row[3] for row in ranked[:limit]]
+
+    def _augment_candidates_from_user_history(
+        self,
+        *,
+        model: Any,
+        user_id: int,
+        seen_items: set[int],
+        candidates: List[Dict[str, Any]],
+        target_count: int,
+    ) -> List[Dict[str, Any]]:
+        if target_count <= len(candidates):
+            return candidates
+        if not hasattr(model, "similar_items"):
+            return candidates
+
+        rating_rows = list(self.user_ratings_by_user.get(user_id, []))
+        if not rating_rows:
+            return candidates
+
+        reference_items = [int(item_id) for item_id, rating in rating_rows if float(rating) >= 4.0][:8]
+        if not reference_items:
+            reference_items = [int(item_id) for item_id, _ in rating_rows[:6]]
+        if not reference_items:
+            return candidates
+
+        excluded_item_ids = {int(item["item_id"]) for item in candidates}
+        excluded_item_ids.update(int(item_id) for item_id in seen_items)
+
+        neighbor_item_ids: List[int] = []
+        for reference_item_id in reference_items:
+            try:
+                neighbors = model.similar_items(item_id=reference_item_id, n=30) or []
+            except RuntimeError:
+                neighbors = []
+            for neighbor in neighbors:
+                item_id = int(getattr(neighbor, "item_id", -1))
+                if item_id <= 0 or item_id in excluded_item_ids:
+                    continue
+                if item_id not in self.movie_lookup:
+                    continue
+                excluded_item_ids.add(item_id)
+                neighbor_item_ids.append(item_id)
+                if len(candidates) + len(neighbor_item_ids) >= target_count:
+                    break
+            if len(candidates) + len(neighbor_item_ids) >= target_count:
+                break
+
+        if not neighbor_item_ids:
+            return candidates
+
+        predicted_scores: List[float]
+        if hasattr(model, "predict_batch"):
+            try:
+                user_ids = np.full(len(neighbor_item_ids), int(user_id), dtype=np.int64)
+                item_ids = np.asarray(neighbor_item_ids, dtype=np.int64)
+                predicted_scores = np.asarray(model.predict_batch(user_ids, item_ids), dtype=np.float64).tolist()
+            except Exception:
+                predicted_scores = [float(model.predict(user_id=user_id, item_id=item_id)) for item_id in neighbor_item_ids]
+        else:
+            predicted_scores = [float(model.predict(user_id=user_id, item_id=item_id)) for item_id in neighbor_item_ids]
+
+        augmented = list(candidates)
+        for item_id, score in zip(neighbor_item_ids, predicted_scores):
+            meta = self.movie_lookup.get(int(item_id))
+            if meta is None:
+                continue
+            augmented.append(
+                {
+                    "item_id": int(item_id),
+                    "title": meta["title"],
+                    "scraped_title": meta.get("scraped_title", ""),
+                    "genres": meta["genres"],
+                    "poster_url": meta.get("poster_url", ""),
+                    "backdrop_url": meta.get("backdrop_url", ""),
+                    "overview": meta.get("overview", ""),
+                    "tmdb_id": meta.get("tmdb_id", ""),
+                    "score": float(score),
+                    "score_source": "model_neighbor",
+                    "is_fallback_score": False,
+                }
+            )
+        return augmented
+
+    @staticmethod
+    def _dedupe_reason_list(reasons: List[Dict[str, Any]], limit: int = 4) -> List[Dict[str, Any]]:
+        deduped: List[Dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for reason in reasons:
+            reason_id = str(reason.get("id", "")).strip()
+            if not reason_id or reason_id in seen_ids:
+                continue
+            seen_ids.add(reason_id)
+            deduped.append(reason)
+            if len(deduped) >= limit:
+                break
+        return deduped
+
+    def _get_active_model_instance(self) -> Any | None:
+        model = self.models.get(self.active_model_name)
+        if model is None:
+            try:
+                self._lazy_load_model(self.active_model_name)
+                model = self.models.get(self.active_model_name)
+            except FileNotFoundError:
+                model = None
+        return model
+
+    def _get_model_item_similarity(self, item_id: int, reference_item_id: int) -> float | None:
+        model = self._get_active_model_instance()
+        if model is None:
+            return None
+
+        item_to_idx = getattr(model, "item_to_idx", None)
+        if not isinstance(item_to_idx, dict):
+            return None
+
+        normalized = getattr(model, "normalized_item_factors", None)
+        if normalized is None:
+            normalized = getattr(model, "normalized_item_vectors", None)
+        if normalized is None or item_id not in item_to_idx or reference_item_id not in item_to_idx:
+            return None
+
+        try:
+            item_idx = int(item_to_idx[item_id])
+            reference_idx = int(item_to_idx[reference_item_id])
+            return float(normalized[item_idx] @ normalized[reference_idx])
+        except (TypeError, ValueError, IndexError):
+            return None
+
+    def _build_pair_behavior_similarity_reason(
+        self,
+        item_id: int,
+        reference_item_id: int,
+        target_title: str,
+        reference_title: str,
+    ) -> Dict[str, Any] | None:
+        self._ensure_full_reference_ratings_loaded()
+        if self.ratings_df is None:
+            return None
+        pair_rows = self.ratings_df[self.ratings_df["item_id"].isin([item_id, reference_item_id])]
+        if pair_rows.empty:
+            return None
+
+        overlap_counts = pair_rows.groupby("user_id")["item_id"].nunique()
+        overlap_user_ids = overlap_counts[overlap_counts >= 2].index
+        overlap_count = int(len(overlap_user_ids))
+        if overlap_count <= 0:
+            return None
+
+        overlap_rows = pair_rows[pair_rows["user_id"].isin(overlap_user_ids)]
+        paired_min_ratings = overlap_rows.groupby("user_id")["rating"].min()
+        high_overlap_count = int((paired_min_ratings >= 4.0).sum())
+
+        if high_overlap_count > 0:
+            explanation = (
+                f"{overlap_count} users rated both {reference_title} and {target_title}, "
+                f"and {high_overlap_count} of them gave both movies at least 4 stars."
+            )
+        else:
+            explanation = (
+                f"{overlap_count} users interacted with both {reference_title} and {target_title}, "
+                "which reinforces their audience-behavior overlap."
+            )
+
+        return {
+            "id": "shared-audience-overlap",
+            "source": "behavior_signal",
+            "title": "Shared audience behavior",
+            "short_explanation": explanation,
+            "metadata": {
+                "reference_item_id": reference_item_id,
+                "overlap_user_count": overlap_count,
+                "high_overlap_count": high_overlap_count,
+                "mentioned_items": self._reason_mentioned_items(
+                    self.movie_lookup.get(reference_item_id),
+                    self.movie_lookup.get(item_id),
+                ),
+            },
+        }
+
+    def _build_personal_match_reason(
+        self,
+        user_id: int,
+        item_id: int,
+        target: Dict[str, Any],
+    ) -> Dict[str, Any] | None:
+        if user_id not in self.users:
+            return None
+
+        predicted_rating = self.predict_rating(user_id=user_id, item_id=item_id).get("predicted_rating")
+        if predicted_rating is None:
+            return None
+
+        prediction_value = float(predicted_rating)
+        if prediction_value < 3.75:
+            return None
+
+        genre_weights: Dict[str, float] = {}
+        for rated_item_id, rating in self.user_ratings_by_user.get(user_id, [])[:30]:
+            meta = self.movie_lookup.get(int(rated_item_id))
+            if meta is None:
+                continue
+            for genre in self._parse_genres(meta.get("genres", "")):
+                genre_weights[genre] = genre_weights.get(genre, 0.0) + float(rating)
+
+        matched_genres = [genre for genre in self._parse_genres(target.get("genres", "")) if genre in genre_weights]
+        explanation = (
+            f"The active model estimates about {prediction_value:.1f}/5 for User {user_id} "
+            "based on prior rating patterns."
+        )
+        if matched_genres:
+            explanation += (
+                " It also lines up with genres this user tends to rate highly, including "
+                f"{self._join_reason_labels(matched_genres, limit=2, fallback='similar themes')}."
+            )
+
+        return {
+            "id": "personal-match",
+            "source": "personal_match",
+            "title": "Strong personal match" if prediction_value >= 4.25 else "Personal taste match",
+            "short_explanation": explanation,
+            "score": round(prediction_value, 3),
+            "metadata": {
+                "model": self.active_model_name,
+                "user_id": user_id,
+                "predicted_rating": round(prediction_value, 3),
+            },
+        }
+
+    def get_movie_recommendation_reasons(
+        self,
+        item_id: int,
+        user_id: int | None = None,
+        similar_candidates: List[Dict[str, Any]] | None = None,
+    ) -> List[Dict[str, Any]]:
+        self._ensure_movie_data_fresh()
+
+        target = self.movie_lookup.get(item_id)
+        if target is None:
+            return []
+
+        reasons: List[Dict[str, Any]] = []
+
+        if user_id is not None and user_id > 0:
+            personal_reason = self._build_personal_match_reason(user_id=user_id, item_id=item_id, target=target)
+            if personal_reason is not None:
+                reasons.append(personal_reason)
+
+        model = self._get_active_model_instance()
+
+        model_neighbors: List[Dict[str, Any]] = []
+        if model is not None and hasattr(model, "similar_items"):
+            try:
+                raw_neighbors = model.similar_items(item_id=item_id, n=5) or []
+            except RuntimeError:
+                raw_neighbors = []
+            for neighbor in raw_neighbors:
+                neighbor_meta = self.movie_lookup.get(int(getattr(neighbor, "item_id", -1)))
+                if neighbor_meta is None:
+                    continue
+                model_neighbors.append(
+                    {
+                        "meta": neighbor_meta,
+                        "score": float(getattr(neighbor, "score", 0.0)),
+                    }
+                )
+
+        if model_neighbors:
+            support_neighbor_metas = [entry["meta"] for entry in model_neighbors[:2]]
+            support_titles = self._join_reason_labels(
+                [self._reason_display_title(meta) for meta in support_neighbor_metas],
+                limit=2,
+                fallback="related titles",
+            )
+            top_similarity = float(model_neighbors[0]["score"])
+            reasons.append(
+                {
+                    "id": "collaborative-similarity",
+                    "source": "collaborative_similarity",
+                    "title": "Collaborative similarity signal",
+                    "short_explanation": (
+                        f"It sits close to {support_titles} in the model's learned item space, "
+                        "making it easy to surface when similar taste patterns appear."
+                    ),
+                    "score": round(top_similarity, 4),
+                    "metadata": {
+                        "model": self.active_model_name,
+                        "neighbor_count": len(model_neighbors),
+                        "mentioned_items": self._reason_mentioned_items(*support_neighbor_metas),
+                    },
+                }
+            )
+
+        target_genres = self._parse_genres(target.get("genres", ""))
+        if target_genres:
+            support_items: List[Dict[str, Any]] = [entry["meta"] for entry in model_neighbors]
+            if not support_items and similar_candidates:
+                for candidate in similar_candidates[:6]:
+                    candidate_meta = self.movie_lookup.get(int(candidate.get("item_id", -1)))
+                    if candidate_meta is not None:
+                        support_items.append(candidate_meta)
+
+            overlap_counts: Dict[str, int] = {}
+            support_title_metas: List[Dict[str, Any]] = []
+            for meta in support_items:
+                overlap = [genre for genre in self._parse_genres(meta.get("genres", "")) if genre in target_genres]
+                if not overlap:
+                    continue
+                support_title_metas.append(meta)
+                for genre in overlap:
+                    overlap_counts[genre] = overlap_counts.get(genre, 0) + 1
+
+            ranked_genres = sorted(target_genres, key=lambda genre: (-overlap_counts.get(genre, 0), target_genres.index(genre)))
+            emphasis_genres = [genre for genre in ranked_genres if overlap_counts.get(genre, 0) > 0][:2]
+            if not emphasis_genres:
+                emphasis_genres = target_genres[:2]
+            genre_phrase = self._join_reason_labels(emphasis_genres, limit=2, fallback="its genre profile")
+            support_titles = self._join_reason_labels(
+                [self._reason_display_title(meta) for meta in support_title_metas[:2]],
+                limit=2,
+                fallback="nearby titles",
+            )
+
+            if support_title_metas:
+                explanation = (
+                    f"Its {genre_phrase} profile overlaps with "
+                    f"{support_titles}, "
+                    "which helps the system place it near related movies."
+                )
+            else:
+                explanation = (
+                    f"Its {genre_phrase} mix gives the recommender a strong content signature "
+                    "for finding related movies."
+                )
+
+            reasons.append(
+                {
+                    "id": "content-match",
+                    "source": "content_match",
+                    "title": "Genre and embedding match",
+                    "short_explanation": explanation,
+                    "metadata": {
+                        "model": self.active_model_name,
+                        "genres": genre_phrase,
+                        "mentioned_items": self._reason_mentioned_items(*support_title_metas[:2]),
+                    },
+                }
+            )
+
+        behavior_stats = self._behavior_stats_for_item(item_id)
+        if behavior_stats is not None and (
+            behavior_stats["watched_count"] > 0 or behavior_stats["high_rating_count"] > 0
+        ):
+            watched_count = int(behavior_stats["watched_count"])
+            high_rating_count = int(behavior_stats["high_rating_count"])
+            avg_rating = float(behavior_stats["avg_rating"])
+            if avg_rating >= 4.0 and high_rating_count > 0:
+                title = "Strong audience approval"
+                explanation = (
+                    f"It has {high_rating_count} high ratings and a {avg_rating:.1f}/5 average "
+                    f"across {watched_count} viewers, giving the model a confident behavior signal."
+                )
+            else:
+                title = "Stable audience behavior"
+                explanation = (
+                    f"It shows consistent engagement across {watched_count} viewers with an average "
+                    f"rating of {avg_rating:.1f}/5, so the recommender can rely on solid behavior data."
+                )
+
+            reasons.append(
+                {
+                    "id": "behavior-signal",
+                    "source": "behavior_signal",
+                    "title": title,
+                    "short_explanation": explanation,
+                    "score": round(avg_rating, 3),
+                    "metadata": {
+                        "watched_count": watched_count,
+                        "high_rating_count": high_rating_count,
+                        "avg_rating": round(avg_rating, 3),
+                    },
+                }
+            )
+
+        return self._dedupe_reason_list(reasons, limit=4)
+
+    def get_movie_similarity_reasons(
+        self,
+        item_id: int,
+        reference_item_id: int,
+    ) -> List[Dict[str, Any]]:
+        self._ensure_movie_data_fresh()
+
+        if item_id == reference_item_id:
+            return []
+
+        target = self.movie_lookup.get(item_id)
+        reference = self.movie_lookup.get(reference_item_id)
+        if target is None or reference is None:
+            return []
+
+        target_title = self._reason_display_title(target)
+        reference_title = self._reason_display_title(reference)
+        reasons: List[Dict[str, Any]] = []
+
+        model_similarity = self._get_model_item_similarity(item_id=item_id, reference_item_id=reference_item_id)
+        if model_similarity is not None and model_similarity > 0:
+            reasons.append(
+                {
+                    "id": "direct-collaborative-similarity",
+                    "source": "collaborative_similarity",
+                    "title": "Collaborative similarity signal",
+                    "short_explanation": (
+                        f"The active model places {target_title} close to {reference_title} in item space, "
+                        "so they tend to surface together when viewer taste patterns align."
+                    ),
+                    "score": round(model_similarity, 4),
+                    "metadata": {
+                        "reference_item_id": reference_item_id,
+                        "model": self.active_model_name,
+                        "mentioned_items": self._reason_mentioned_items(target, reference),
+                    },
+                }
+            )
+
+        target_genres = self._parse_genres(target.get("genres", ""))
+        reference_genres = self._parse_genres(reference.get("genres", ""))
+        shared_genres = [genre for genre in target_genres if genre in reference_genres]
+        if shared_genres:
+            shared_genre_phrase = self._join_reason_labels(shared_genres, limit=2, fallback="shared themes")
+            reasons.append(
+                {
+                    "id": "direct-content-overlap",
+                    "source": "content_match",
+                    "title": "Shared genres and themes",
+                    "short_explanation": (
+                        f"{target_title} overlaps with {reference_title} on {shared_genre_phrase}, "
+                        "which gives both movies a closely related content signature."
+                    ),
+                    "metadata": {
+                        "reference_item_id": reference_item_id,
+                        "genres": shared_genre_phrase,
+                        "mentioned_items": self._reason_mentioned_items(target, reference),
+                    },
+                }
+            )
+
+        pair_behavior_reason = self._build_pair_behavior_similarity_reason(
+            item_id=item_id,
+            reference_item_id=reference_item_id,
+            target_title=target_title,
+            reference_title=reference_title,
+        )
+        if pair_behavior_reason is not None:
+            reasons.append(pair_behavior_reason)
+
+        return self._dedupe_reason_list(reasons, limit=3)
 
     def search_movies(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
         self._ensure_movie_data_fresh()
@@ -759,7 +1733,7 @@ class RecommenderService:
         return sortable.to_dict(orient="records")
 
     def predict_rating(self, user_id: int, item_id: int) -> Dict[str, Any]:
-        self._ensure_active_model_fresh()
+        self._ensure_active_model_fresh(load_data=False)
         try:
             model = self.models.get(self.active_model_name)
             if model is None:
@@ -772,7 +1746,6 @@ class RecommenderService:
 
     def recommend_for_user(self, user_id: int, n: int = 10) -> List[Dict[str, Any]]:
         self._ensure_movie_data_fresh()
-        self._ensure_active_model_fresh()
         if user_id not in self.users:
             raise ValueError(f"User ID {user_id} not found.")
         model = self.models.get(self.active_model_name)
@@ -783,15 +1756,13 @@ class RecommenderService:
         # If the active model was trained on old artifacts and does not cover this user,
         # fall back to popularity from the current database-wide ratings.
         model_user_to_idx = getattr(model, "user_to_idx", {})
+        user_rating_pairs = self.user_ratings_by_user.get(user_id, [])
+        seen = {int(item_id) for item_id, _ in user_rating_pairs}
         if not isinstance(model_user_to_idx, dict) or user_id not in model_user_to_idx:
-            seen = set(self.ratings_df[self.ratings_df["user_id"] == user_id]["item_id"].astype(int).tolist())
             return self._fallback_popular_items(n=n, exclude_items=seen, score_mode="rating")
 
-        # Dynamically inject seen items to bypass massive pickle overhead
-        user_rows = self.ratings_df[self.ratings_df["user_id"] == user_id]
-        seen = set(user_rows["item_id"])
-        
-        recs = model.recommend_top_n(user_id=user_id, n=n, exclude_seen=True, seen_items=seen)
+        candidate_count = min(max(n * 8, 100), 500)
+        recs = model.recommend_top_n(user_id=user_id, n=candidate_count, exclude_seen=True, seen_items=seen)
         enriched = []
         selected_item_ids: set[int] = set()
         for rec in recs:
@@ -815,8 +1786,17 @@ class RecommenderService:
                 }
             )
             selected_item_ids.add(rec_item_id)
-            if len(enriched) >= n:
-                break
+
+        if enriched:
+            enriched = self._augment_candidates_from_user_history(
+                model=model,
+                user_id=user_id,
+                seen_items=seen,
+                candidates=enriched,
+                target_count=min(candidate_count + 120, 700),
+            )
+            enriched = self._rerank_model_recommendations(user_id=user_id, candidates=enriched, limit=n)
+            selected_item_ids = {int(item["item_id"]) for item in enriched}
 
         if len(enriched) < n:
             fallback_exclude = {int(iid) for iid in seen}
@@ -832,7 +1812,6 @@ class RecommenderService:
 
     def similar_for_item(self, item_id: int, n: int = 10) -> List[Dict[str, Any]]:
         self._ensure_movie_data_fresh()
-        self._ensure_active_model_fresh()
         model = self.models.get(self.active_model_name)
         if model is None:
             self._lazy_load_model(self.active_model_name)
@@ -912,14 +1891,12 @@ class RecommenderService:
         if user_id not in self.users:
             raise ValueError(f"User ID {user_id} not found.")
             
-        # Dynamically build history to save memory
-        user_rows = self.ratings_df[self.ratings_df["user_id"] == user_id]
-        user_rows = user_rows.sort_values(by="rating", ascending=False)
-        if limit > 0:
-            user_rows = user_rows.head(limit)
-            
         history = []
-        for iid, rating in zip(user_rows["item_id"], user_rows["rating"]):
+        user_rows = self.user_ratings_by_user.get(user_id, [])
+        if limit > 0:
+            user_rows = user_rows[:limit]
+
+        for iid, rating in user_rows:
             meta = self.movie_lookup.get(
                 iid,
                 {
@@ -947,7 +1924,7 @@ class RecommenderService:
         return history
 
     def list_users(self, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
-        self._ensure_active_model_fresh()
+        self._ensure_movie_data_fresh()
         total = len(self.users)
         users_page = self.users[offset:offset+limit]
         return {
@@ -1155,8 +2132,9 @@ class RecommenderService:
 
     def preload_active_model(self) -> Dict[str, Any]:
         """
-        Preload active model data and model weights into memory.
-        This removes first-request cold start spikes after app open or model switch.
+        Preload the active model and its shared runtime data into memory.
+        Runtime cache artifacts keep this lightweight while removing first-request
+        cold starts after an engine switch.
         """
         self._ensure_active_model_fresh(load_data=True)
         with self._lock:
@@ -1273,6 +2251,21 @@ class RecommenderService:
             self._movies_mtime_ns = out_path.stat().st_mtime_ns
         except OSError:
             self._movies_mtime_ns = None
+        if self._movies_loaded_path is not None and self._movies_mtime_ns is not None:
+            stale_keys = [
+                key
+                for key, cached in self._movies_cache_by_source_key.items()
+                if cached.get("movies") is self.movies
+            ]
+            for key in stale_keys:
+                self._movies_cache_by_source_key.pop(key, None)
+            new_source_key = self._source_key_for_path(self._movies_loaded_path)
+            if new_source_key:
+                self._movies_cache_by_source_key[new_source_key] = {
+                    "movies": self.movies,
+                    "movie_lookup": self.movie_lookup,
+                    "mtime_ns": int(self._movies_mtime_ns),
+                }
         return True
 
 service = RecommenderService()

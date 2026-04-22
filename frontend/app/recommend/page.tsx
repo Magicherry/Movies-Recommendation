@@ -6,6 +6,7 @@ import MovieCardGrid from "../../components/movie-card-grid";
 
 export default function RecommendPage() {
   const [userId, setUserId] = useState("1");
+  const [activeUserId, setActiveUserId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<Recommendation[]>([]);
@@ -24,9 +25,11 @@ export default function RecommendPage() {
     try {
       const recs = await getRecommendations(parsed);
       setItems(recs);
+      setActiveUserId(parsed);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load recommendations.");
       setItems([]);
+      setActiveUserId(null);
     } finally {
       setLoading(false);
     }
@@ -55,7 +58,7 @@ export default function RecommendPage() {
 
         <div className="status-row">
           {loading && <span>Crunching data...</span>}
-          {!loading && items.length > 0 && <span>We found {items.length} matches for User {userId}</span>}
+          {!loading && items.length > 0 && activeUserId !== null && <span>We found {items.length} matches for User {activeUserId}</span>}
         </div>
         {error && <div className="error-text">{error}</div>}
       </div>
@@ -68,6 +71,8 @@ export default function RecommendPage() {
             scoreLabel="Match Score"
             emptyMessage=""
             rowMode={true}
+            detailContext="recommended"
+            detailUserId={activeUserId ?? undefined}
           />
         </section>
       )}

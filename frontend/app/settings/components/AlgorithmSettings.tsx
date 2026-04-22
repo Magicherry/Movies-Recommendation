@@ -522,6 +522,15 @@ export default function AlgorithmSettings() {
     });
   }, [radarModelMetrics]);
 
+  const allModelsLegendItems = useMemo(() => {
+    return radarModelMetrics.map(({ modelName }, index) => ({
+      modelName,
+      label: RADAR_MODEL_LABELS[modelName] ?? MODEL_METADATA[modelName]?.title ?? modelName,
+      color: getRadarModelColor(modelName, activeModel, index, brandColor),
+      isActive: modelName === activeModel,
+    }));
+  }, [radarModelMetrics, activeModel, brandColor]);
+
   return (
     <section className="settings-card">
       <h2>Engines</h2>
@@ -811,7 +820,50 @@ export default function AlgorithmSettings() {
                               />
                             );
                           })}
-                          <Legend layout="vertical" verticalAlign="top" align="left" wrapperStyle={{ fontSize: "12px", left: "10px", top: "10px" }} />
+                          <Legend
+                            layout="vertical"
+                            verticalAlign="top"
+                            align="left"
+                            wrapperStyle={{ fontSize: "12px", left: "10px", top: "10px" }}
+                            content={() => (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "10px",
+                                  paddingTop: "2px",
+                                }}
+                              >
+                                {allModelsLegendItems.map((item) => (
+                                  <div
+                                    key={item.modelName}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "10px",
+                                      padding: "2px 0",
+                                      color: item.isActive ? "var(--text-main)" : "var(--text-subtle)",
+                                      fontWeight: item.isActive ? 700 : 500,
+                                      lineHeight: 1.35,
+                                    }}
+                                  >
+                                    <span
+                                      aria-hidden="true"
+                                      style={{
+                                        width: "10px",
+                                        height: "10px",
+                                        borderRadius: "999px",
+                                        flex: "0 0 10px",
+                                        background: item.color,
+                                        boxShadow: item.isActive ? "0 0 0 3px rgba(255, 255, 255, 0.12)" : "none",
+                                      }}
+                                    />
+                                    <span>{item.label}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          />
                         </>
                       ) : (
                         <Radar

@@ -4,12 +4,18 @@ import PredictionDisplay from "../../../components/prediction-display";
 import RefreshOnEngineChange from "../../../components/refresh-on-engine-change";
 import MovieDetailActions from "../../../components/movie-detail-actions";
 import PersonList from "../../../components/person-list";
-import Link from "next/link";
+import MovieDetailWhyRecommended from "../../../components/movie-detail-why-recommended";
+import { normalizeMovieDetailContext, parsePositiveIntParam } from "../../../lib/movie-detail-context";
 import { notFound } from "next/navigation";
 
 type MovieDetailPageProps = {
   params: {
     id: string;
+  };
+  searchParams: {
+    context?: string | string[];
+    user?: string | string[];
+    source_item?: string | string[];
   };
 };
 
@@ -19,15 +25,29 @@ function getGradient(id: number) {
   return `linear-gradient(135deg, hsl(${hue1}, 40%, 15%), hsl(${hue2}, 40%, 5%))`;
 }
 
-export default async function MovieDetailPage({ params }: MovieDetailPageProps) {
+export default async function MovieDetailPage({ params, searchParams }: MovieDetailPageProps) {
   const itemId = Number(params.id);
   if (!Number.isFinite(itemId) || itemId <= 0) {
     notFound();
   }
 
+  const detailMode = normalizeMovieDetailContext(
+    typeof searchParams.context === "string" ? searchParams.context : undefined
+  );
+  const contextUserId = parsePositiveIntParam(searchParams.user);
+  const referenceItemId = parsePositiveIntParam(searchParams.source_item);
+
   let data: Awaited<ReturnType<typeof getMovieDetail>>;
   try {
-    data = await getMovieDetail(itemId, 100);
+    data = await getMovieDetail(
+      itemId,
+      100,
+      detailMode === "similar" && referenceItemId
+        ? { mode: "similar", referenceItemId }
+        : detailMode === "recommended" && contextUserId
+          ? { userId: contextUserId }
+          : { mode: "neutral" }
+    );
   } catch (error) {
     const err = error as Error & { status?: number };
     if (err.status === 404 || err.message.toLowerCase().includes("not found")) {
@@ -67,11 +87,20 @@ export default async function MovieDetailPage({ params }: MovieDetailPageProps) 
           <p className="hero-desc">
             {data.movie.overview || "A fantastic film to enjoy. Dive deep into this critically acclaimed piece."}
           </p>
-          <PredictionDisplay itemId={itemId} />
+          {detailMode === "recommended" ? (
+            <PredictionDisplay itemId={itemId} userIdOverride={contextUserId} />
+          ) : null}
         </div>
       </div>
 
       <section className="content-padding">
+        <MovieDetailWhyRecommended
+          itemId={itemId}
+          initialReasons={data.why_recommended}
+          mode={detailMode}
+          contextUserId={contextUserId}
+          referenceItemId={referenceItemId}
+        />
         <PersonList directors={directors} cast={cast} tmdbId={data.movie.tmdb_id} movieTitle={displayMovieName(data.movie)} />
 
         <CollectionLimitGrid
@@ -81,6 +110,8 @@ export default async function MovieDetailPage({ params }: MovieDetailPageProps) 
           scoreLabel="Similarity"
           emptyMessage="No similar movies were found for this item."
           rowMode={true}
+          detailContext="similar"
+          detailSourceItemId={itemId}
         />
       </section>
     </div>

@@ -434,15 +434,15 @@ class Option4ALSRecommender:
             if self.item_base_scores is not None
             else (self.global_mean + self.item_bias).astype(np.float32)
         )
-        preds = (
+        ranking_scores = (
             item_base_scores
             + self.user_bias[u_idx]
             + (self.item_factors @ user_vector)
         ).astype(np.float32)
-        preds = np.clip(preds, self.min_rating, self.max_rating)
+        display_scores = np.clip(ranking_scores, self.min_rating, self.max_rating).astype(np.float32)
 
         if exclude_seen:
-            preds = preds.copy()
+            ranking_scores = ranking_scores.copy()
             if seen_items is not None:
                 seen_item_indices = np.fromiter(
                     (self.item_to_idx.get(int(seen_item), -1) for seen_item in seen_items),
@@ -453,20 +453,20 @@ class Option4ALSRecommender:
             else:
                 seen_item_indices = self.user_seen_item_indices.get(user_id)
             if seen_item_indices is not None and seen_item_indices.size > 0:
-                preds[seen_item_indices] = -np.inf
+                ranking_scores[seen_item_indices] = -np.inf
 
         if n <= 0:
             return []
-        top_count = min(n, len(preds))
+        top_count = min(n, len(ranking_scores))
         if top_count <= 0:
             return []
-        candidate_idx = np.argpartition(-preds, top_count - 1)[:top_count]
-        top_idx = candidate_idx[np.argsort(-preds[candidate_idx])]
+        candidate_idx = np.argpartition(-ranking_scores, top_count - 1)[:top_count]
+        top_idx = candidate_idx[np.argsort(-ranking_scores[candidate_idx])]
 
         recs: List[Recommendation] = []
         for idx in top_idx:
-            if np.isfinite(preds[idx]):
-                recs.append(Recommendation(item_id=self.idx_to_item[int(idx)], score=float(preds[idx])))
+            if np.isfinite(ranking_scores[idx]):
+                recs.append(Recommendation(item_id=self.idx_to_item[int(idx)], score=float(display_scores[idx])))
         return recs
 
     def similar_items(self, item_id: int, n: int = 10) -> List[Recommendation]:

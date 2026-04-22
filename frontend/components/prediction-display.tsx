@@ -4,8 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { useUser } from "../context/user-context";
 import { getLongModelLabel } from "../lib/model-engine";
 
-export default function PredictionDisplay({ itemId }: { itemId: number }) {
+export default function PredictionDisplay({
+  itemId,
+  userIdOverride,
+}: {
+  itemId: number;
+  userIdOverride?: number;
+}) {
   const { userId } = useUser();
+  const effectiveUserId = userIdOverride ?? userId;
   const [prediction, setPrediction] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeEngine, setActiveEngine] = useState<string>("the active model");
@@ -18,7 +25,7 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
       setLoading(true);
       try {
         const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8001/api";
-        const res = await fetch(`${API_BASE}/predict/${userId}/${itemId}`);
+        const res = await fetch(`${API_BASE}/predict/${effectiveUserId}/${itemId}`);
         if (res.ok) {
           const data = await res.json();
           if (disposed || seq !== fetchSeqRef.current) return;
@@ -61,7 +68,7 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('streamx-engine-changed', fetchPrediction);
     };
-  }, [userId, itemId]);
+  }, [effectiveUserId, itemId]);
 
   if (loading) {
     return (
@@ -114,7 +121,7 @@ export default function PredictionDisplay({ itemId }: { itemId: number }) {
       </div>
       
       <div style={{ color: "var(--text-subtle)", fontSize: "0.85rem", maxWidth: "200px" }}>
-        Based on User {userId}'s history using {activeEngine}
+        Based on User {effectiveUserId}'s history using {activeEngine}
       </div>
     </div>
   );
