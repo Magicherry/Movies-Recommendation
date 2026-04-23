@@ -8,7 +8,6 @@ import HeroCarousel, { type HeroCarouselSource } from "../components/hero-carous
 import { useUser } from "../context/user-context";
 
 // Global cache to maintain state across navigations, enabling Next.js scroll restoration
-let globalFeatured: Movie[] = [];
 let globalRecs: Recommendation[] = [];
 let globalHistory: Movie[] = [];
 let globalTrending: Movie[] = [];
@@ -16,9 +15,7 @@ let globalUserId: number | null = null;
 let globalLastRefresh: string | null = null;
 let globalWatchAgainCount: number = 15;
 let globalTrendingCount: number = 15;
-let globalCarouselCount: number = 5;
 let globalCarouselIntervalMs: number = 30000;
-let globalCarouselSource: HeroCarouselSource = "trending";
 let globalCarouselSourceNote = "Personalized feed unavailable. Showing trending picks.";
 
 export default function HomePage() {
@@ -27,24 +24,20 @@ export default function HomePage() {
   const [metadataVersion, setMetadataVersion] = useState(0);
   const hasCache = globalUserId === userId && globalTrending.length > 0;
   const [loading, setLoading] = useState(!hasCache);
-  const [featuredMovies, setFeaturedMovies] = useState<Movie[]>(hasCache ? globalFeatured : []);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>(hasCache ? globalRecs : []);
   const [history, setHistory] = useState<Movie[]>(hasCache ? globalHistory : []);
   const [trending, setTrending] = useState<Movie[]>(hasCache ? globalTrending : []);
   const [carouselIntervalMs, setCarouselIntervalMs] = useState(hasCache ? globalCarouselIntervalMs : 30000);
-  const [carouselSource, setCarouselSource] = useState<HeroCarouselSource>(hasCache ? globalCarouselSource : "trending");
   const [carouselSourceNote, setCarouselSourceNote] = useState(hasCache ? globalCarouselSourceNote : "Loading recommendations...");
+  const [hoverPreviewMovie, setHoverPreviewMovie] = useState<Movie | null>(null);
 
   useEffect(() => {
     const handler = () => {
-      globalFeatured = [];
       globalRecs = [];
       globalHistory = [];
       globalTrending = [];
       globalLastRefresh = null;
-      globalCarouselCount = 5;
       globalCarouselIntervalMs = 30000;
-      globalCarouselSource = "trending";
       globalCarouselSourceNote = "Personalized feed unavailable. Showing trending picks.";
       setMetadataVersion((v) => v + 1);
     };
@@ -71,7 +64,6 @@ export default function HomePage() {
 
     async function loadData() {
       const hasVisibleContent =
-        featuredMovies.length > 0 ||
         recommendations.length > 0 ||
         history.length > 0 ||
         trending.length > 0;
@@ -83,8 +75,6 @@ export default function HomePage() {
       const watchAgainCount = Math.min(100, Math.max(5, savedWatchAgain ? parseInt(savedWatchAgain, 10) : 15));
       const savedTrending = localStorage.getItem("streamx-trending-count");
       const trendingCount = Math.min(100, Math.max(5, savedTrending ? parseInt(savedTrending, 10) : 15));
-      const savedCarouselCount = localStorage.getItem("streamx-carousel-count");
-      const carouselCount = Math.min(15, Math.max(1, savedCarouselCount ? parseInt(savedCarouselCount, 10) : 5));
       const savedCarouselInterval = localStorage.getItem("streamx-carousel-interval-seconds");
       const carouselIntervalMsValue = Math.min(120000, Math.max(5000, (savedCarouselInterval ? parseInt(savedCarouselInterval, 10) : 30) * 1000));
       const forceRefresh = localStorage.getItem("streamx-force-refresh");
@@ -97,14 +87,12 @@ export default function HomePage() {
         globalLastRefresh === forceRefresh &&
         globalWatchAgainCount === watchAgainCount &&
         globalTrendingCount === trendingCount &&
-        globalCarouselCount === carouselCount &&
         globalCarouselIntervalMs === carouselIntervalMsValue
       ) {
         // Data is already loaded and cached for this user with the correct count and model
         if (cancelled) return;
         setRecommendations(globalRecs);
         setCarouselIntervalMs(globalCarouselIntervalMs);
-        setCarouselSource(globalCarouselSource);
         setCarouselSourceNote(globalCarouselSourceNote);
         setLoading(false);
         return;
@@ -150,10 +138,8 @@ export default function HomePage() {
         setHistory(historySlice);
         globalHistory = historySlice;
 
-        let nextCarouselSource: HeroCarouselSource = "trending";
         let nextCarouselSourceNote = "No personalized results found. Showing trending picks.";
         if (recs.length > 0) {
-          nextCarouselSource = "personalized";
           nextCarouselSourceNote = "Tailored for your active profile.";
         } else if (recommendationResult.errorMessage) {
           const normalizedError = recommendationResult.errorMessage.toLowerCase();
@@ -163,18 +149,8 @@ export default function HomePage() {
         }
 
         const movies = moviesData.items;
-        if (recs.length > 0) {
-          setFeaturedMovies(recs.slice(0, carouselCount));
-          globalFeatured = recs.slice(0, carouselCount);
-        } else {
-          setFeaturedMovies(movies.slice(0, carouselCount));
-          globalFeatured = movies.slice(0, carouselCount);
-        }
-        globalCarouselCount = carouselCount;
         globalCarouselIntervalMs = carouselIntervalMsValue;
-        setCarouselSource(nextCarouselSource);
         setCarouselSourceNote(nextCarouselSourceNote);
-        globalCarouselSource = nextCarouselSource;
         globalCarouselSourceNote = nextCarouselSourceNote;
 
         setTrending(movies.slice(0, trendingCount));
@@ -197,7 +173,11 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [userId, metadataVersion, featuredMovies.length, recommendations.length, history.length, trending.length]);
+  }, [userId, metadataVersion, recommendations.length, history.length, trending.length]);
+
+  useEffect(() => {
+    setHoverPreviewMovie(null);
+  }, [userId, recommendations]);
 
   if (loading) {
     return (
@@ -226,15 +206,20 @@ export default function HomePage() {
     }
   };
 
+  const heroMovies: Movie[] = recommendations.length > 0 ? recommendations : trending;
+  const heroSource: HeroCarouselSource = recommendations.length > 0 ? "personalized" : "trending";
+  const heroDetailUserId = heroSource === "personalized" ? userId : undefined;
+
   return (
     <>
       <HeroCarousel 
-        movies={featuredMovies} 
-        source={carouselSource} 
+        movies={heroMovies} 
+        source={heroSource} 
         sourceNote={carouselSourceNote} 
         autoAdvanceMs={carouselIntervalMs} 
         onExploreMore={handleExploreMore}
-        detailUserId={carouselSource === "personalized" ? userId : undefined}
+        detailUserId={heroDetailUserId}
+        previewMovie={hoverPreviewMovie}
       />
 
       <section id="browse" className="content-padding" style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
@@ -249,6 +234,10 @@ export default function HomePage() {
               rowResetKey={userId}
               detailContext="recommended"
               detailUserId={userId}
+              onMovieHoverStart={setHoverPreviewMovie}
+              onMovieHoverEnd={(movie) => {
+                setHoverPreviewMovie((current) => (current?.item_id === movie.item_id ? null : current));
+              }}
             />
           </div>
         )}

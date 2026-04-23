@@ -19,6 +19,33 @@ export async function generateMetadata({ params, searchParams }: PersonPageProps
   };
 }
 
+function parseDateParts(value?: string | null): { year: number; month: number; day: number } | null {
+  if (!value) return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+  };
+}
+
+function calculateAge(birthday?: string | null, deathday?: string | null): number | null {
+  const birth = parseDateParts(birthday);
+  if (!birth) return null;
+  const end = parseDateParts(deathday) ?? {
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1,
+    day: new Date().getDate(),
+  };
+
+  let age = end.year - birth.year;
+  if (end.month < birth.month || (end.month === birth.month && end.day < birth.day)) {
+    age -= 1;
+  }
+  return age >= 0 ? age : null;
+}
+
 export default async function PersonPage({ params, searchParams }: PersonPageProps) {
   const personId = Number(params.id);
   const name = searchParams.name || "";
@@ -32,6 +59,7 @@ export default async function PersonPage({ params, searchParams }: PersonPagePro
   const displayName = person?.name || name || "Unknown Person";
   const biography = person?.biography || "No biography available.";
   const profileUrl = person?.profile_path ? `https://image.tmdb.org/t/p/w500${person.profile_path}` : null;
+  const age = calculateAge(person?.birthday, person?.deathday);
 
   return (
     <div className="page-transition">
@@ -74,6 +102,18 @@ export default async function PersonPage({ params, searchParams }: PersonPagePro
                   <>
                     <span style={{ opacity: 0.5 }}>•</span>
                     <span>Born: {person.birthday}</span>
+                  </>
+                )}
+                {typeof age === "number" && (
+                  <>
+                    <span style={{ opacity: 0.5 }}>•</span>
+                    <span>{person?.deathday ? `Age at death: ${age}` : `Age: ${age}`}</span>
+                  </>
+                )}
+                {person?.deathday && (
+                  <>
+                    <span style={{ opacity: 0.5 }}>•</span>
+                    <span>Died: {person.deathday}</span>
                   </>
                 )}
                 {person.place_of_birth && (

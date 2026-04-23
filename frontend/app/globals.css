@@ -415,7 +415,7 @@ body {
 }
 
 .hero-content {
-  max-width: 600px;
+  max-width: 800px;
   z-index: 10;
 }
 .hero-source-row {
@@ -471,6 +471,7 @@ body {
   font-size: 1.1rem;
   color: var(--text-main);
   line-height: 1.5;
+  max-width: 58ch;
   margin: 0 0 24px;
   text-shadow: 1px 1px 4px rgba(0,0,0,0.5);
   display: -webkit-box;
@@ -866,30 +867,79 @@ body {
   bottom: 30px;
   left: 50%;
   transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
   z-index: 20;
 }
+.hero-carousel-indicators-viewport {
+  --hero-indicator-slot-size: 22px;
+  --hero-indicator-gap: 6px;
+  --hero-indicator-edge-safe-left: 0px;
+  --hero-indicator-edge-safe-right: 0px;
+  --hero-indicator-mask-left: 10px;
+  --hero-indicator-mask-right: 6px;
+  --hero-indicator-pitch: calc(var(--hero-indicator-slot-size) + var(--hero-indicator-gap));
+  width: calc(
+    (var(--visible-slots) * var(--hero-indicator-pitch)) -
+    var(--hero-indicator-gap) +
+    var(--hero-indicator-edge-safe-left) +
+    var(--hero-indicator-edge-safe-right)
+  );
+  box-sizing: border-box;
+  padding-left: var(--hero-indicator-edge-safe-left);
+  padding-right: var(--hero-indicator-edge-safe-right);
+  overflow: hidden;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    rgba(0, 0, 0, 1) var(--hero-indicator-mask-left),
+    rgba(0, 0, 0, 1) calc(100% - var(--hero-indicator-mask-right)),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    rgba(0, 0, 0, 1) var(--hero-indicator-mask-left),
+    rgba(0, 0, 0, 1) calc(100% - var(--hero-indicator-mask-right)),
+    transparent 100%
+  );
+}
+.hero-carousel-indicators-track {
+  display: flex;
+  align-items: center;
+  gap: var(--hero-indicator-gap);
+  transform: translateX(calc(var(--track-offset) * -1 * var(--hero-indicator-pitch)));
+  transition: transform 0.35s ease;
+  will-change: transform;
+}
+.hero-indicator-slot {
+  width: var(--hero-indicator-slot-size);
+  min-width: var(--hero-indicator-slot-size);
+  display: flex;
+  justify-content: center;
+}
 .hero-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.4);
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.32);
   border: none;
   cursor: pointer;
   padding: 0;
-  transition: width 0.3s ease, background 0.3s ease, transform 0.2s ease;
+  transition: width 0.3s ease, height 0.3s ease, background 0.3s ease, opacity 0.3s ease, transform 0.2s ease;
+  opacity: 0.9;
 }
 .hero-indicator:hover {
   background: rgba(255, 255, 255, 0.6);
-  transform: scale(1.2);
+  transform: scale(1.12);
+  opacity: 1;
 }
 .hero-indicator:active {
   transform: scale(0.9);
 }
 .hero-indicator.active {
   background: rgba(255, 255, 255, 0.8);
-  width: 24px;
+  width: 22px;
+  height: 10px;
+  opacity: 1;
   transform: scale(1);
 }
 

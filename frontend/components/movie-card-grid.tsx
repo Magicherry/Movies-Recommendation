@@ -33,6 +33,8 @@ type MovieCardGridProps = {
   detailUserId?: number;
   detailSourceItemId?: number;
   rowResetKey?: string | number;
+  onMovieHoverStart?: (movie: MovieCardItem) => void;
+  onMovieHoverEnd?: (movie: MovieCardItem) => void;
 };
 
 // Generates a deterministic gradient based on item_id
@@ -150,6 +152,8 @@ export default function MovieCardGrid({
   detailUserId,
   detailSourceItemId,
   rowResetKey,
+  onMovieHoverStart,
+  onMovieHoverEnd,
 }: MovieCardGridProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -261,6 +265,8 @@ export default function MovieCardGrid({
       <div
         key={movie.item_id}
         className={`movie-card-wrapper${isMenuOpen ? " movie-card-wrapper--menu-open" : ""}`}
+        onMouseEnter={() => onMovieHoverStart?.(mergedMovie)}
+        onMouseLeave={() => onMovieHoverEnd?.(mergedMovie)}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();

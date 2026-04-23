@@ -1,11 +1,20 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type CSSProperties } from "react";
 import Link from "next/link";
 import { Movie, displayMovieName } from "../lib/api";
 import { buildMovieDetailHref } from "../lib/movie-detail-context";
 
 export type HeroCarouselSource = "personalized" | "trending";
+
+const HERO_INDICATOR_VISIBLE_SLOTS = 7;
+
+function getIndicatorTrackOffset(total: number, activeIndex: number, visibleSlots: number): number {
+  const safeActiveIndex = Math.max(0, Math.min(activeIndex, total - 1));
+  const centerSlot = Math.floor(visibleSlots / 2);
+  const maxOffset = Math.max(0, total - visibleSlots);
+  return Math.max(0, Math.min(safeActiveIndex - centerSlot, maxOffset));
+}
 
 type HeroCarouselProps = {
   movies: Movie[];
@@ -14,6 +23,7 @@ type HeroCarouselProps = {
   autoAdvanceMs?: number;
   onExploreMore?: () => void;
   detailUserId?: number;
+  previewMovie?: Movie | null;
 };
 
 export default function HeroCarousel({
@@ -23,10 +33,12 @@ export default function HeroCarousel({
   autoAdvanceMs = 30000,
   onExploreMore,
   detailUserId,
+  previewMovie = null,
 }: HeroCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const intervalMs = Math.min(120000, Math.max(5000, autoAdvanceMs));
+  const isPreviewActive = Boolean(previewMovie);
 
   useEffect(() => {
     if (currentIndex >= movies.length) {
@@ -34,13 +46,21 @@ export default function HeroCarousel({
     }
   }, [currentIndex, movies.length]);
 
-    useEffect(() => {
-      if (isPaused) return;
-      const interval = setInterval(() => {
-        setCurrentIndex((prev) => (prev + 1) % movies.length);
-      }, intervalMs);
-      return () => clearInterval(interval);
-    }, [isPaused, movies.length, intervalMs]);
+  useEffect(() => {
+    if (!previewMovie) return;
+    const nextIndex = movies.findIndex((movie) => movie.item_id === previewMovie.item_id);
+    if (nextIndex >= 0 && nextIndex !== currentIndex) {
+      setCurrentIndex(nextIndex);
+    }
+  }, [previewMovie, movies, currentIndex]);
+
+  useEffect(() => {
+    if (isPaused || isPreviewActive || movies.length < 1) return;
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % movies.length);
+    }, intervalMs);
+    return () => clearInterval(interval);
+  }, [isPaused, isPreviewActive, movies.length, intervalMs, currentIndex]);
 
   const goPrev = useCallback(() => {
     setCurrentIndex((prev) => (prev === 0 ? movies.length - 1 : prev - 1));
@@ -52,7 +72,22 @@ export default function HeroCarousel({
 
   if (!movies || movies.length === 0) return null;
 
-  const featured = movies[currentIndex];
+  const featured = previewMovie ?? movies[currentIndex];
+  const previewIndex = previewMovie ? movies.findIndex((movie) => movie.item_id === previewMovie.item_id) : -1;
+  const activeIndicatorIndex = previewIndex >= 0 ? previewIndex : currentIndex;
+  const visibleIndicatorSlots = Math.min(movies.length, HERO_INDICATOR_VISIBLE_SLOTS);
+  const indicatorTrackOffset = getIndicatorTrackOffset(movies.length, activeIndicatorIndex, visibleIndicatorSlots);
+  const maxIndicatorTrackOffset = Math.max(0, movies.length - visibleIndicatorSlots);
+  const isIndicatorTrackAtStart = indicatorTrackOffset === 0;
+  const isIndicatorTrackAtEnd = indicatorTrackOffset === maxIndicatorTrackOffset;
+  const indicatorViewportStyle = {
+    "--visible-slots": visibleIndicatorSlots,
+    "--track-offset": indicatorTrackOffset,
+    "--hero-indicator-edge-safe-left": isIndicatorTrackAtStart ? "10px" : "0px",
+    "--hero-indicator-edge-safe-right": isIndicatorTrackAtEnd ? "18px" : "0px",
+    "--hero-indicator-mask-left": isIndicatorTrackAtStart ? "0px" : "10px",
+    "--hero-indicator-mask-right": isIndicatorTrackAtEnd ? "0px" : "6px",
+  } as CSSProperties;
   const sourceLabel = source === "personalized" ? "Personalized Picks" : "Trending Picks";
   const detailHref = buildMovieDetailHref(featured.item_id, {
     context: source === "personalized" ? "recommended" : "neutral",
@@ -162,14 +197,20 @@ export default function HeroCarousel({
       
       {/* Indicators */}
       <div className="hero-carousel-indicators">
-        {movies.map((_, idx) => (
-          <button
-            key={idx}
-            className={`hero-indicator ${idx === currentIndex ? "active" : ""}`}
-            onClick={() => setCurrentIndex(idx)}
-            aria-label={`Go to slide ${idx + 1}`}
-          />
-        ))}
+        <div className="hero-carousel-indicators-viewport" style={indicatorViewportStyle}>
+          <div className="hero-carousel-indicators-track">
+            {movies.map((_, idx) => (
+              <div key={idx} className="hero-indicator-slot">
+                <button
+                  className={`hero-indicator ${idx === activeIndicatorIndex ? "active" : ""}`}
+                  onClick={() => setCurrentIndex(idx)}
+                  aria-label={`Go to slide ${idx + 1}`}
+                  aria-current={idx === activeIndicatorIndex ? "true" : undefined}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

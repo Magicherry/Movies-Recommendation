@@ -35,9 +35,6 @@ const STEP_REC = 5;
 const MIN_COL = 5;
 const MAX_COL = 100;
 const STEP_COL = 5;
-const MIN_CAROUSEL_COUNT = 1;
-const MAX_CAROUSEL_COUNT = 15;
-const STEP_CAROUSEL_COUNT = 1;
 const MIN_CAROUSEL_SECONDS = 5;
 const MAX_CAROUSEL_SECONDS = 120;
 const STEP_CAROUSEL_SECONDS = 5;
@@ -53,7 +50,6 @@ const APPEARANCE_DEFAULTS: Record<string, string> = {
   "streamx-trending-count": "15",
   "streamx-more-like-this-count": "15",
   "streamx-person-movies-count": "15",
-  "streamx-carousel-count": "5",
   "streamx-carousel-interval-seconds": "30",
   "streamx-show-card-scores": "true",
   "streamx-show-brand-algorithm": "true",
@@ -95,7 +91,6 @@ export default function AppearanceSettings() {
   const [trendingCount, setTrendingCount] = useState(15);
   const [moreLikeThisCount, setMoreLikeThisCount] = useState(15);
   const [personMoviesCount, setPersonMoviesCount] = useState(15);
-  const [carouselCount, setCarouselCount] = useState(5);
   const [carouselIntervalSeconds, setCarouselIntervalSeconds] = useState(30);
   const [countsExpanded, setCountsExpanded] = useState(false);
 
@@ -127,7 +122,6 @@ export default function AppearanceSettings() {
     setTrendingCount(parseStoredNumber("streamx-trending-count", 15, MIN_COL, MAX_COL));
     setMoreLikeThisCount(parseStoredNumber("streamx-more-like-this-count", 15, MIN_COL, MAX_COL));
     setPersonMoviesCount(parseStoredNumber("streamx-person-movies-count", 15, MIN_COL, MAX_COL));
-    setCarouselCount(parseStoredNumber("streamx-carousel-count", 5, MIN_CAROUSEL_COUNT, MAX_CAROUSEL_COUNT));
     setCarouselIntervalSeconds(
       parseStoredNumber("streamx-carousel-interval-seconds", 30, MIN_CAROUSEL_SECONDS, MAX_CAROUSEL_SECONDS)
     );
@@ -185,10 +179,6 @@ export default function AppearanceSettings() {
   );
   const personMoviesHandlers = useMemo(
     () => makeCountHandlers(setPersonMoviesCount, "streamx-person-movies-count", MIN_COL, MAX_COL),
-    [makeCountHandlers]
-  );
-  const carouselCountHandlers = useMemo(
-    () => makeCountHandlers(setCarouselCount, "streamx-carousel-count", MIN_CAROUSEL_COUNT, MAX_CAROUSEL_COUNT),
     [makeCountHandlers]
   );
   const carouselIntervalHandlers = useMemo(
@@ -295,6 +285,7 @@ export default function AppearanceSettings() {
     for (const [key, value] of Object.entries(APPEARANCE_DEFAULTS)) {
       localStorage.setItem(key, value);
     }
+    localStorage.removeItem("streamx-carousel-count");
     document.documentElement.style.setProperty("--brand", APPEARANCE_DEFAULTS["streamx-theme-color"]);
     document.documentElement.style.setProperty("--brand-hover", "#55b400");
     document.documentElement.style.setProperty("--bg-base", APPEARANCE_DEFAULTS["streamx-bg-color"]);
@@ -675,7 +666,7 @@ export default function AppearanceSettings() {
 
       <div className="setting-group setting-group-block">
         <label>Hero Carousel</label>
-        <p className="setting-desc">Configure autoplay interval and number of slides shown on the home banner.</p>
+        <p className="setting-desc">Configure autoplay interval for the home banner, which follows the Top Picks row.</p>
         <div className="setting-block-body">
         <div className="setting-row">
           <div className="setting-row-info">
@@ -703,36 +694,6 @@ export default function AppearanceSettings() {
               className="settings-number-input"
               style={{ width: "80px", flexShrink: 0 }}
               aria-label="Carousel slide duration in seconds"
-            />
-          </div>
-        </div>
-
-        <div className="setting-row">
-          <div className="setting-row-info">
-            <h3>Slide Count</h3>
-            <p>How many movies are included in the home carousel.</p>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "nowrap" }}>
-            <input
-              type="range"
-              min={MIN_CAROUSEL_COUNT}
-              max={MAX_CAROUSEL_COUNT}
-              step={STEP_CAROUSEL_COUNT}
-              value={carouselCount}
-              onChange={carouselCountHandlers.onChange}
-              className="range-slider"
-              style={{ "--slider-progress": `${((carouselCount - MIN_CAROUSEL_COUNT) / (MAX_CAROUSEL_COUNT - MIN_CAROUSEL_COUNT)) * 100}%` } as React.CSSProperties}
-            />
-            <input
-              type="number"
-              min={MIN_CAROUSEL_COUNT}
-              max={MAX_CAROUSEL_COUNT}
-              value={carouselCount}
-              onChange={carouselCountHandlers.onInputChange}
-              onBlur={(e) => carouselCountHandlers.onBlur(e, carouselCount)}
-              className="settings-number-input"
-              style={{ width: "80px", flexShrink: 0 }}
-              aria-label="Carousel slide count"
             />
           </div>
         </div>
