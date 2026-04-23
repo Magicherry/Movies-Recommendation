@@ -35,6 +35,8 @@ type MovieCardGridProps = {
   rowResetKey?: string | number;
   onMovieHoverStart?: (movie: MovieCardItem) => void;
   onMovieHoverEnd?: (movie: MovieCardItem) => void;
+  /** When set, this item gets the same zoom/overlay styling as hover (e.g. synced with hero carousel). */
+  highlightedItemId?: number | null;
 };
 
 // Generates a deterministic gradient based on item_id
@@ -154,6 +156,7 @@ export default function MovieCardGrid({
   rowResetKey,
   onMovieHoverStart,
   onMovieHoverEnd,
+  highlightedItemId = null,
 }: MovieCardGridProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -256,6 +259,7 @@ export default function MovieCardGrid({
   const renderCardWrapper = (movie: MovieCardItem) => {
     const mergedMovie = withImageOverrides(movie);
     const isMenuOpen = contextMenu?.movie.item_id === movie.item_id;
+    const isHeroSynced = highlightedItemId != null && highlightedItemId === movie.item_id;
     const href = buildMovieDetailHref(mergedMovie.item_id, {
       context: detailContext,
       userId: detailUserId,
@@ -264,7 +268,7 @@ export default function MovieCardGrid({
     return (
       <div
         key={movie.item_id}
-        className={`movie-card-wrapper${isMenuOpen ? " movie-card-wrapper--menu-open" : ""}`}
+        className={`movie-card-wrapper${isMenuOpen ? " movie-card-wrapper--menu-open" : ""}${isHeroSynced ? " movie-card-wrapper--hero-sync" : ""}`}
         onMouseEnter={() => onMovieHoverStart?.(mergedMovie)}
         onMouseLeave={() => onMovieHoverEnd?.(mergedMovie)}
         onContextMenu={(e) => {

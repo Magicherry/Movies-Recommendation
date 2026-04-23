@@ -1,6 +1,11 @@
 <h2 align="center">
   StreamX - Movies Recommender System <br/>
 </h2>
+
+<p align="center">
+  A full-stack application implementing a custom Recommender System with a modern web interface.
+</p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/Next.js-14.2-0f172a?logo=nextdotjs&logoColor=white">
   <img src="https://img.shields.io/badge/React-18.x-0f172a?logo=react&logoColor=61DAFB">
@@ -9,16 +14,17 @@
   <img src="https://img.shields.io/badge/NumPy-Data%20Processing-0f172a?logo=numpy&logoColor=013243">
 </p>
 
-<p align="center">
-  A full-stack application implementing a custom Recommender System with a modern web interface.
-</p>
+## Report & Slides
+
+- **Report (PDF):** [FinalReport/report.pdf](FinalReport/report.pdf)
+- **Slides (PDF):** [FinalReport/slide/Comparative Study of Collaborative Filtering Methods for Movie Recommendation.pdf](FinalReport/slide/Comparative%20Study%20of%20Collaborative%20Filtering%20Methods%20for%20Movie%20Recommendation.pdf)
 
 ## Features
 
 - **Robust Recommendation Engine**
-  - **Matrix Factorization**: Custom implementations trained with Numba-accelerated Stochastic Gradient Descent (SGD, Option 1) and Sparse CSR-block Alternating Least Squares (MF-ALS, Option 4). Both feature massive loop parallelization and dynamic Early Stopping for millisecond-scale processing on 27M+ ratings.
+  - **Matrix Factorization**: PyTorch mini-batch SGD (CUDA/MPS if available) and ALS on sparse CSR data with Numba-accelerated ALS steps. Early stopping on a validation split; suitable for 27M+ ratings.
   - **Deep Neural CF**: Hybrid deep learning model with Text CNN for title feature extraction.
-  - **Matrix SVD**: Closed-form SVD latent factors calibrated with Ridge/Lasso regression.
+  - **Matrix SVD**: Closed-form SVD latent factors calibrated with Ridge/Lasso/KNN regression.
 - **Automated Data Processing**
   - Per-user random 80/20 data split for reliable training and testing.
 - **Comprehensive Evaluation Metrics**
@@ -103,6 +109,7 @@ python -m scripts.train_and_evaluate --model-type option1 --dataset-dir dataset/
 python -m scripts.train_and_evaluate --model-type option2 --dataset-dir dataset/ml-latest
 python -m scripts.train_and_evaluate --model-type option3_ridge --dataset-dir dataset/ml-latest
 python -m scripts.train_and_evaluate --model-type option3_lasso --dataset-dir dataset/ml-latest
+python -m scripts.train_and_evaluate --model-type option3_KNN --dataset-dir dataset/ml-latest
 python -m scripts.train_and_evaluate --model-type option4 --dataset-dir dataset/ml-latest
 ```
 

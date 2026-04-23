@@ -1162,10 +1162,11 @@ body {
   display: flex;
   flex-direction: column;
 }
-.movie-card-wrapper:hover {
+.movie-card-wrapper:hover,
+.movie-card-wrapper--hero-sync {
   z-index: 10;
 }
-:is(.movie-card-wrapper:hover, .movie-card-wrapper--menu-open) .poster-card {
+:is(.movie-card-wrapper:hover, .movie-card-wrapper--menu-open, .movie-card-wrapper--hero-sync) .poster-card {
   transform: scale(1.05);
   z-index: 10;
 }
@@ -1183,7 +1184,7 @@ body {
   /* Opacity fade uses a longer ease than the shared glass transition */
   transition: opacity 0.3s ease, background 0.2s var(--glass-icon-btn-ease), border-color 0.2s var(--glass-icon-btn-ease), box-shadow 0.2s var(--glass-icon-btn-ease), transform 0.2s var(--glass-icon-btn-ease), color 0.2s var(--glass-icon-btn-ease);
 }
-:is(.movie-card-wrapper:hover, .movie-card-wrapper--menu-open) .movie-context-menu-trigger--card {
+:is(.movie-card-wrapper:hover, .movie-card-wrapper--menu-open, .movie-card-wrapper--hero-sync) .movie-context-menu-trigger--card {
   opacity: 1;
   pointer-events: auto;
 }
@@ -1195,11 +1196,11 @@ body {
 }
 
 /* Card ⋯: clear hover zoom (base rule sets transform:none; icon svg scale is disabled so only the button scales) */
-:is(.movie-card-wrapper:hover, .movie-card-wrapper--menu-open) .movie-context-menu-trigger--card:hover {
+:is(.movie-card-wrapper:hover, .movie-card-wrapper--menu-open, .movie-card-wrapper--hero-sync) .movie-context-menu-trigger--card:hover {
   transform: scale(1.1);
   box-shadow: var(--glass-icon-btn-shadow-hover);
 }
-:is(.movie-card-wrapper:hover, .movie-card-wrapper--menu-open) .movie-context-menu-trigger--card:active {
+:is(.movie-card-wrapper:hover, .movie-card-wrapper--menu-open, .movie-card-wrapper--hero-sync) .movie-context-menu-trigger--card:active {
   transform: scale(0.95);
   box-shadow: var(--glass-icon-btn-shadow-active);
 }
@@ -1327,7 +1328,7 @@ body {
   transition: box-shadow 0.3s ease, border-color 0.3s ease;
 }
 
-:is(.movie-card-wrapper:hover, .movie-card-wrapper--menu-open) .poster-bg::before {
+:is(.movie-card-wrapper:hover, .movie-card-wrapper--menu-open, .movie-card-wrapper--hero-sync) .poster-bg::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -1355,7 +1356,8 @@ body {
   z-index: 1;
 }
 .movie-card-wrapper:hover .poster-overlay,
-.movie-card-wrapper--menu-open .poster-overlay {
+.movie-card-wrapper--menu-open .poster-overlay,
+.movie-card-wrapper--hero-sync .poster-overlay {
   opacity: 0.95;
 }
 
@@ -1369,7 +1371,8 @@ body {
   transition: opacity 0.3s;
 }
 .movie-card-wrapper:hover .poster-info-overlay,
-.movie-card-wrapper--menu-open .poster-info-overlay {
+.movie-card-wrapper--menu-open .poster-info-overlay,
+.movie-card-wrapper--hero-sync .poster-info-overlay {
   opacity: 1;
 }
 

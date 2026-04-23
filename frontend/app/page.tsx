@@ -30,6 +30,11 @@ export default function HomePage() {
   const [carouselIntervalMs, setCarouselIntervalMs] = useState(hasCache ? globalCarouselIntervalMs : 30000);
   const [carouselSourceNote, setCarouselSourceNote] = useState(hasCache ? globalCarouselSourceNote : "Loading recommendations...");
   const [hoverPreviewMovie, setHoverPreviewMovie] = useState<Movie | null>(null);
+  const [heroFeaturedItemId, setHeroFeaturedItemId] = useState<number | null>(null);
+
+  const handleHeroFeaturedMovie = useCallback((movie: Movie) => {
+    setHeroFeaturedItemId(movie.item_id);
+  }, []);
 
   useEffect(() => {
     const handler = () => {
@@ -177,6 +182,7 @@ export default function HomePage() {
 
   useEffect(() => {
     setHoverPreviewMovie(null);
+    setHeroFeaturedItemId(null);
   }, [userId, recommendations]);
 
   if (loading) {
@@ -220,6 +226,7 @@ export default function HomePage() {
         onExploreMore={handleExploreMore}
         detailUserId={heroDetailUserId}
         previewMovie={hoverPreviewMovie}
+        onFeaturedMovieChange={handleHeroFeaturedMovie}
       />
 
       <section id="browse" className="content-padding" style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
@@ -234,6 +241,7 @@ export default function HomePage() {
               rowResetKey={userId}
               detailContext="recommended"
               detailUserId={userId}
+              highlightedItemId={heroFeaturedItemId}
               onMovieHoverStart={setHoverPreviewMovie}
               onMovieHoverEnd={(movie) => {
                 setHoverPreviewMovie((current) => (current?.item_id === movie.item_id ? null : current));

@@ -24,6 +24,8 @@ type HeroCarouselProps = {
   onExploreMore?: () => void;
   detailUserId?: number;
   previewMovie?: Movie | null;
+  /** Called when the visible hero movie changes (auto-advance, arrows, indicators, or preview sync). */
+  onFeaturedMovieChange?: (movie: Movie) => void;
 };
 
 export default function HeroCarousel({
@@ -34,6 +36,7 @@ export default function HeroCarousel({
   onExploreMore,
   detailUserId,
   previewMovie = null,
+  onFeaturedMovieChange,
 }: HeroCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -61,6 +64,13 @@ export default function HeroCarousel({
     }, intervalMs);
     return () => clearInterval(interval);
   }, [isPaused, isPreviewActive, movies.length, intervalMs, currentIndex]);
+
+  useEffect(() => {
+    if (!onFeaturedMovieChange || !movies || movies.length === 0) return;
+    const safeIndex = Math.max(0, Math.min(currentIndex, movies.length - 1));
+    const next = previewMovie ?? movies[safeIndex];
+    if (next) onFeaturedMovieChange(next);
+  }, [onFeaturedMovieChange, previewMovie, movies, currentIndex, movies]);
 
   const goPrev = useCallback(() => {
     setCurrentIndex((prev) => (prev === 0 ? movies.length - 1 : prev - 1));
