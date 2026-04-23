@@ -1,8 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, PieChart, Pie, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from "recharts";
 import { displayMovieTitle } from "../../../lib/api";
+
+interface HistBin {
+  label: string;
+  count: number;
+  binStart: number;
+  binEnd: number;
+  xMid: number;
+}
 
 interface DbStats {
   total_movies: number;
@@ -13,9 +21,88 @@ interface DbStats {
   rating_distribution: { rating: string; count: number }[];
   movies_by_year: { year: string; count: number }[];
   top_rated_movies: { title: string; count: number }[];
+  user_activity_histogram?: HistBin[];
+  item_popularity_histogram?: HistBin[];
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1', '#a4de6c', '#d0ed57'];
+const AXIS_LINE = { stroke: "var(--border-soft)" as const };
+const AXIS_TICK = { fill: "var(--text-subtle)", fontSize: 11 };
+
+function formatCountTick(v: number) {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 10_000) return `${Math.round(v / 1_000)}k`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}k`;
+  return String(v);
+}
+
+function formatTooltipCount(value: unknown) {
+  if (value == null) return ["—", "Count"];
+  if (typeof value === "number") return [value.toLocaleString(), "Count"];
+  return [String(value), "Count"];
+}
+
+const tooltipBase = (seriesColor: string) => ({
+  contentStyle: {
+    backgroundColor: "var(--chart-tooltip-bg)",
+    border: "var(--chart-tooltip-border)",
+    borderRadius: "var(--chart-tooltip-radius)",
+  },
+  labelStyle: { color: "var(--text-subtle)", fontSize: 12, marginBottom: 4 } as const,
+  itemStyle: { color: seriesColor, fontSize: 13, fontWeight: 600 } as const,
+  formatter: formatTooltipCount,
+  cursor: { fill: "var(--chart-cursor-fill)" } as const,
+  wrapperStyle: { outline: "none" } as const,
+});
+
+const tooltipLineYear = {
+  contentStyle: {
+    backgroundColor: "var(--chart-tooltip-bg)",
+    border: "var(--chart-tooltip-border)",
+    borderRadius: "var(--chart-tooltip-radius)",
+  },
+  labelStyle: { color: "var(--text-subtle)", fontSize: 12, marginBottom: 4 } as const,
+  itemStyle: { color: "var(--chart-db-year)" } as const,
+  formatter: formatTooltipCount,
+  wrapperStyle: { outline: "none" } as const,
+};
+
+function histLabelFormatter(
+  _label: string,
+  payload: unknown,
+  perUnit: "user" | "movie"
+) {
+  const arr = payload as Array<{ payload?: HistBin }> | undefined;
+  const row = arr?.[0]?.payload;
+  if (row && typeof row.binStart === "number" && typeof row.binEnd === "number") {
+    const u = perUnit === "user" ? "user" : "movie";
+    return `${Math.round(row.binStart)} – ${Math.round(row.binEnd)} ratings per ${u}`;
+  }
+  return "";
+}
+
+/** For log Y: Recharts log scale cannot use 0; use null to omit the bar; `count` remains for tooltips */
+function histRowsForLogBar(rows: HistBin[]) {
+  return rows.map((d) => ({
+    ...d,
+    countLog: d.count > 0 ? d.count : (null as number | null),
+  }));
+}
+
+// Recharts Tooltip formatter typing is overly strict; we only need payload.count for the true total
+function histTooltipValueFormatter(
+  _value: unknown,
+  name: unknown,
+  item: unknown
+): [string, string] {
+  const payload = (item as { payload?: HistBin } | undefined)?.payload;
+  const raw = payload?.count;
+  const label = typeof name === "string" ? name : "Count";
+  if (typeof raw === "number") return [raw.toLocaleString(), label];
+  return [String(_value != null ? _value : "0"), label];
+}
+
+/** Bottom row (genre + rating): same chart height so the 2×2 grid aligns */
+const DASHBOARD_BOTTOM_ROW_CHART_H = 360;
 
 export default function DashboardStats() {
   const [stats, setStats] = useState<DbStats | null>(null);
@@ -374,84 +461,277 @@ export default function DashboardStats() {
 
       {stats && (
         <>
-          <div className="setting-group">
-            <label>Top Genres Distribution</label>
-            <p className="setting-desc">The distribution of movies across the most popular genres.</p>
-            <div className="chart-wrapper" style={{ marginTop: '16px' }}>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={stats.top_genres} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
-                  <XAxis dataKey="name" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                  <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
-                    itemStyle={{ color: 'var(--brand)' }}
-                    cursor={{ fill: 'var(--chart-cursor-fill)' }}
-                  />
-                  <Bar dataKey="count" fill="var(--brand)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+        <div className="setting-group">
+          <label>Data distributions</label>
+          <p className="setting-desc">Histograms and genre mix from the loaded ratings. Long tails are typical of collaborative data.</p>
+          <div className="db-dashboard-grid">
+            <div className="db-dashboard-cell">
+              <div className="chart-wrapper settings-db-charts db-chart-card">
+                <h4 className="db-chart-title">User activity distribution</h4>
+                <p className="setting-desc">Number of users by how many ratings each user submitted.</p>
+                {stats.user_activity_histogram && stats.user_activity_histogram.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={320}>
+                    <BarChart
+                      data={histRowsForLogBar(stats.user_activity_histogram)}
+                      margin={{ top: 6, right: 8, left: 2, bottom: 28 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
+                      <XAxis
+                        dataKey="label"
+                        axisLine={AXIS_LINE}
+                        tickLine={false}
+                        tick={AXIS_TICK}
+                        interval={3}
+                        height={46}
+                        angle={-40}
+                        textAnchor="end"
+                        tickMargin={4}
+                        label={{ value: "Ratings per user", position: "bottom", offset: 10, fill: "var(--text-subtle)", fontSize: 11 }}
+                      />
+                      <YAxis
+                        type="number"
+                        scale="log"
+                        domain={[1, "auto"]}
+                        allowDataOverflow
+                        axisLine={AXIS_LINE}
+                        tickLine={false}
+                        tick={AXIS_TICK}
+                        width={52}
+                        tickFormatter={(v: number) => formatCountTick(v)}
+                        label={{ value: "Users (log scale)", angle: -90, position: "insideLeft", fill: "var(--text-subtle)", fontSize: 11 }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "var(--chart-tooltip-bg)",
+                          border: "var(--chart-tooltip-border)",
+                          borderRadius: "var(--chart-tooltip-radius)",
+                        }}
+                        labelStyle={{ color: "var(--text-subtle)", fontSize: 12, marginBottom: 4 }}
+                        itemStyle={{ color: "var(--chart-hist-user)", fontSize: 13, fontWeight: 600 }}
+                        formatter={histTooltipValueFormatter}
+                        labelFormatter={(l, p) => histLabelFormatter(l, p, "user")}
+                        cursor={{ fill: "var(--chart-cursor-fill)" }}
+                        wrapperStyle={{ outline: "none" }}
+                      />
+                      <Bar
+                        dataKey="countLog"
+                        name="Users"
+                        fill="var(--chart-hist-user)"
+                        radius={[2, 2, 0, 0]}
+                        maxBarSize={14}
+                        isAnimationActive={false}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="db-chart-empty">No histogram data</div>
+                )}
+              </div>
+            </div>
+            <div className="db-dashboard-cell">
+              <div className="chart-wrapper settings-db-charts db-chart-card">
+                <h4 className="db-chart-title">Item popularity distribution</h4>
+                <p className="setting-desc">Number of movies by how many ratings each title received.</p>
+                {stats.item_popularity_histogram && stats.item_popularity_histogram.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={320}>
+                    <BarChart
+                      data={histRowsForLogBar(stats.item_popularity_histogram)}
+                      margin={{ top: 6, right: 8, left: 2, bottom: 28 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
+                      <XAxis
+                        dataKey="label"
+                        axisLine={AXIS_LINE}
+                        tickLine={false}
+                        tick={AXIS_TICK}
+                        interval={3}
+                        height={46}
+                        angle={-40}
+                        textAnchor="end"
+                        tickMargin={4}
+                        label={{ value: "Ratings per movie", position: "bottom", offset: 10, fill: "var(--text-subtle)", fontSize: 11 }}
+                      />
+                      <YAxis
+                        type="number"
+                        scale="log"
+                        domain={[1, "auto"]}
+                        allowDataOverflow
+                        axisLine={AXIS_LINE}
+                        tickLine={false}
+                        tick={AXIS_TICK}
+                        width={52}
+                        tickFormatter={(v: number) => formatCountTick(v)}
+                        label={{ value: "Movies (log scale)", angle: -90, position: "insideLeft", fill: "var(--text-subtle)", fontSize: 11 }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "var(--chart-tooltip-bg)",
+                          border: "var(--chart-tooltip-border)",
+                          borderRadius: "var(--chart-tooltip-radius)",
+                        }}
+                        labelStyle={{ color: "var(--text-subtle)", fontSize: 12, marginBottom: 4 }}
+                        itemStyle={{ color: "var(--chart-hist-item)", fontSize: 13, fontWeight: 600 }}
+                        formatter={histTooltipValueFormatter}
+                        labelFormatter={(l, p) => histLabelFormatter(l, p, "movie")}
+                        cursor={{ fill: "var(--chart-cursor-fill)" }}
+                        wrapperStyle={{ outline: "none" }}
+                      />
+                      <Bar
+                        dataKey="countLog"
+                        name="Movies"
+                        fill="var(--chart-hist-item)"
+                        radius={[2, 2, 0, 0]}
+                        maxBarSize={14}
+                        isAnimationActive={false}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="db-chart-empty">No histogram data</div>
+                )}
+              </div>
+            </div>
+            <div className="db-dashboard-cell">
+              <div className="chart-wrapper settings-db-charts db-chart-card">
+                <h4 className="db-chart-title">Genre distribution (Top 12)</h4>
+                <p className="setting-desc">Movies per genre in the library (multi-label titles count in each genre).</p>
+                <div className="db-dashboard-bottom-plot">
+                <ResponsiveContainer width="100%" height={DASHBOARD_BOTTOM_ROW_CHART_H}>
+                  <BarChart
+                    data={stats.top_genres}
+                    layout="vertical"
+                    margin={{ top: 4, right: 12, left: 4, bottom: 32 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" horizontal={false} />
+                    <XAxis
+                      type="number"
+                      axisLine={AXIS_LINE}
+                      tickLine={false}
+                      tick={AXIS_TICK}
+                      tickFormatter={formatCountTick}
+                      label={{ value: "Number of movies", position: "bottom", offset: 12, fill: "var(--text-subtle)", fontSize: 11 }}
+                    />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      axisLine={AXIS_LINE}
+                      tickLine={false}
+                      tick={AXIS_TICK}
+                      width={108}
+                    />
+                    <Tooltip {...tooltipBase("var(--chart-db-genre)")} />
+                    <Bar dataKey="count" name="Movies" fill="var(--chart-db-genre)" radius={[0, 4, 4, 0]} maxBarSize={20} isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+            <div className="db-dashboard-cell">
+              <div className="chart-wrapper settings-db-charts db-chart-card">
+                <h4 className="db-chart-title">Rating distribution</h4>
+                <p className="setting-desc">Volume of ratings at each half-star (0.5–5.0).</p>
+                <div className="db-dashboard-bottom-plot">
+                <ResponsiveContainer width="100%" height={DASHBOARD_BOTTOM_ROW_CHART_H}>
+                  <BarChart data={stats.rating_distribution} margin={{ top: 8, right: 10, left: 4, bottom: 32 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
+                    <XAxis
+                      dataKey="rating"
+                      axisLine={AXIS_LINE}
+                      tickLine={false}
+                      tick={AXIS_TICK}
+                      label={{ value: "Rating", position: "bottom", offset: 12, fill: "var(--text-subtle)", fontSize: 11 }}
+                    />
+                    <YAxis
+                      axisLine={AXIS_LINE}
+                      tickLine={false}
+                      tick={AXIS_TICK}
+                      tickFormatter={formatCountTick}
+                      width={52}
+                      label={{ value: "Count", angle: -90, position: "insideLeft", fill: "var(--text-subtle)", fontSize: 11 }}
+                    />
+                    <Tooltip {...tooltipBase("var(--chart-db-rating)")} />
+                    <Bar dataKey="count" name="Count" fill="var(--chart-db-rating)" radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+                </div>
+              </div>
             </div>
           </div>
+        </div>
 
-          <div className="setting-group">
-            <label>Rating Distribution</label>
-            <p className="setting-desc">How users have rated movies on the 0.5 to 5.0 scale.</p>
-            <div className="chart-wrapper" style={{ marginTop: '16px' }}>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={stats.rating_distribution} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
-                  <XAxis dataKey="rating" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                  <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
-                    itemStyle={{ color: '#8884d8' }}
-                    cursor={{ fill: 'var(--chart-cursor-fill)' }}
-                  />
-                  <Bar dataKey="count" fill="#8884d8" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="setting-group">
-            <label>Movies Added by Year (Last 20 Years)</label>
+        <div className="setting-group">
+          <div className="chart-wrapper settings-db-charts db-chart-card">
+            <h4 className="db-chart-title">Movies Added by Year (Last 20 Years)</h4>
             <p className="setting-desc">The number of movies released each year over the past two decades.</p>
-            <div className="chart-wrapper" style={{ marginTop: '16px' }}>
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={stats.movies_by_year} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
-                  <XAxis dataKey="year" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                  <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
-                    itemStyle={{ color: '#82ca9d' }}
-                  />
-                  <Line type="monotone" dataKey="count" stroke="#82ca9d" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            <ResponsiveContainer width="100%" height={360}>
+              <LineChart data={stats.movies_by_year} margin={{ top: 12, right: 16, left: 4, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
+                <XAxis
+                  dataKey="year"
+                  axisLine={AXIS_LINE}
+                  tickLine={false}
+                  tick={AXIS_TICK}
+                  label={{ value: "Year", position: "bottom", offset: 0, fill: "var(--text-subtle)", fontSize: 11 }}
+                  minTickGap={8}
+                />
+                <YAxis
+                  axisLine={AXIS_LINE}
+                  tickLine={false}
+                  tick={AXIS_TICK}
+                  tickFormatter={formatCountTick}
+                  width={48}
+                  label={{ value: "Movies", angle: -90, position: "insideLeft", fill: "var(--text-subtle)", fontSize: 11 }}
+                />
+                <Tooltip {...tooltipLineYear} />
+                <Line
+                  type="monotone"
+                  dataKey="count"
+                  name="Count"
+                  stroke="var(--chart-db-year)"
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: "var(--chart-db-year)", stroke: "var(--bg-surface)", strokeWidth: 1 }}
+                  activeDot={{ r: 5, fill: "var(--chart-db-year)" }}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
+        </div>
 
-          <div className="setting-group">
-            <label>Most Rated Movies</label>
+        <div className="setting-group">
+          <div className="chart-wrapper settings-db-charts db-chart-card">
+            <h4 className="db-chart-title">Most Rated Movies</h4>
             <p className="setting-desc">The movies that have received the highest number of user ratings.</p>
-            <div className="chart-wrapper" style={{ marginTop: '16px' }}>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={stats.top_rated_movies.map((m) => ({ ...m, title: displayMovieTitle(m.title) }))} layout="vertical" margin={{ top: 20, right: 30, left: 150, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" horizontal={false} />
-                  <XAxis type="number" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                  <YAxis dataKey="title" type="category" stroke="#a1a1aa" tick={{ fill: '#a1a1aa', fontSize: 13 }} width={250} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
-                    itemStyle={{ color: '#ffc658' }}
-                    cursor={{ fill: 'var(--chart-cursor-fill)' }}
-                  />
-                  <Bar dataKey="count" fill="#ffc658" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <ResponsiveContainer width="100%" height={380}>
+              <BarChart
+                data={stats.top_rated_movies.map((m) => ({ ...m, title: displayMovieTitle(m.title) }))}
+                layout="vertical"
+                margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" horizontal={false} />
+                <XAxis
+                  type="number"
+                  axisLine={AXIS_LINE}
+                  tickLine={false}
+                  tick={AXIS_TICK}
+                  tickFormatter={formatCountTick}
+                  label={{ value: "Rating count", position: "bottom", offset: 0, fill: "var(--text-subtle)", fontSize: 11 }}
+                />
+                <YAxis
+                  dataKey="title"
+                  type="category"
+                  axisLine={AXIS_LINE}
+                  tickLine={false}
+                  tick={{ ...AXIS_TICK, fontSize: 11 }}
+                  width={200}
+                  tickFormatter={(t: string) => (t.length > 36 ? `${t.slice(0, 33)}…` : t)}
+                />
+                <Tooltip {...tooltipBase("var(--chart-db-toprated)")} />
+                <Bar dataKey="count" name="Count" fill="var(--chart-db-toprated)" radius={[0, 5, 5, 0]} maxBarSize={22} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
+        </div>
         </>
       )}
     </section>

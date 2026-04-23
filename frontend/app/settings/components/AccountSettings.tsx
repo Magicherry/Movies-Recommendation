@@ -115,7 +115,7 @@ export default function AccountSettings() {
         )}
       </div>
 
-      <div className="setting-row" style={{ marginTop: '32px' }}>
+      <div className="setting-row account-setting-row-section">
         <div className="setting-row-info">
           <h3>Export Personal Data</h3>
           <p>Download a JSON file containing your ratings and preferences.</p>

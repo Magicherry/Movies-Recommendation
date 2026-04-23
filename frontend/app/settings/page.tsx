@@ -164,36 +164,38 @@ export default function SettingsPage() {
           {activeTab === "advanced" && <AdvancedSettings />}
           {activeTab === "about" && (
             <section className="settings-card about-card">
-              <h2 className="about-title" style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "24px" }}>
-                <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <h2 className="about-title about-title-row">
+                <span className="about-title-left">
                   <img src="/icon.png" alt="StreamX Logo" style={{ width: "32px", height: "32px", borderRadius: "6px" }} />
-                  <span><span className="about-brand">Stream</span><span className="about-brand-alt">X</span></span>
+                  <span className="about-brand-mark about-brand-mark--title" aria-label="STREAMX">
+                    <span style={{ color: "var(--brand)" }}>STREAM</span>X
+                  </span>
                 </span>
+                <a
+                  href="https://github.com/Magicherry/Movies-Recommendation"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="settings-action-btn settings-action-btn-secondary about-github-btn"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                  </svg>
+                  View on GitHub
+                </a>
               </h2>
               <div className="about-content">
                 <p className="about-intro">
-                  <strong><span className="about-brand">Stream</span><span className="about-brand-alt">X</span></strong> is a personalized movie recommendation system built as a final project. It leverages advanced machine learning algorithms to provide tailored movie suggestions based on user preferences.
+                  This is a full-stack experience for personalized movie discovery. It learns from your taste, surfaces films you are more likely to enjoy, and lets you pick among several recommendation engines in Settings.
                 </p>
-                <div className="about-actions">
-                  <a
-                    href="https://github.com/Magicherry/Movies-Recommendation"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="link-card about-github-link"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                    </svg>
-                    View on GitHub
-                  </a>
-                </div>
                 <div className="about-sections">
                   <div className="about-section">
                     <h3 className="about-section-title">Tech Stack</h3>
                     <ul className="about-list">
-                      <li><strong className="about-label">Frontend:</strong> Next.js, React, Recharts</li>
-                      <li><strong className="about-label">Backend:</strong> Django REST Framework</li>
-                      <li><strong className="about-label">Machine Learning:</strong> TensorFlow, NumPy, Pandas</li>
+                      <li><strong className="about-label">Frontend:</strong> Next.js, React, TypeScript, Recharts, Framer Motion, HeroUI</li>
+                      <li><strong className="about-label">Backend &amp; API:</strong> Django, Django REST Framework, Gunicorn, Requests, python-dotenv</li>
+                      <li><strong className="about-label">Data &amp; numerics:</strong> NumPy, Pandas, SciPy</li>
+                      <li><strong className="about-label">Machine learning:</strong> PyTorch (Neural CF), custom matrix factorization and SVD pipelines, Numba-accelerated training</li>
+                      <li><strong className="about-label">Training &amp; analysis:</strong> Matplotlib, tqdm</li>
                     </ul>
                   </div>
                   <div className="about-section">
@@ -207,10 +209,15 @@ export default function SettingsPage() {
                   <div className="about-section">
                     <h3 className="about-section-title">Data Sources</h3>
                     <p className="about-text">
-                      Core ratings and movie metadata are from the{" "}
-                      <a href="https://grouplens.org/datasets/movielens/" target="_blank" rel="noopener noreferrer" className="about-link">MovieLens Latest dataset (ml-latest)</a>.
-                      High-quality posters and backdrops are dynamically fetched via the{" "}
-                      <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer" className="about-link">TMDB API</a>.
+                      Core ratings and movie metadata come from the{" "}
+                      <a href="https://grouplens.org/datasets/movielens/latest/" target="_blank" rel="noopener noreferrer" className="about-link">MovieLens Latest (ml-latest)</a>{" "}
+                      collection by the{" "}
+                      <a href="https://grouplens.org/" target="_blank" rel="noopener noreferrer" className="about-link">GroupLens</a>{" "}
+                      research group at the{" "}
+                      <a href="https://www.umn.edu/" target="_blank" rel="noopener noreferrer" className="about-link">University of Minnesota</a>.
+                      High-quality posters and backdrops are loaded with the{" "}
+                      <a href="https://developer.themoviedb.org/docs" target="_blank" rel="noopener noreferrer" className="about-link">TMDB API</a>{" "}
+                      (<a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer" className="about-link">The Movie Database</a>).
                     </p>
                   </div>
                 </div>

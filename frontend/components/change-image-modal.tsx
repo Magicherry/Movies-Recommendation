@@ -276,7 +276,7 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
             </button>
           )}
           <h2 className="movie-modal-header-title">
-            {level === 1 ? "Change Image" : level === 2 ? (level2Mode === "poster" ? "Choose cover" : "Choose backdrop") : (level2Mode === "poster" ? "Enter cover URL" : "Enter backdrop URL")}
+            {level === 1 ? "Change Image" : level === 2 ? (level2Mode === "poster" ? "Choose Cover" : "Choose Backdrop") : (level2Mode === "poster" ? "Enter cover URL" : "Enter backdrop URL")}
           </h2>
           <button
             type="button"

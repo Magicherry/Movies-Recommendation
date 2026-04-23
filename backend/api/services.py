@@ -1945,8 +1945,8 @@ class RecommenderService:
                     if g and g != '(no genres listed)':
                         genre_counts[g] = genre_counts.get(g, 0) + 1
                         
-        # Sort genres by count
-        top_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        # Sort genres by count (top 12 for dashboard horizontal chart)
+        top_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:12]
         
         # Movies per year
         movies_per_year = {}
@@ -1962,6 +1962,11 @@ class RecommenderService:
         
         # Top rated movies (most ratings)
         top_rated_movies = []
+        user_counts_arr = np.array(list(self.user_rating_counts.values()), dtype=np.float64) if self.user_rating_counts else np.array([], dtype=np.float64)
+        movie_counts_arr = np.array(list(self.movie_rating_counts.values()), dtype=np.float64) if self.movie_rating_counts else np.array([], dtype=np.float64)
+        user_activity_histogram = self._ratings_count_histogram(user_counts_arr, num_bins=40)
+        item_popularity_histogram = self._ratings_count_histogram(movie_counts_arr, num_bins=40)
+
         for iid, count in sorted(self.movie_rating_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
             meta = self.movie_lookup.get(iid, {"title": "Unknown", "scraped_title": ""})
             display_title = meta.get("scraped_title") or meta.get("title", "Unknown")
@@ -1975,8 +1980,46 @@ class RecommenderService:
             "top_genres": [{"name": g[0], "count": g[1]} for g in top_genres],
             "rating_distribution": getattr(self, "rating_distribution", []),
             "movies_by_year": movies_by_year,
-            "top_rated_movies": top_rated_movies
+            "top_rated_movies": top_rated_movies,
+            "user_activity_histogram": user_activity_histogram,
+            "item_popularity_histogram": item_popularity_histogram,
         }
+
+    @staticmethod
+    def _ratings_count_histogram(values: np.ndarray, num_bins: int = 40) -> List[Dict[str, Any]]:
+        """Histogram of per-user or per-movie rating counts (linear bins from 0 to max)."""
+        if values.size == 0:
+            return []
+        max_v = float(np.max(values))
+        if max_v <= 0:
+            return []
+        fin = values[np.isfinite(values) & (values >= 0)]
+        if fin.size == 0:
+            return []
+        max_v = float(np.max(fin))
+        nbin = max(2, int(num_bins))
+        edges = np.linspace(0.0, max_v, nbin + 1)
+        hist, _ = np.histogram(fin, bins=edges)
+        rows: List[Dict[str, Any]] = []
+        for i, c in enumerate(hist):
+            lo, hi = float(edges[i]), float(edges[i + 1])
+            mid = (lo + hi) / 2.0
+            if max_v >= 5000 and mid >= 500:
+                label = f"{mid / 1000.0:.1f}k"
+            elif max_v >= 1000 and mid >= 200:
+                label = f"{mid / 1000.0:.1f}k"
+            else:
+                label = f"{mid:.0f}"
+            rows.append(
+                {
+                    "label": label,
+                    "count": int(c),
+                    "binStart": lo,
+                    "binEnd": hi,
+                    "xMid": mid,
+                }
+            )
+        return rows
 
     @staticmethod
     def _build_histogram(values: np.ndarray, bins: int = 10) -> List[Dict[str, Any]]:

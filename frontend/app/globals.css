@@ -56,6 +56,18 @@
   /* Chart grid/cursor (Recharts) */
   --chart-grid-stroke: rgba(255, 255, 255, 0.1);
   --chart-cursor-fill: rgba(255, 255, 255, 0.05);
+  /* Database tab */
+  --chart-bar-secondary: #a78bfa;
+  /* Top row (histograms) — do not recolor elsewhere */
+  --chart-hist-user: #3b82f6;
+  --chart-hist-item: #ef4444;
+  /* Grid bottom row + legacy sections (not the top two histograms) */
+  /* Cyan: distinct from user-hist blue, rating amber, and year/teal */
+  --chart-db-genre: #06b6d4;
+  --chart-db-rating: #f59e0b;
+  --chart-db-year: #10b981;
+  /* Neutral slate: avoids repeating blue/cyan/green/amber; reads clearly on dark cards */
+  --chart-db-toprated: #94a3b8;
 
   /* Misc */
   --shadow-dropdown: 0 10px 40px rgba(0, 0, 0, 0.5);
@@ -4213,6 +4225,80 @@ body {
   box-shadow: var(--shadow-card);
 }
 
+/* Settings → Database: balanced padding, stable chart box */
+.settings-db-charts {
+  width: 100%;
+  min-height: 300px;
+  padding: 20px 16px 16px 8px;
+}
+.settings-db-charts .recharts-cartesian-grid-horizontal line,
+.settings-db-charts .recharts-cartesian-grid-vertical line {
+  stroke: var(--chart-grid-stroke);
+}
+@media (max-width: 640px) {
+  .settings-db-charts {
+    min-height: 280px;
+    padding: 12px 8px 8px 4px;
+  }
+}
+
+/* Database tab — 2×2 chart grid */
+.db-dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 16px;
+  align-items: stretch;
+}
+.db-dashboard-cell {
+  min-width: 0;
+}
+/* Title + blurb + plot inside the same card (inherits .chart-wrapper surface) */
+.chart-wrapper.settings-db-charts.db-chart-card {
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  padding: 16px 16px 12px 16px;
+  min-width: 0;
+}
+.db-chart-card .db-chart-title {
+  margin: 0 0 6px 0;
+  padding: 0;
+}
+.db-chart-card .setting-desc,
+.db-chart-card .db-chart-desc {
+  margin: 0 0 12px 0;
+  line-height: 1.5;
+  font-size: 0.9rem;
+}
+.db-chart-card > .recharts-responsive-container,
+.db-chart-card > .db-chart-empty {
+  flex-shrink: 0;
+}
+/* Bottom row: equal plot height in grid (plot only) */
+.db-dashboard-bottom-plot {
+  min-height: 320px;
+}
+@media (max-width: 900px) {
+  .db-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.db-chart-title {
+  margin: 0 0 4px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+.db-chart-empty {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-subtle);
+  font-size: 0.9rem;
+}
+
 .loading-state {
   padding: 40px;
   text-align: center;
@@ -4552,6 +4638,16 @@ body {
 .setting-row:last-child {
   border-bottom: none;
 }
+/* First row after page title: other tabs use .setting-group (no top padding), not .setting-row */
+.settings-card > h2 + .setting-row {
+  padding-top: 0;
+}
+/* Account: horizontal rule after a .setting-group, same rhythm as stacked rows elsewhere */
+.settings-card .setting-group + .setting-row.account-setting-row-section {
+  margin-top: 24px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 20px;
+}
 .setting-row-info h3 {
   margin: 0 0 4px 0;
   font-size: 1.05rem;
@@ -4599,32 +4695,68 @@ body {
   color: var(--text-subtle);
 }
 
-.link-card {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-main);
-  text-decoration: none;
-  background: var(--bg-hover-soft);
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-soft);
-  transition: background 0.2s ease, border-color 0.2s ease;
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-
-.link-card:hover {
-  background: var(--bg-hover-medium);
-  border-color: var(--text-subtle);
-}
-
 /* About tab layout and typography */
 .about-card .about-title {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
-.about-brand { color: var(--brand); }
-.about-brand-alt { color: #fff; }
+.about-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.about-title-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.about-title-row .about-github-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+/* Same family as Database / Model action buttons; compact for the title row */
+.about-github-btn {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 14px 0 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  gap: 7px;
+  text-decoration: none;
+  color: var(--text-main);
+  border-radius: var(--radius-sm);
+}
+.about-github-btn.settings-action-btn:hover:not(:disabled) {
+  transform: none;
+}
+.about-github-btn.settings-action-btn:active:not(:disabled),
+.about-github-btn.settings-action-btn:hover:active:not(:disabled) {
+  transform: scale(0.97);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.28);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.about-github-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  opacity: 0.92;
+}
+/* Match navbar .brand-link typography (Inter 800, uppercase) */
+.about-brand-mark {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: var(--text-main);
+}
+.about-brand-mark--title {
+  font-size: 1.5rem;
+  line-height: 1.2;
+  display: inline-block;
+}
 .about-content {
   display: flex;
   flex-direction: column;
@@ -4636,12 +4768,6 @@ body {
   margin: 0;
   font-size: 1rem;
   width: 100%;
-}
-.about-actions {
-  margin: 0;
-}
-.about-github-link {
-  border: 1px solid var(--border-soft);
 }
 .about-sections {
   display: grid;
