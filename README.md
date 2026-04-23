@@ -17,7 +17,7 @@
 ## Report & Slides
 
 - **Report (PDF):** [FinalReport/report.pdf](FinalReport/report.pdf)
-- **Slides (PDF):** [FinalReport/slide/Comparative Study of Collaborative Filtering Methods for Movie Recommendation.pdf](FinalReport/slide/Comparative%20Study%20of%20Collaborative%20Filtering%20Methods%20for%20Movie%20Recommendation.pdf)
+- **Slides (PDF):** [Comparative Study of Collaborative Filtering Methods for Movie Recommendation.pdf](FinalReport/slide/Comparative%20Study%20of%20Collaborative%20Filtering%20Methods%20for%20Movie%20Recommendation.pdf)
 
 ## Features
 
