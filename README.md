@@ -42,15 +42,15 @@
 
 | Home Page | Top Picks |
 | :---: | :---: |
-| ![Home](preview/Home.png) | ![Top Picks](preview/TopPicks.png) |
+| ![Home](preview/Home_1.png) | ![Top Picks](preview/TopPicks_1.png) |
 
 | Library | Movie Detail | Community |
 | :---: | :---: | :---: |
-| ![Library](preview/Library.png) | ![Movie Detail](preview/MovieDetail.png) | ![Community](preview/Community.png) |
+| ![Library](preview/Library_1.png) | ![Movie Detail](preview/MovieDetail_1.png) | ![Community](preview/Community_1.png) |
 
 | User Profile | Actor Detail | Settings |
 | :---: | :---: | :---: |
-| ![User Profile](preview/UserProfile.png) | ![Actor Detail](preview/ActorDetail.png) | ![Engines](preview/Engines.png) |
+| ![User Profile](preview/UserProfile_1.png) | ![Actor Detail](preview/ActorDetail_1.png) | ![Engines](preview/Engines_1.png) |
 
 ## Project Structure
 
