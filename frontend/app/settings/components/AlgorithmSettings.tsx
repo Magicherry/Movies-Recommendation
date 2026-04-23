@@ -3,23 +3,10 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { dispatchActiveModelChange } from "../../../lib/model-engine";
 import { preloadActiveModel } from "../../../lib/api";
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-  Legend,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar,
-} from "recharts";
+import { TrainingEngineCurvesSection } from "./training-engine-curves-block";
+import { ActiveModelHistoryCharts } from "./active-model-history-charts";
+import { Option3SvdChartsBlock } from "./option3-svd-charts-block";
+import { Tooltip, ResponsiveContainer, Legend, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from "recharts";
 
 interface ModelConfig {
   active_model: string;
@@ -28,6 +15,7 @@ interface ModelConfig {
   metrics_by_model?: Record<string, any>;
   history?: {
     loss?: number[];
+    train_loss?: number[];
     val_loss?: number[];
     mae?: number[];
     val_mae?: number[];
@@ -238,13 +226,10 @@ export default function AlgorithmSettings() {
       });
       
       if (res.ok) {
-        // Optimistically update the UI
-        setModelConfig(prev => {
-          const next = prev ? { ...prev, active_model: modelName } : null;
-          cachedModelConfig = next;
-          return next;
-        });
-        // Dispatch immediately so UI can show loading state for the newly selected model.
+        // Load full model-config (active_model, history, metrics) in one update.
+        // Avoid optimistically setting active_model with stale history — chart titles and series would disagree.
+        await fetchModelConfig();
+
         dispatchActiveModelChange(modelName, { loadStatus: "loading" });
 
         try {
@@ -262,8 +247,6 @@ export default function AlgorithmSettings() {
 
         // Force home page to refresh recommendations after preload finishes.
         localStorage.setItem("streamx-force-refresh", Date.now().toString());
-        // Fetch full config to get new metrics
-        await fetchModelConfig();
       } else {
         console.error("Failed to change model, status:", res.status);
       }
@@ -283,8 +266,14 @@ export default function AlgorithmSettings() {
   const lossChartData = useMemo(() => {
     const h = modelConfig?.history;
     if (!h || isOption3StaticFit) return [];
-    if (h.loss) return h.loss.map((l, i) => ({ epoch: i + 1, loss: l, val_loss: h.val_loss?.[i] }));
-    // Option1 and Option4: no neural "loss"; plot per-epoch train RMSE vs train MAE (legacy chart pairing).
+    // Neural / Huber loss channel (saved as `loss` or `train_loss` depending on export).
+    if (h.loss?.length) {
+      return h.loss.map((l, i) => ({ epoch: i + 1, loss: l, val_loss: h.val_loss?.[i] }));
+    }
+    if (h.train_loss?.length) {
+      return h.train_loss.map((l, i) => ({ epoch: i + 1, loss: l, val_loss: h.val_loss?.[i] }));
+    }
+    // Option1 (SGD) and Option4 (ALS): no loss series; plot train RMSE vs train MAE per epoch.
     return h.train_rmse?.map((r, i) => ({ epoch: i + 1, loss: r, val_loss: h.train_mae?.[i] })) || [];
   }, [modelConfig?.history, isOption3StaticFit]);
 
@@ -370,13 +359,6 @@ export default function AlgorithmSettings() {
       )
       .map((row) => ({ feature: row.feature, absWeight: row.abs_weight }));
   }, [isOption3StaticFit, modelConfig?.diagnostics]);
-
-  const hasOption3Charts =
-    option3ErrorComparisonData.length > 0 ||
-    option3SvdEnergyData.length > 0 ||
-    option3UserNormHistData.length > 0 ||
-    option3ItemNormHistData.length > 0 ||
-    option3CalibrationWeightData.length > 0;
 
   const maeChartData = useMemo(() => {
     const h = modelConfig?.history;
@@ -893,360 +875,34 @@ export default function AlgorithmSettings() {
         </div>
       )}
 
-      {chartsMounted && isOption3StaticFit && hasOption3Charts && (
-        <div className="model-history">
-          <h4 style={{ marginBottom: "8px" }}>Training fit vs holdout test</h4>
-          <p className="setting-desc" style={{ marginBottom: "20px" }}>
-            Matrix SVD runs one closed-form pipeline (truncated SVD, biases, then optional Ridge/Lasso calibration or KNN projection). There is no per-epoch loss curve. Bars compare
-            in-sample error on the training split to MAE/RMSE on the held-out test split from metrics.
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: "24px" }}>
-            {option3ErrorComparisonData.length > 0 && (
-              <div style={{
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-soft)",
-                borderRadius: "12px",
-                padding: "20px 20px 20px 0",
-                display: "flex",
-                flexDirection: "column",
-                boxShadow: "var(--shadow-card)"
-              }}>
-                <h4 style={{ margin: "0 0 16px 20px", fontSize: "1rem", fontWeight: 600, color: "var(--text-main)" }}>Error comparison (train vs holdout)</h4>
-                <div style={{ height: "250px", width: "100%" }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={option3ErrorComparisonData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
-                      <XAxis dataKey="metric" stroke="#a1a1aa" tick={{ fill: "#a1a1aa" }} />
-                      <YAxis stroke="#a1a1aa" tick={{ fill: "#a1a1aa" }} domain={[0, "auto"]} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "var(--chart-tooltip-bg)",
-                          border: "var(--chart-tooltip-border)",
-                          borderRadius: "var(--chart-tooltip-radius)",
-                        }}
-                        formatter={(value) => (typeof value === "number" ? value.toFixed(4) : `${value ?? "-"}`)}
-                      />
-                      <Legend />
-                      <Bar dataKey="train" name="Training (in-sample)" fill="var(--brand)" radius={[4, 4, 0, 0]} maxBarSize={48} />
-                      <Bar dataKey="test" name="Holdout test" fill="#ec4899" radius={[4, 4, 0, 0]} maxBarSize={48} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
+      {modelConfig && chartsMounted && !isOption3StaticFit && (
+        <TrainingEngineCurvesSection
+          activeEngineId={modelConfig.active_model}
+          activeEngineLabel={RADAR_MODEL_LABELS[modelConfig.active_model] ?? modelConfig.active_model}
+        />
+      )}
 
-            {option3SvdEnergyData.length > 0 && (
-              <div style={{
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-soft)",
-                borderRadius: "12px",
-                padding: "20px 20px 20px 0",
-                display: "flex",
-                flexDirection: "column",
-                boxShadow: "var(--shadow-card)"
-              }}>
-                <h4 style={{ margin: "0 0 16px 20px", fontSize: "1rem", fontWeight: 600, color: "var(--text-main)" }}>SVD component energy share</h4>
-                <div style={{ height: "250px", width: "100%" }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={option3SvdEnergyData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
-                      <XAxis dataKey="component" stroke="#a1a1aa" tick={{ fill: "#a1a1aa" }} />
-                      <YAxis
-                        stroke="#a1a1aa"
-                        tick={{ fill: "#a1a1aa" }}
-                        domain={[0, "auto"]}
-                        tickFormatter={(value) => `${value}%`}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "var(--chart-tooltip-bg)",
-                          border: "var(--chart-tooltip-border)",
-                          borderRadius: "var(--chart-tooltip-radius)",
-                        }}
-                        formatter={(value) =>
-                          typeof value === "number" ? `${value.toFixed(2)}%` : `${value ?? "-"}`
-                        }
-                      />
-                      <Legend />
-                      <Bar dataKey="energyPct" name="Energy %" fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-
-            {option3UserNormHistData.length > 0 && (
-              <div style={{
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-soft)",
-                borderRadius: "12px",
-                padding: "20px 20px 20px 0",
-                display: "flex",
-                flexDirection: "column",
-                boxShadow: "var(--shadow-card)"
-              }}>
-                <h4 style={{ margin: "0 0 16px 20px", fontSize: "1rem", fontWeight: 600, color: "var(--text-main)" }}>User latent norm distribution</h4>
-                <div style={{ height: "250px", width: "100%" }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={option3UserNormHistData} margin={{ top: 8, right: 16, left: 8, bottom: 32 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
-                      <XAxis dataKey="bin" stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} angle={-25} textAnchor="end" height={56} />
-                      <YAxis stroke="#a1a1aa" tick={{ fill: "#a1a1aa" }} domain={[0, "auto"]} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "var(--chart-tooltip-bg)",
-                          border: "var(--chart-tooltip-border)",
-                          borderRadius: "var(--chart-tooltip-radius)",
-                        }}
-                      />
-                      <Legend />
-                      <Bar dataKey="count" name="User count" fill="#14b8a6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-
-            {option3ItemNormHistData.length > 0 && (
-              <div style={{
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-soft)",
-                borderRadius: "12px",
-                padding: "20px 20px 20px 0",
-                display: "flex",
-                flexDirection: "column",
-                boxShadow: "var(--shadow-card)"
-              }}>
-                <h4 style={{ margin: "0 0 16px 20px", fontSize: "1rem", fontWeight: 600, color: "var(--text-main)" }}>Item latent norm distribution</h4>
-                <div style={{ height: "250px", width: "100%" }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={option3ItemNormHistData} margin={{ top: 8, right: 16, left: 8, bottom: 32 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
-                      <XAxis dataKey="bin" stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} angle={-25} textAnchor="end" height={56} />
-                      <YAxis stroke="#a1a1aa" tick={{ fill: "#a1a1aa" }} domain={[0, "auto"]} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "var(--chart-tooltip-bg)",
-                          border: "var(--chart-tooltip-border)",
-                          borderRadius: "var(--chart-tooltip-radius)",
-                        }}
-                      />
-                      <Legend />
-                      <Bar dataKey="count" name="Item count" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-
-            {option3CalibrationWeightData.length > 0 && (
-              <div style={{
-                gridColumn: "1 / -1",
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-soft)",
-                borderRadius: "12px",
-                padding: "20px 20px 20px 0",
-                display: "flex",
-                flexDirection: "column",
-                boxShadow: "var(--shadow-card)"
-              }}>
-                <h4 style={{ margin: "0 0 16px 20px", fontSize: "1rem", fontWeight: 600, color: "var(--text-main)" }}>Top calibration weights (|w|)</h4>
-                <div style={{ height: "300px", width: "100%" }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={option3CalibrationWeightData} margin={{ top: 8, right: 16, left: 8, bottom: 32 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" vertical={false} />
-                      <XAxis dataKey="feature" stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} angle={-25} textAnchor="end" height={56} />
-                      <YAxis stroke="#a1a1aa" tick={{ fill: "#a1a1aa" }} domain={[0, "auto"]} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "var(--chart-tooltip-bg)",
-                          border: "var(--chart-tooltip-border)",
-                          borderRadius: "var(--chart-tooltip-radius)",
-                        }}
-                        formatter={(value) => (typeof value === "number" ? value.toFixed(5) : `${value ?? "-"}`)}
-                      />
-                      <Legend />
-                      <Bar dataKey="absWeight" name="|weight|" fill="#8b5cf6" radius={[4, 4, 0, 0]} maxBarSize={36} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+      {modelConfig && chartsMounted && isOption3StaticFit && (
+        <Option3SvdChartsBlock
+          modelLabel={RADAR_MODEL_LABELS[modelConfig.active_model] ?? modelConfig.active_model}
+          errorData={option3ErrorComparisonData}
+          energyData={option3SvdEnergyData}
+          userNormData={option3UserNormHistData}
+          itemNormData={option3ItemNormHistData}
+          calibrationData={option3CalibrationWeightData}
+        />
       )}
 
       {modelConfig?.history && chartsMounted && !isOption3StaticFit && (
-        <div className="model-history">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: "24px" }}>
-            {lossChartData.length > 0 && (
-            <div style={{
-              background: "var(--bg-elevated)",
-              border: "1px solid var(--border-soft)",
-              borderRadius: "12px",
-              padding: "20px 20px 20px 0",
-              display: "flex",
-              flexDirection: "column",
-              boxShadow: "var(--shadow-card)"
-            }}>
-              <h4 style={{ margin: "0 0 16px 20px", fontSize: "1rem", fontWeight: 600, color: "var(--text-main)" }}>
-                {isOption4Als ? "MF-ALS Training Convergence" : `Training History (${modelConfig.history.loss ? 'Loss' : 'RMSE'})`}
-              </h4>
-              <div style={{ height: "250px", width: "100%" }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={lossChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />
-                    <XAxis dataKey="epoch" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                    <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} domain={['auto', 'auto']} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
-                    />
-                    <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey="loss" 
-                      stroke="var(--brand)" 
-                      strokeWidth={2} 
-                      dot={false} 
-                      name={modelConfig.history.loss ? "Train Loss" : "Train RMSE"} 
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="val_loss" 
-                      stroke="#ec4899" 
-                      strokeWidth={2} 
-                      dot={false} 
-                      name={modelConfig.history.loss ? "Val Loss" : "Train MAE"} 
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-            )}
-
-            {modelConfig.history.mae && modelConfig.history.val_mae && (
-              <div style={{
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-soft)",
-                borderRadius: "12px",
-                padding: "20px 20px 20px 0",
-                display: "flex",
-                flexDirection: "column",
-                boxShadow: "var(--shadow-card)"
-              }}>
-                <h4 style={{ margin: "0 0 16px 20px", fontSize: "1rem", fontWeight: 600, color: "var(--text-main)" }}>Training History (MAE)</h4>
-                <div style={{ height: "250px", width: "100%" }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={maeChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />
-                      <XAxis dataKey="epoch" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                      <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} domain={['auto', 'auto']} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
-                      />
-                      <Legend />
-                      <Line 
-                        type="monotone" 
-                        dataKey="mae" 
-                        stroke="#3b82f6" 
-                        strokeWidth={2} 
-                        dot={false} 
-                        name="Train MAE" 
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="val_mae" 
-                        stroke="#f59e0b" 
-                        strokeWidth={2} 
-                        dot={false} 
-                        name="Val MAE" 
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-
-            {modelConfig.history.rmse && modelConfig.history.val_rmse && (
-              <div style={{
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-soft)",
-                borderRadius: "12px",
-                padding: "20px 20px 20px 0",
-                display: "flex",
-                flexDirection: "column",
-                boxShadow: "var(--shadow-card)"
-              }}>
-                <h4 style={{ margin: "0 0 16px 20px", fontSize: "1rem", fontWeight: 600, color: "var(--text-main)" }}>Training History (RMSE)</h4>
-                <div style={{ height: "250px", width: "100%" }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={rmseChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />
-                      <XAxis dataKey="epoch" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                      <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} domain={['auto', 'auto']} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
-                      />
-                      <Legend />
-                      <Line 
-                        type="monotone" 
-                        dataKey="rmse" 
-                        stroke="#8b5cf6" 
-                        strokeWidth={2} 
-                        dot={false} 
-                        name="Train RMSE" 
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="val_rmse" 
-                        stroke="#10b981" 
-                        strokeWidth={2} 
-                        dot={false} 
-                        name="Val RMSE" 
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-
-            {modelConfig.history.learning_rate && (
-              <div style={{
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-soft)",
-                borderRadius: "12px",
-                padding: "20px 20px 20px 0",
-                display: "flex",
-                flexDirection: "column",
-                boxShadow: "var(--shadow-card)"
-              }}>
-                <h4 style={{ margin: "0 0 16px 20px", fontSize: "1rem", fontWeight: 600, color: "var(--text-main)" }}>Learning Rate Schedule</h4>
-                <div style={{ height: "250px", width: "100%" }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={lrChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid-stroke)" />
-                      <XAxis dataKey="epoch" stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
-                      <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} domain={['auto', 'auto']} tickFormatter={(val) => val.toExponential(1)} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: 'var(--chart-tooltip-bg)', border: 'var(--chart-tooltip-border)', borderRadius: 'var(--chart-tooltip-radius)' }}
-                        formatter={(value) => (typeof value === "number" ? value.toExponential(4) : `${value ?? "-"}`)}
-                      />
-                      <Legend />
-                      <Line 
-                        type="stepAfter" 
-                        dataKey="lr" 
-                        stroke="#06b6d4" 
-                        strokeWidth={2} 
-                        dot={false} 
-                        name="Learning Rate" 
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <ActiveModelHistoryCharts
+          modelLabel={RADAR_MODEL_LABELS[modelConfig.active_model] ?? modelConfig.active_model}
+          history={modelConfig.history}
+          isOption4Als={isOption4Als}
+          lossChartData={lossChartData}
+          maeChartData={maeChartData}
+          rmseChartData={rmseChartData}
+          lrChartData={lrChartData}
+        />
       )}
     </section>
   );

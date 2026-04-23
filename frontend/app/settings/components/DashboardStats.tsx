@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from "recharts";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  LineChart,
+  Line,
+} from "recharts";
 import { displayMovieTitle } from "../../../lib/api";
 
 interface HistBin {

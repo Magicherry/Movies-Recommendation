@@ -14,6 +14,7 @@ urlpatterns = [
     path("predict/<int:user_id>/<int:item_id>", views.predict_rating, name="predict-rating"),
     path("search", views.search, name="search"),
     path("stats", views.db_stats, name="db-stats"),
+    path("training-histories", views.training_histories, name="training-histories"),
     path("model-config", views.model_config, name="model-config"),
     path("model-preload", views.model_preload, name="model-preload"),
     path("scrape/start", views.scrape_start, name="scrape-start"),

@@ -374,6 +374,14 @@ def db_stats(request: HttpRequest) -> JsonResponse:
     except FileNotFoundError as exc:
         return _error(str(exc), status=500)
 
+
+@require_GET
+def training_histories(request: HttpRequest) -> JsonResponse:
+    try:
+        return JsonResponse(service.get_all_training_histories())
+    except FileNotFoundError as exc:
+        return _error(str(exc), status=500)
+
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def model_config(request: HttpRequest) -> JsonResponse:

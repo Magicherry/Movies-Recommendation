@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 from threading import Lock
+import numbers
 from typing import Any, Dict, List
 
 import numpy as np
@@ -2172,6 +2173,76 @@ class RecommenderService:
             "history": active_history,
             "diagnostics": diagnostics,
         }
+
+    @staticmethod
+    def _training_history_epoch_length(history: Dict[str, Any]) -> int:
+        """Number of per-epoch rows (excludes one-off metadata keys like best_val_epoch)."""
+        skip_prefixes = ("best_",)
+        m = 0
+        for key, value in history.items():
+            if any(key.startswith(p) for p in skip_prefixes):
+                continue
+            if not isinstance(value, list) or not value:
+                continue
+            if not all(isinstance(x, numbers.Real) and not isinstance(x, bool) for x in value):
+                continue
+            m = max(m, len(value))
+        return m
+
+    @staticmethod
+    def _training_history_is_epoch_worthy(history: Dict[str, Any]) -> bool:
+        return RecommenderService._training_history_epoch_length(history) >= 2
+
+    def get_all_training_histories(self) -> Dict[str, Any]:
+        """
+        Load training_history.json for every model folder that has a multi-epoch history.
+        Used by the settings dashboard to plot train/validation curves for all engines.
+        """
+        label_by_id: Dict[str, str] = {
+            "option1": "MF-SGD",
+            "option2": "Deep Hybrid",
+            "option3_ridge": "SVD-Ridge",
+            "option3_lasso": "SVD-Lasso",
+            "option3_knn": "SVD-KNN",
+            "option4": "MF-ALS",
+        }
+        order = ("option1", "option2", "option3_ridge", "option3_lasso", "option3_knn", "option4")
+
+        if not self.artifacts_dir.is_dir():
+            return {"engines": []}
+
+        found: List[Dict[str, Any]] = []
+        for name in os.listdir(self.artifacts_dir):
+            model_dir = self.artifacts_dir / name
+            if not model_dir.is_dir():
+                continue
+            path = model_dir / "training_history.json"
+            if not path.exists():
+                continue
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, ValueError, json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(data, dict) or not self._training_history_is_epoch_worthy(data):
+                continue
+            found.append(
+                {
+                    "id": name,
+                    "label": label_by_id.get(name, name),
+                    "history": data,
+                }
+            )
+
+        def sort_key(item: Dict[str, Any]) -> tuple[int, str]:
+            mid = str(item.get("id", ""))
+            try:
+                return (order.index(mid), mid)
+            except ValueError:
+                return (100, mid)
+
+        found.sort(key=sort_key)
+        return {"engines": found}
 
     def preload_active_model(self) -> Dict[str, Any]:
         """
