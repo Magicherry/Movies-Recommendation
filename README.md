@@ -109,7 +109,7 @@ python -m scripts.train_and_evaluate --model-type option1 --dataset-dir dataset/
 python -m scripts.train_and_evaluate --model-type option2 --dataset-dir dataset/ml-latest
 python -m scripts.train_and_evaluate --model-type option3_ridge --dataset-dir dataset/ml-latest
 python -m scripts.train_and_evaluate --model-type option3_lasso --dataset-dir dataset/ml-latest
-python -m scripts.train_and_evaluate --model-type option3_KNN --dataset-dir dataset/ml-latest
+python -m scripts.train_and_evaluate --model-type option3_knn --dataset-dir dataset/ml-latest
 python -m scripts.train_and_evaluate --model-type option4 --dataset-dir dataset/ml-latest
 ```
 
