@@ -10,6 +10,8 @@ const SOURCE_LABELS: Record<string, string> = {
   personal_match: "Personalized",
 };
 
+const AI_SPARKLE_TITLES = new Set(["Why Recommended", "Why Similar"]);
+
 type WhyRecommendedSectionProps = {
   reasons: RecommendationReason[];
   eyebrow?: string;
@@ -27,6 +29,41 @@ function getSourceLabel(source: string): string {
 
 function getSourceClassName(source: string): string {
   return source.replace(/_/g, "-");
+}
+
+/** Compact AI sparkle mark used next to the "Why Recommended" heading. */
+function AiSparklesIcon() {
+  const gradId = "wrsTitleAiSparks";
+  return (
+    <svg
+      className="why-recommended-title-ai-icon"
+      width={20}
+      height={20}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id={gradId} x1="4" y1="3" x2="20" y2="21" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#c4b5fd" />
+          <stop offset="0.48" stopColor="#60a5fa" />
+          <stop offset="1" stopColor="#a78bfa" />
+        </linearGradient>
+      </defs>
+      <path fill={`url(#${gradId})`} d="M11.2 3.2c.18-.44.8-.44.98 0l1.36 3.34a5 5 0 0 0 2.72 2.72l3.34 1.36c.44.18.44.8 0 .98l-3.34 1.36a5 5 0 0 0-2.72 2.72l-1.36 3.34c-.18.44-.8.44-.98 0l-1.36-3.34a5 5 0 0 0-2.72-2.72L3.78 11.6c-.44-.18-.44-.8 0-.98l3.34-1.36a5 5 0 0 0 2.72-2.72L11.2 3.2Z" />
+      <path
+        fill={`url(#${gradId})`}
+        opacity={0.86}
+        d="M18.8 3.7c.1-.25.46-.25.56 0l.48 1.16c.18.43.52.77.95.95l1.16.48c.25.1.25.46 0 .56l-1.16.48c-.43.18-.77.52-.95.95l-.48 1.16c-.1.25-.46.25-.56 0l-.48-1.16a1.72 1.72 0 0 0-.95-.95l-1.16-.48c-.25-.1-.25-.46 0-.56l1.16-.48c.43-.18.77-.52.95-.95l.48-1.16Z"
+      />
+      <path
+        fill={`url(#${gradId})`}
+        opacity={0.72}
+        d="M5.2 16.6c.08-.2.36-.2.44 0l.34.82c.12.3.36.54.66.66l.82.34c.2.08.2.36 0 .44l-.82.34c-.3.12-.54.36-.66.66l-.34.82c-.08.2-.36.2-.44 0l-.34-.82a1.2 1.2 0 0 0-.66-.66l-.82-.34c-.2-.08-.2-.36 0-.44l.82-.34c.3-.12.54-.36.66-.66l.34-.82Z"
+      />
+    </svg>
+  );
 }
 
 function getSourceIcon(source: string): ReactNode {
@@ -287,7 +324,12 @@ export default function WhyRecommendedSection({
         <div>
           <p className="why-recommended-eyebrow">{eyebrow}</p>
           <h2 id="why-recommended-heading" className="why-recommended-title">
-            {title}
+            <span className="why-recommended-title-text">{title}</span>
+            {AI_SPARKLE_TITLES.has(title) ? (
+              <span className="why-recommended-title-ai" title="AI-assisted explanation" aria-hidden="true">
+                <AiSparklesIcon />
+              </span>
+            ) : null}
           </h2>
         </div>
         <p className="why-recommended-summary">

@@ -13,6 +13,7 @@ type ScrollableRowProps = {
   listStyle?: React.CSSProperties;
   containerStyle?: React.CSSProperties;
   resetKey?: string | number;
+  scrollToItemId?: string | number | null;
 };
 
 export default function ScrollableRow({
@@ -26,6 +27,7 @@ export default function ScrollableRow({
   listStyle,
   containerStyle,
   resetKey,
+  scrollToItemId,
 }: ScrollableRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -76,6 +78,31 @@ export default function ScrollableRow({
     row.scrollTo({ left: 0, behavior: "auto" });
     updateScrollState();
   }, [resetKey, updateScrollState]);
+
+  useEffect(() => {
+    const row = rowRef.current;
+    if (scrollToItemId == null || !row) return;
+
+    const targetItemId = String(scrollToItemId);
+    const target = Array.from(row.children).find((child) => {
+      return child instanceof HTMLElement && child.dataset.rowItemId === targetItemId;
+    });
+    if (!(target instanceof HTMLElement)) return;
+
+    const rowRect = row.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const edgePadding = 12;
+    const isFullyVisible =
+      targetRect.left >= rowRect.left + edgePadding &&
+      targetRect.right <= rowRect.right - edgePadding;
+
+    if (isFullyVisible) return;
+
+    row.scrollTo({
+      left: target.offsetLeft - (row.clientWidth - target.offsetWidth) / 2,
+      behavior: "smooth",
+    });
+  }, [scrollToItemId]);
 
   const scrollLeft = useCallback(() => {
     if (rowRef.current) {

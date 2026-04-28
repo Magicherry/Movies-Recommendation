@@ -37,6 +37,7 @@ type MovieCardGridProps = {
   onMovieHoverEnd?: (movie: MovieCardItem) => void;
   /** When set, this item gets the same zoom/overlay styling as hover (e.g. synced with hero carousel). */
   highlightedItemId?: number | null;
+  autoScrollToHighlightedItem?: boolean;
 };
 
 // Generates a deterministic gradient based on item_id
@@ -157,6 +158,7 @@ export default function MovieCardGrid({
   onMovieHoverStart,
   onMovieHoverEnd,
   highlightedItemId = null,
+  autoScrollToHighlightedItem = false,
 }: MovieCardGridProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -268,6 +270,7 @@ export default function MovieCardGrid({
     return (
       <div
         key={movie.item_id}
+        data-row-item-id={movie.item_id}
         className={`movie-card-wrapper${isMenuOpen ? " movie-card-wrapper--menu-open" : ""}${isHeroSynced ? " movie-card-wrapper--hero-sync" : ""}`}
         onMouseEnter={() => onMovieHoverStart?.(mergedMovie)}
         onMouseLeave={() => onMovieHoverEnd?.(mergedMovie)}
@@ -316,6 +319,7 @@ export default function MovieCardGrid({
         <ScrollableRow
           title={title}
           resetKey={rowResetKey}
+          scrollToItemId={autoScrollToHighlightedItem ? highlightedItemId : null}
           onHeaderClick={handleCollectionClick}
           headerTitle={title ? `View all in ${title}` : undefined}
           headerIcon={

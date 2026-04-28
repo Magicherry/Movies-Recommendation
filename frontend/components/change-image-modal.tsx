@@ -388,7 +388,18 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
               <section className="movie-modal-section">
                 <h3 className="movie-modal-section-title">TMDB source</h3>
                 {hasStoredTmdbId ? (
-                  <p className="movie-modal-intro">Using saved TMDB ID: {movieTmdbId}</p>
+                  <p className="movie-modal-intro">
+                    Using saved TMDB ID:{" "}
+                    <a
+                      className="change-image-tmdb-link"
+                      href={`https://www.themoviedb.org/movie/${movieTmdbId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open this movie on TMDB"
+                    >
+                      {movieTmdbId}
+                    </a>
+                  </p>
                 ) : (
                   <p className="movie-modal-error">No TMDB ID found for this movie. Please run metadata scrape first.</p>
                 )}
