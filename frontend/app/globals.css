@@ -446,7 +446,7 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .hero-source-badge {
   display: inline-flex;
@@ -480,6 +480,23 @@ body {
   line-height: 1.1;
   margin: 0 0 16px;
   text-shadow: 2px 2px 8px rgba(0,0,0,0.6);
+}
+.hero-title-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.hero-title-block--carousel {
+  margin-bottom: 18px;
+}
+.hero-movie-logo {
+  display: block;
+  width: min(520px, 78vw);
+  max-height: 180px;
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.65));
 }
 .hero-meta {
   display: flex;
@@ -2363,9 +2380,13 @@ body {
   .hero-title {
     font-size: 2.2rem;
   }
+  .hero-movie-logo {
+    width: min(420px, 82vw);
+    max-height: 140px;
+  }
   .hero-source-row {
     gap: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 16px;
   }
   .hero-source-note {
     width: 100%;
@@ -3998,7 +4019,7 @@ body {
 }
 .change-image-cards-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
 }
 .change-image-card {
@@ -4070,12 +4091,17 @@ body {
   object-fit: contain;
   object-position: center;
 }
+.change-image-card-logo img {
+  object-fit: contain;
+  object-position: center;
+}
 .change-image-card-poster {
   width: 100%;
   height: 220px;
   max-height: 220px;
 }
-.change-image-card-backdrop {
+.change-image-card-backdrop,
+.change-image-card-logo {
   width: 100%;
   height: 220px;
   max-height: 220px;
@@ -4223,6 +4249,16 @@ body {
 }
 .change-image-backdrop-grid .change-image-picker-thumb {
   aspect-ratio: 16/9;
+}
+.change-image-logo-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.change-image-logo-grid .change-image-picker-thumb {
+  aspect-ratio: 16/9;
+}
+.change-image-logo-grid .change-image-picker-thumb img {
+  object-fit: contain;
+  padding: 12px;
 }
 
 

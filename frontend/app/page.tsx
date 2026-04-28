@@ -136,6 +136,7 @@ export default function HomePage() {
           genres: h.genres,
           poster_url: h.poster_url,
           backdrop_url: h.backdrop_url,
+          logo_url: h.logo_url,
           overview: h.overview,
           tmdb_id: h.tmdb_id,
         }));
@@ -145,7 +146,7 @@ export default function HomePage() {
 
         let nextCarouselSourceNote = "No personalized results found. Showing trending picks.";
         if (recs.length > 0) {
-          nextCarouselSourceNote = "Tailored for your active profile.";
+          nextCarouselSourceNote = "";
         } else if (recommendationResult.errorMessage) {
           const normalizedError = recommendationResult.errorMessage.toLowerCase();
           nextCarouselSourceNote = normalizedError.includes("not found")

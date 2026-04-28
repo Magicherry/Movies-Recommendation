@@ -9,18 +9,20 @@ import type { TMDBImageItem } from "../lib/api";
 type ChangeImageModalProps = {
   movie: MovieCardItem;
   onClose: () => void;
-  onSuccess: (payload: { itemId: number; posterUrl: string; backdropUrl: string }) => void;
+  onSuccess: (payload: { itemId: number; posterUrl: string; backdropUrl: string; logoUrl: string }) => void;
 };
 
 const MODAL_TRANSITION_MS = 250;
 
-type Level2Mode = "poster" | "backdrop";
+type Level2Mode = "poster" | "backdrop" | "logo";
 
 export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeImageModalProps) {
   const currentPoster = movie.poster_url ?? "";
   const currentBackdrop = movie.backdrop_url ?? "";
+  const currentLogo = movie.logo_url ?? "";
   const [selectedPosterUrl, setSelectedPosterUrl] = useState<string | null>(null);
   const [selectedBackdropUrl, setSelectedBackdropUrl] = useState<string | null>(null);
+  const [selectedLogoUrl, setSelectedLogoUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEntered, setIsEntered] = useState(false);
@@ -32,14 +34,18 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
   const [urlInput, setUrlInput] = useState("");
   const [posters, setPosters] = useState<TMDBImageItem[]>([]);
   const [backdrops, setBackdrops] = useState<TMDBImageItem[]>([]);
+  const [logos, setLogos] = useState<TMDBImageItem[]>([]);
   const [imagesLoading, setImagesLoading] = useState(false);
   const [posterSize, setPosterSize] = useState<{ w: number; h: number } | null>(null);
   const [backdropSize, setBackdropSize] = useState<{ w: number; h: number } | null>(null);
+  const [logoSize, setLogoSize] = useState<{ w: number; h: number } | null>(null);
   const [posterLoadError, setPosterLoadError] = useState(false);
   const [backdropLoadError, setBackdropLoadError] = useState(false);
+  const [logoLoadError, setLogoLoadError] = useState(false);
 
   const displayPoster = selectedPosterUrl !== null ? selectedPosterUrl : currentPoster;
   const displayBackdrop = selectedBackdropUrl !== null ? selectedBackdropUrl : currentBackdrop;
+  const displayLogo = selectedLogoUrl !== null ? selectedLogoUrl : currentLogo;
   const movieTmdbId = movie.tmdb_id != null && movie.tmdb_id !== "" ? Number(movie.tmdb_id) : NaN;
   const hasStoredTmdbId = Number.isInteger(movieTmdbId) && movieTmdbId > 0;
 
@@ -56,21 +62,22 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
     setError(null);
     const posterToSend = selectedPosterUrl !== null ? selectedPosterUrl : currentPoster;
     const backdropToSend = selectedBackdropUrl !== null ? selectedBackdropUrl : currentBackdrop;
-    if (!posterToSend.trim() && !backdropToSend.trim()) {
+    const logoToSend = selectedLogoUrl !== null ? selectedLogoUrl : currentLogo;
+    if (!posterToSend.trim() && !backdropToSend.trim() && !logoToSend.trim()) {
       setError("At least one image is required.");
       return;
     }
     setSaving(true);
     try {
-      await movieUpdateImages(movie.item_id, posterToSend, backdropToSend);
-      onSuccess({ itemId: movie.item_id, posterUrl: posterToSend, backdropUrl: backdropToSend });
+      await movieUpdateImages(movie.item_id, posterToSend, backdropToSend, logoToSend);
+      onSuccess({ itemId: movie.item_id, posterUrl: posterToSend, backdropUrl: backdropToSend, logoUrl: logoToSend });
       handleClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Update failed.");
     } finally {
       setSaving(false);
     }
-  }, [movie.item_id, currentPoster, currentBackdrop, selectedPosterUrl, selectedBackdropUrl, onSuccess, handleClose]);
+  }, [movie.item_id, currentPoster, currentBackdrop, currentLogo, selectedPosterUrl, selectedBackdropUrl, selectedLogoUrl, onSuccess, handleClose]);
 
   const openLevel2Poster = useCallback(() => {
     if (!hasStoredTmdbId) {
@@ -102,6 +109,21 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
     setError(null);
   }, [hasStoredTmdbId, backdrops.length, imagesLoading]);
 
+  const openLevel2Logo = useCallback(() => {
+    if (!hasStoredTmdbId) {
+      setError("No TMDB ID found. Please scrape metadata first.");
+      return;
+    }
+    if (imagesLoading) return;
+    if (logos.length === 0) {
+      setError("No logos found for this movie.");
+      return;
+    }
+    setLevel(2);
+    setLevel2Mode("logo");
+    setError(null);
+  }, [hasStoredTmdbId, logos.length, imagesLoading]);
+
   const openLevel3Poster = useCallback(() => {
     setUrlInput(displayPoster || "");
     setLevel(3);
@@ -116,13 +138,23 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
     setError(null);
   }, [displayBackdrop]);
 
+  const openLevel3Logo = useCallback(() => {
+    setUrlInput(displayLogo || "");
+    setLevel(3);
+    setLevel2Mode("logo");
+    setError(null);
+  }, [displayLogo]);
+
   const handleApplyUrl = useCallback(() => {
     if (level2Mode === "poster") {
       setSelectedPosterUrl(urlInput.trim());
       setPosterSize(null);
-    } else {
+    } else if (level2Mode === "backdrop") {
       setSelectedBackdropUrl(urlInput.trim());
       setBackdropSize(null);
+    } else {
+      setSelectedLogoUrl(urlInput.trim());
+      setLogoSize(null);
     }
     setLevel(1);
   }, [level2Mode, urlInput]);
@@ -131,9 +163,12 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
     if (level2Mode === "poster") {
       setSelectedPosterUrl(item.url);
       setPosterSize({ w: item.width, h: item.height });
-    } else {
+    } else if (level2Mode === "backdrop") {
       setSelectedBackdropUrl(item.url);
       setBackdropSize({ w: item.width, h: item.height });
+    } else {
+      setSelectedLogoUrl(item.url);
+      setLogoSize({ w: item.width, h: item.height });
     }
     setLevel(1);
   }, [level2Mode]);
@@ -145,6 +180,10 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
   const handleDiscardBackdrop = useCallback(() => {
     setSelectedBackdropUrl("");
     setBackdropSize(null);
+  }, []);
+  const handleDiscardLogo = useCallback(() => {
+    setSelectedLogoUrl("");
+    setLogoSize(null);
   }, []);
 
   const onPosterLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -165,6 +204,15 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
       return null;
     });
   }, []);
+  const onLogoLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    setLogoLoadError(false);
+    setLogoSize(prev => {
+      if (prev) return prev;
+      if (img.naturalWidth && img.naturalHeight) return { w: img.naturalWidth, h: img.naturalHeight };
+      return null;
+    });
+  }, []);
 
   useEffect(() => {
     setPosterLoadError(false);
@@ -173,6 +221,10 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
   useEffect(() => {
     setBackdropLoadError(false);
   }, [displayBackdrop]);
+
+  useEffect(() => {
+    setLogoLoadError(false);
+  }, [displayLogo]);
 
   useEffect(() => {
     const scrollY = window.scrollY;
@@ -215,6 +267,7 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
     if (!hasStoredTmdbId) {
       setPosters([]);
       setBackdrops([]);
+      setLogos([]);
       setImagesLoading(false);
       return;
     }
@@ -225,6 +278,7 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
         if (cancelled) return;
         setPosters(data.posters ?? []);
         setBackdrops(data.backdrops ?? []);
+        setLogos(data.logos ?? []);
       })
       .catch(() => {
         if (!cancelled) {
@@ -253,6 +307,14 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
     isEntered && !isExiting && "movie-modal-entered",
     isExiting && "movie-modal-exiting",
   ].filter(Boolean).join(" ");
+  const activeImageName = level2Mode === "poster" ? "cover" : level2Mode === "backdrop" ? "backdrop" : "logo";
+  const activeImageTitle = level2Mode === "poster" ? "Cover" : level2Mode === "backdrop" ? "Backdrop" : "Logo";
+  const pickerGridClass = [
+    "change-image-picker-grid",
+    level2Mode === "backdrop" && "change-image-backdrop-grid",
+    level2Mode === "logo" && "change-image-logo-grid",
+  ].filter(Boolean).join(" ");
+  const pickerItems = level2Mode === "poster" ? posters : level2Mode === "backdrop" ? backdrops : logos;
 
   const content = (
     <div
@@ -276,7 +338,7 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
             </button>
           )}
           <h2 className="movie-modal-header-title">
-            {level === 1 ? "Change Image" : level === 2 ? (level2Mode === "poster" ? "Choose Cover" : "Choose Backdrop") : (level2Mode === "poster" ? "Enter cover URL" : "Enter backdrop URL")}
+            {level === 1 ? "Change Image" : level === 2 ? `Choose ${activeImageTitle}` : `Enter ${activeImageName} URL`}
           </h2>
           <button
             type="button"
@@ -296,7 +358,7 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
               <div className="change-image-panel change-image-panel--1">
               <div className="change-image-body-scroll">
               <p className="movie-modal-intro">
-                Change cover or backdrop below. Images are loaded directly from TMDB using the saved TMDB ID.
+                Change cover, backdrop, or logo below. Images are loaded directly from TMDB using the saved TMDB ID.
               </p>
 
               <section className="movie-modal-section change-image-level1-cards">
@@ -382,6 +444,46 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
                       </button>
                     </div>
                   </div>
+                  <div className="change-image-card change-image-card-ref">
+                    <div className="change-image-card-preview change-image-card-logo">
+                      {displayLogo && !logoLoadError ? (
+                        <img key={displayLogo} src={displayLogo} alt="Logo" onLoad={onLogoLoad} onError={() => { setLogoLoadError(true); setLogoSize(null); }} />
+                      ) : (
+                        <span className="change-image-card-empty">No logo</span>
+                      )}
+                    </div>
+                    <span className="change-image-card-label">Logo</span>
+                    <span className="change-image-card-resolution">{logoSize ? `${logoSize.w} × ${logoSize.h}` : "\u00A0"}</span>
+                    <div className="change-image-card-actions change-image-card-actions-icons">
+                      <button
+                        type="button"
+                        onClick={openLevel2Logo}
+                        disabled={imagesLoading || !hasStoredTmdbId || logos.length === 0}
+                        className="change-image-card-icon-btn"
+                        title="Search image"
+                        aria-label="Search image"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="11" cy="11" r="8" />
+                          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                      </button>
+                      <button type="button" onClick={openLevel3Logo} className="change-image-card-icon-btn" title="Enter URL" aria-label="Enter URL">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                        </svg>
+                      </button>
+                      <button type="button" onClick={handleDiscardLogo} className="change-image-card-icon-btn" title="Remove logo" aria-label="Remove logo">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          <line x1="10" y1="11" x2="10" y2="17" />
+                          <line x1="14" y1="11" x2="14" y2="17" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </section>
 
@@ -413,7 +515,7 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
                 <button
                   type="button"
                   onClick={handleSave}
-                  disabled={saving || !(displayPoster?.trim() || displayBackdrop?.trim())}
+                  disabled={saving || !(displayPoster?.trim() || displayBackdrop?.trim() || displayLogo?.trim())}
                   className="movie-modal-btn movie-modal-btn-primary"
                 >
                   {saving ? "Saving…" : "Save"}
@@ -424,10 +526,10 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
               <div className="change-image-panel change-image-panel--2">
             <div className="change-image-body-scroll">
               <p className="movie-modal-intro">
-                {level2Mode === "poster" ? "Select a cover image to use." : "Select a backdrop image to use."}
+                Select a {activeImageName} image to use.
               </p>
-              <div className={`change-image-picker-grid${level2Mode === "backdrop" ? " change-image-backdrop-grid" : ""}`}>
-                {(level2Mode === "poster" ? posters : backdrops).map((item) => (
+              <div className={pickerGridClass}>
+                {pickerItems.map((item) => (
                   <div key={item.file_path} className="change-image-picker-item">
                     <button
                       type="button"
@@ -452,7 +554,7 @@ export default function ChangeImageModal({ movie, onClose, onSuccess }: ChangeIm
               <div className="change-image-panel change-image-panel--3">
                 <div className="change-image-body-scroll">
                   <p className="movie-modal-intro">
-                    {level2Mode === "poster" ? "Enter a custom cover image URL." : "Enter a custom backdrop image URL."}
+                    Enter a custom {activeImageName} image URL.
                   </p>
                   <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "16px" }}>
                     <input 

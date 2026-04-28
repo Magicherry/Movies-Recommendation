@@ -24,7 +24,7 @@ if not API_KEY or API_KEY == "your_real_api_key_here":
     sys.exit(1)
 
 thread_local = threading.local()
-REQUIRED_ENRICHED_COLS = ("poster_url", "backdrop_url", "overview", "tmdb_id", "scraped_title", "cast", "directors")
+REQUIRED_ENRICHED_COLS = ("poster_url", "backdrop_url", "logo_url", "overview", "tmdb_id", "scraped_title", "cast", "directors")
 
 
 def init_scrape_summary() -> dict[str, int]:
@@ -264,6 +264,19 @@ def parse_title_and_year(full_title):
     return (clean_title, year, inner_names)
 
 
+def pick_tmdb_logo_url(movie: dict) -> str:
+    """Pick the best logo from TMDB image metadata, preferring English logos."""
+    logos = ((movie.get("images") or {}).get("logos") or [])
+    if not logos:
+        return ""
+    preferred = sorted(logos, key=lambda item: (
+        0 if (item.get("iso_639_1") or "").lower() == "en" else 1,
+        -(item.get("vote_average") or 0),
+    ))
+    file_path = preferred[0].get("file_path") or ""
+    return f"https://image.tmdb.org/t/p/w500{file_path}" if file_path else ""
+
+
 def fetch_tmdb_info(row):
     title_year = row['title']
     item_id = row['item_id']
@@ -278,7 +291,7 @@ def fetch_tmdb_info(row):
     def fetch_by_tmdb_id(tmdb_id: int, match_source: str = "links_id_hit"):
         detail_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
         try:
-            resp = session.get(detail_url, params={"api_key": API_KEY, "append_to_response": "credits"}, timeout=5)
+            resp = session.get(detail_url, params={"api_key": API_KEY, "append_to_response": "credits,images"}, timeout=5)
             if resp.status_code != 200:
                 return None
             movie = resp.json()
@@ -307,6 +320,7 @@ def fetch_tmdb_info(row):
                 "item_id": item_id,
                 "poster_url": f"https://image.tmdb.org/t/p/w500{movie['poster_path']}" if movie.get("poster_path") else "",
                 "backdrop_url": f"https://image.tmdb.org/t/p/w1280{movie['backdrop_path']}" if movie.get("backdrop_path") else "",
+                "logo_url": pick_tmdb_logo_url(movie),
                 "overview": movie.get("overview", ""),
                 "tmdb_id": str(resolved_tmdb_id) if resolved_tmdb_id is not None else "",
                 "scraped_title": (movie.get("title") or "").strip(),
@@ -360,6 +374,7 @@ def fetch_tmdb_info(row):
         "item_id": item_id,
         "poster_url": "",
         "backdrop_url": "",
+        "logo_url": "",
         "overview": "",
         "tmdb_id": "",
         "scraped_title": "",
@@ -447,6 +462,7 @@ def main():
                 if i:
                     df.at[i[0], "poster_url"] = res.get("poster_url", "")
                     df.at[i[0], "backdrop_url"] = res.get("backdrop_url", "")
+                    df.at[i[0], "logo_url"] = res.get("logo_url", "")
                     df.at[i[0], "overview"] = res.get("overview", "")
                     df.at[i[0], "tmdb_id"] = res.get("tmdb_id", "")
                     df.at[i[0], "scraped_title"] = res.get("scraped_title", "")

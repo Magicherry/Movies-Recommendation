@@ -58,6 +58,7 @@ export default async function MovieDetailPage({ params, searchParams }: MovieDet
 
   const cast = data.movie.cast || [];
   const directors = data.movie.directors || [];
+  const movieName = displayMovieName(data.movie);
 
   return (
     <div className="page-transition">
@@ -76,10 +77,14 @@ export default async function MovieDetailPage({ params, searchParams }: MovieDet
         <div className="hero-banner-gradient" />
         
         <div className="hero-content">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <h1 className="hero-title" style={{ margin: 0 }}>{displayMovieName(data.movie)}</h1>
+          <div className="hero-title-block">
+            {data.movie.logo_url ? (
+              <img className="hero-movie-logo" src={data.movie.logo_url} alt={`${movieName} logo`} />
+            ) : (
+              <h1 className="hero-title" style={{ margin: 0 }}>{movieName}</h1>
+            )}
           </div>
-          <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
+          <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px' }}>
             <span style={{ fontWeight: 'bold', color: 'white' }}>{data.movie.title.match(/\((\d{4})\)$/)?.[1] || "Movie"}</span>
             <span>•</span>
             <span>{data.movie.genres.replace(/\|/g, " • ")}</span>
@@ -101,7 +106,7 @@ export default async function MovieDetailPage({ params, searchParams }: MovieDet
           contextUserId={contextUserId}
           referenceItemId={referenceItemId}
         />
-        <PersonList directors={directors} cast={cast} tmdbId={data.movie.tmdb_id} movieTitle={displayMovieName(data.movie)} />
+        <PersonList directors={directors} cast={cast} tmdbId={data.movie.tmdb_id} movieTitle={movieName} />
 
         <CollectionLimitGrid
           settingKey="more-like-this"

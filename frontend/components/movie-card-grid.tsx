@@ -18,6 +18,7 @@ export type MovieCardItem = {
   is_fallback_score?: boolean;
   poster_url?: string;
   backdrop_url?: string;
+  logo_url?: string;
   overview?: string;
   tmdb_id?: number | string;
   scraped_title?: string;
@@ -168,7 +169,7 @@ export default function MovieCardGrid({
   const [imageModalMovie, setImageModalMovie] = useState<MovieCardItem | null>(null);
   const [refreshingItemId, setRefreshingItemId] = useState<number | null>(null);
   const [fadingItemId, setFadingItemId] = useState<number | null>(null);
-  const [imageOverrides, setImageOverrides] = useState<Record<number, { poster_url: string; backdrop_url: string }>>({});
+  const [imageOverrides, setImageOverrides] = useState<Record<number, { poster_url: string; backdrop_url: string; logo_url: string }>>({});
 
   const openContextMenuAt = useCallback((movie: MovieCardItem, x: number, y: number) => {
     setContextMenu({ x: Math.round(x), y: Math.round(y), movie });
@@ -215,24 +216,25 @@ export default function MovieCardGrid({
     }
   }, [refreshAndPreserveScroll]);
 
-  const handleModalSuccess = useCallback((payload?: { itemId: number; posterUrl: string; backdropUrl: string }) => {
+  const handleModalSuccess = useCallback((payload?: { itemId: number; posterUrl: string; backdropUrl: string; logoUrl?: string }) => {
     if (payload) {
       setImageOverrides((prev) => ({
         ...prev,
         [payload.itemId]: {
           poster_url: payload.posterUrl,
           backdrop_url: payload.backdropUrl,
+          logo_url: payload.logoUrl ?? imageModalMovie?.logo_url ?? "",
         },
       }));
       if (imageModalMovie?.item_id === payload.itemId) {
-        setImageModalMovie((prev) => (prev ? { ...prev, poster_url: payload.posterUrl, backdrop_url: payload.backdropUrl } : prev));
+        setImageModalMovie((prev) => (prev ? { ...prev, poster_url: payload.posterUrl, backdrop_url: payload.backdropUrl, logo_url: payload.logoUrl ?? prev.logo_url ?? "" } : prev));
       }
     }
     refreshAndPreserveScroll();
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("streamx-metadata-updated"));
     }
-  }, [refreshAndPreserveScroll, imageModalMovie?.item_id]);
+  }, [refreshAndPreserveScroll, imageModalMovie?.item_id, imageModalMovie?.logo_url]);
 
   const handleCollectionClick = useCallback(() => {
     if (typeof window !== "undefined") {

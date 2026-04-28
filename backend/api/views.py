@@ -576,7 +576,7 @@ def tmdb_search(request: HttpRequest) -> JsonResponse:
 
 @require_GET
 def tmdb_movie_images(request: HttpRequest, tmdb_id: int) -> JsonResponse:
-    """Fetch all posters and backdrops for a TMDB movie (GET /movie/{id}/images)."""
+    """Fetch posters, backdrops, and logos for a TMDB movie."""
     api_key = _get_tmdb_api_key()
     if not api_key:
         return _error("TMDB API key not configured. Set it in Settings.", status=503)
@@ -592,6 +592,7 @@ def tmdb_movie_images(request: HttpRequest, tmdb_id: int) -> JsonResponse:
     base = "https://image.tmdb.org/t/p"
     posters_raw = data.get("posters") or []
     backdrops_raw = data.get("backdrops") or []
+    logos_raw = data.get("logos") or []
     seen_p = set()
     posters = []
     for p in sorted(posters_raw, key=lambda x: -(x.get("vote_average") or 0)):
@@ -620,7 +621,36 @@ def tmdb_movie_images(request: HttpRequest, tmdb_id: int) -> JsonResponse:
             "width": b.get("width") or 0,
             "height": b.get("height") or 0,
         })
-    return JsonResponse({"posters": posters[:30], "backdrops": backdrops[:30]})
+    seen_l = set()
+    logos = []
+    for logo in sorted(logos_raw, key=lambda x: (
+        0 if (x.get("iso_639_1") or "").lower() == "en" else 1,
+        -(x.get("vote_average") or 0),
+    )):
+        fp = logo.get("file_path") or ""
+        if not fp or fp in seen_l:
+            continue
+        seen_l.add(fp)
+        logos.append({
+            "file_path": fp,
+            "url": f"{base}/w500{fp}",
+            "vote_average": logo.get("vote_average") or 0,
+            "width": logo.get("width") or 0,
+            "height": logo.get("height") or 0,
+        })
+    return JsonResponse({"posters": posters[:30], "backdrops": backdrops[:30], "logos": logos[:30]})
+
+
+def _pick_tmdb_logo_url(movie_data: dict) -> str:
+    logos = ((movie_data.get("images") or {}).get("logos") or [])
+    if not logos:
+        return ""
+    preferred = sorted(logos, key=lambda x: (
+        0 if (x.get("iso_639_1") or "").lower() == "en" else 1,
+        -(x.get("vote_average") or 0),
+    ))
+    file_path = preferred[0].get("file_path") or ""
+    return f"https://image.tmdb.org/t/p/w500{file_path}" if file_path else ""
 
 
 @csrf_exempt
@@ -640,13 +670,14 @@ def movie_apply_scrape(request: HttpRequest, item_id: int) -> JsonResponse:
         
     cast = []
     directors = []
+    movie_data = {}
     if tmdb_id:
         api_key = _get_tmdb_api_key()
         if api_key:
             import requests
             detail_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
             try:
-                detail_resp = requests.get(detail_url, params={"api_key": api_key, "append_to_response": "credits"}, timeout=8)
+                detail_resp = requests.get(detail_url, params={"api_key": api_key, "append_to_response": "credits,images"}, timeout=8)
                 if detail_resp.status_code == 200:
                     movie_data = detail_resp.json()
                     credits = movie_data.get("credits", {})
@@ -672,6 +703,7 @@ def movie_apply_scrape(request: HttpRequest, item_id: int) -> JsonResponse:
         item_id=item_id,
         poster_url=poster_url or None,
         backdrop_url=backdrop_url or None,
+        logo_url=(_pick_tmdb_logo_url(movie_data) or None) if tmdb_id else None,
         overview=overview or None,
         tmdb_id=tmdb_id,
         scraped_title=scraped_title or None,
@@ -734,7 +766,7 @@ def movie_refresh_metadata(request: HttpRequest, item_id: int) -> JsonResponse:
                 tmdb_id = best.get("id")
                 if tmdb_id:
                     detail_url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
-                    detail_resp = requests.get(detail_url, params={"api_key": api_key, "append_to_response": "credits"}, timeout=8)
+                    detail_resp = requests.get(detail_url, params={"api_key": api_key, "append_to_response": "credits,images"}, timeout=8)
                     if detail_resp.status_code == 200:
                         return detail_resp.json()
                 return best
@@ -768,6 +800,7 @@ def movie_refresh_metadata(request: HttpRequest, item_id: int) -> JsonResponse:
     backdrop_path = best.get("backdrop_path") or ""
     poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else ""
     backdrop_url = f"https://image.tmdb.org/t/p/w1280{backdrop_path}" if backdrop_path else ""
+    logo_url = _pick_tmdb_logo_url(best)
     overview = best.get("overview", "") or ""
     tmdb_id = best.get("id")
     scraped_title = (best.get("title") or "").strip()
@@ -795,6 +828,7 @@ def movie_refresh_metadata(request: HttpRequest, item_id: int) -> JsonResponse:
         item_id=item_id,
         poster_url=poster_url or None,
         backdrop_url=backdrop_url or None,
+        logo_url=logo_url or None,
         overview=overview or None,
         tmdb_id=tmdb_id,
         scraped_title=scraped_title or None,
@@ -809,19 +843,21 @@ def movie_refresh_metadata(request: HttpRequest, item_id: int) -> JsonResponse:
 @csrf_exempt
 @require_http_methods(["POST"])
 def movie_update_images(request: HttpRequest, item_id: int) -> JsonResponse:
-    """Update or clear poster and/or backdrop URL for one movie. Send empty string to clear."""
+    """Update or clear poster, backdrop, and/or logo URL for one movie."""
     try:
         body = json.loads(request.body)
         poster_url = (body.get("poster_url") or "").strip() if "poster_url" in body else None
         backdrop_url = (body.get("backdrop_url") or "").strip() if "backdrop_url" in body else None
+        logo_url = (body.get("logo_url") or "").strip() if "logo_url" in body else None
     except json.JSONDecodeError:
         return _error("Invalid JSON", status=400)
-    if "poster_url" not in body and "backdrop_url" not in body:
-        return _error("Provide at least poster_url or backdrop_url", status=400)
+    if "poster_url" not in body and "backdrop_url" not in body and "logo_url" not in body:
+        return _error("Provide at least poster_url, backdrop_url, or logo_url", status=400)
     success = service.update_movie_enriched(
         item_id=item_id,
         poster_url=poster_url,
         backdrop_url=backdrop_url,
+        logo_url=logo_url,
         overview=None,
     )
     if not success:

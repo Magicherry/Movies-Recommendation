@@ -99,6 +99,7 @@ export default function HeroCarousel({
     "--hero-indicator-mask-right": isIndicatorTrackAtEnd ? "0px" : "6px",
   } as CSSProperties;
   const sourceLabel = source === "personalized" ? "Personalized Picks" : "Trending Picks";
+  const featuredName = displayMovieName(featured);
   const detailHref = buildMovieDetailHref(featured.item_id, {
     context: source === "personalized" ? "recommended" : "neutral",
     userId: source === "personalized" ? detailUserId : undefined,
@@ -109,12 +110,6 @@ export default function HeroCarousel({
     const hue1 = (id * 137) % 360;
     const hue2 = (id * 97) % 360;
     return `linear-gradient(135deg, hsl(${hue1}, 40%, 25%), hsl(${hue2}, 60%, 10%))`;
-  };
-
-  const getAgeRating = (genres: string) => {
-    if (genres.includes('Children') || genres.includes('Animation')) return 'PG';
-    if (genres.includes('Horror') || genres.includes('Crime') || genres.includes('Thriller')) return '18+';
-    return '13+';
   };
 
   return (
@@ -169,13 +164,17 @@ export default function HeroCarousel({
           </span>
           {sourceNote ? <span className="hero-source-note">{sourceNote}</span> : null}
         </div>
-        <h1 className="hero-title">{displayMovieName(featured)}</h1>
+        <div className={`hero-title-block${featured.logo_url ? " hero-title-block--carousel" : ""}`}>
+          {featured.logo_url ? (
+            <img className="hero-movie-logo" src={featured.logo_url} alt={`${featuredName} logo`} />
+          ) : (
+            <h1 className="hero-title">{featuredName}</h1>
+          )}
+        </div>
         <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontWeight: 'bold', color: 'white' }}>{featured.title.match(/\((\d{4})\)$/)?.[1] || "Movie"}</span>
           <span>•</span>
-          <span>{getAgeRating(featured.genres)}</span>
-          <span>•</span>
-          <span>{featured.genres.split('|')[0] || "Drama"}</span>
+          <span>{featured.genres ? featured.genres.replace(/\|/g, " • ") : "Drama"}</span>
         </div>
         <p className="hero-desc">
           {featured.overview || "Experience the magic of cinema with our personalized recommendations. Powered by advanced Matrix Factorization algorithms to find exactly what you want to watch."}

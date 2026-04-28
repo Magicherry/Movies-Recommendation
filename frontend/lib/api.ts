@@ -5,6 +5,7 @@ export type Movie = {
   genres: string;
   poster_url?: string;
   backdrop_url?: string;
+  logo_url?: string;
   overview?: string;
   tmdb_id?: number | string;
   cast?: any[];
@@ -338,6 +339,7 @@ export type TMDBSearchResult = {
   overview: string;
   poster_url: string;
   backdrop_url: string;
+  logo_url?: string;
 };
 
 export async function tmdbSearch(query: string, year?: string): Promise<{ results: TMDBSearchResult[] }> {
@@ -353,7 +355,7 @@ export async function tmdbSearch(query: string, year?: string): Promise<{ result
 
 export type TMDBImageItem = { file_path: string; url: string; vote_average: number; width: number; height: number };
 
-export async function tmdbMovieImages(tmdbId: number): Promise<{ posters: TMDBImageItem[]; backdrops: TMDBImageItem[] }> {
+export async function tmdbMovieImages(tmdbId: number): Promise<{ posters: TMDBImageItem[]; backdrops: TMDBImageItem[]; logos: TMDBImageItem[] }> {
   const res = await devFetch(`${API_BASE}/tmdb/movie/${tmdbId}/images`, { cache: "no-store" }, `/tmdb/movie/${tmdbId}/images`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -402,10 +404,11 @@ export async function movieRefreshMetadata(itemId: number): Promise<void> {
   }
 }
 
-export async function movieUpdateImages(itemId: number, posterUrl?: string, backdropUrl?: string): Promise<void> {
-  const body: { poster_url?: string; backdrop_url?: string } = {};
+export async function movieUpdateImages(itemId: number, posterUrl?: string, backdropUrl?: string, logoUrl?: string): Promise<void> {
+  const body: { poster_url?: string; backdrop_url?: string; logo_url?: string } = {};
   if (posterUrl !== undefined) body.poster_url = posterUrl;
   if (backdropUrl !== undefined) body.backdrop_url = backdropUrl;
+  if (logoUrl !== undefined) body.logo_url = logoUrl;
   const res = await devFetch(`${API_BASE}/movie/${itemId}/images`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

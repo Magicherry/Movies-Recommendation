@@ -262,6 +262,7 @@ class RecommenderService:
             "genres": row.genres,
             "poster_url": getattr(row, "poster_url", ""),
             "backdrop_url": getattr(row, "backdrop_url", ""),
+            "logo_url": getattr(row, "logo_url", ""),
             "overview": getattr(row, "overview", ""),
             "tmdb_id": norm_tmdb_id,
             "cast": cast_data,
@@ -287,7 +288,7 @@ class RecommenderService:
         frame["item_id"] = pd.to_numeric(frame["item_id"], errors="coerce")
         frame = frame.dropna(subset=["item_id"]).copy()
         frame["item_id"] = frame["item_id"].astype(int)
-        text_cols = ("poster_url", "backdrop_url", "overview", "tmdb_id", "scraped_title", "cast", "directors")
+        text_cols = ("poster_url", "backdrop_url", "logo_url", "overview", "tmdb_id", "scraped_title", "cast", "directors")
         for col in text_cols:
             if col not in frame.columns:
                 frame[col] = ""
@@ -330,6 +331,7 @@ class RecommenderService:
                 item["genres"] = meta.get("genres", item.get("genres", ""))
                 item["poster_url"] = meta.get("poster_url", item.get("poster_url", ""))
                 item["backdrop_url"] = meta.get("backdrop_url", item.get("backdrop_url", ""))
+                item["logo_url"] = meta.get("logo_url", item.get("logo_url", ""))
                 item["overview"] = meta.get("overview", item.get("overview", ""))
                 item["tmdb_id"] = meta.get("tmdb_id", item.get("tmdb_id", ""))
 
@@ -348,6 +350,7 @@ class RecommenderService:
                 item["genres"] = meta.get("genres", item.get("genres", ""))
                 item["poster_url"] = meta.get("poster_url", item.get("poster_url", ""))
                 item["backdrop_url"] = meta.get("backdrop_url", item.get("backdrop_url", ""))
+                item["logo_url"] = meta.get("logo_url", item.get("logo_url", ""))
                 item["overview"] = meta.get("overview", item.get("overview", ""))
                 item["tmdb_id"] = meta.get("tmdb_id", item.get("tmdb_id", ""))
 
@@ -724,6 +727,7 @@ class RecommenderService:
                     "genres": "",
                     "poster_url": "",
                     "backdrop_url": "",
+                    "logo_url": "",
                     "overview": "",
                     "tmdb_id": "",
                 },
@@ -736,6 +740,7 @@ class RecommenderService:
                     "genres": meta["genres"],
                     "poster_url": meta.get("poster_url", ""),
                     "backdrop_url": meta.get("backdrop_url", ""),
+                    "logo_url": meta.get("logo_url", ""),
                     "overview": meta.get("overview", ""),
                     "tmdb_id": meta.get("tmdb_id", ""),
                     "score": float(score),
@@ -1284,6 +1289,7 @@ class RecommenderService:
                     "genres": meta["genres"],
                     "poster_url": meta.get("poster_url", ""),
                     "backdrop_url": meta.get("backdrop_url", ""),
+                    "logo_url": meta.get("logo_url", ""),
                     "overview": meta.get("overview", ""),
                     "tmdb_id": meta.get("tmdb_id", ""),
                     "score": float(score),
@@ -1779,6 +1785,7 @@ class RecommenderService:
                     "genres": meta["genres"],
                     "poster_url": meta.get("poster_url", ""),
                     "backdrop_url": meta.get("backdrop_url", ""),
+                    "logo_url": meta.get("logo_url", ""),
                     "overview": meta.get("overview", ""),
                     "tmdb_id": meta.get("tmdb_id", ""),
                     "score": float(rec.score),
@@ -1852,6 +1859,7 @@ class RecommenderService:
                     "genres": meta["genres"],
                     "poster_url": meta.get("poster_url", ""),
                     "backdrop_url": meta.get("backdrop_url", ""),
+                    "logo_url": meta.get("logo_url", ""),
                     "overview": meta.get("overview", ""),
                     "tmdb_id": meta.get("tmdb_id", ""),
                     "score": float(rec.score),
@@ -1907,6 +1915,7 @@ class RecommenderService:
                     "genres": "",
                     "poster_url": "",
                     "backdrop_url": "",
+                    "logo_url": "",
                     "overview": "",
                     "tmdb_id": "",
                 },
@@ -1918,6 +1927,7 @@ class RecommenderService:
                 "genres": meta["genres"],
                 "poster_url": meta.get("poster_url", ""),
                 "backdrop_url": meta.get("backdrop_url", ""),
+                "logo_url": meta.get("logo_url", ""),
                 "overview": meta.get("overview", ""),
                 "tmdb_id": meta.get("tmdb_id", ""),
                 "rating": float(rating),
@@ -2298,6 +2308,7 @@ class RecommenderService:
         item_id: int,
         poster_url: str | None = None,
         backdrop_url: str | None = None,
+        logo_url: str | None = None,
         overview: str | None = None,
         tmdb_id: int | None = None,
         scraped_title: str | None = None,
@@ -2308,7 +2319,7 @@ class RecommenderService:
         self._ensure_movie_data_fresh()
         if self.movies is None or item_id not in self.movie_lookup:
             return False
-        for col in ("poster_url", "backdrop_url", "overview", "tmdb_id", "scraped_title", "cast", "directors"):
+        for col in ("poster_url", "backdrop_url", "logo_url", "overview", "tmdb_id", "scraped_title", "cast", "directors"):
             if col not in self.movies.columns:
                 self.movies[col] = ""
         row = self.movie_lookup[item_id]
@@ -2322,6 +2333,11 @@ class RecommenderService:
             idx = self.movies[self.movies["item_id"] == item_id].index
             if len(idx) > 0:
                 self.movies.at[idx[0], "backdrop_url"] = backdrop_url
+        if logo_url is not None:
+            row["logo_url"] = logo_url
+            idx = self.movies[self.movies["item_id"] == item_id].index
+            if len(idx) > 0:
+                self.movies.at[idx[0], "logo_url"] = logo_url
         if overview is not None:
             row["overview"] = overview
             idx = self.movies[self.movies["item_id"] == item_id].index
