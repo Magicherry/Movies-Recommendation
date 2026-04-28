@@ -3679,18 +3679,28 @@ body {
   justify-content: space-between;
   align-items: baseline;
   margin-bottom: 6px;
+  gap: 12px;
 }
 .movie-modal-result-card .result-title {
+  min-width: 0;
   font-weight: 600;
   font-size: 1.05rem;
   color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.movie-modal-result-card .result-header-meta {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
 }
 .movie-modal-result-card .result-meta {
   font-size: 0.85rem;
   color: var(--brand);
   font-weight: 500;
-  flex-shrink: 0;
-  margin-left: 12px;
 }
 .movie-modal-result-card .result-overview {
   font-size: 0.85rem;
@@ -3707,9 +3717,11 @@ body {
   margin-bottom: 6px;
 }
 .movie-modal-result-card .result-check {
-  position: absolute;
-  top: 16px;
-  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   color: var(--brand);
   opacity: 0;
   transform: scale(0.8);

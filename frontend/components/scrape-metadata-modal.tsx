@@ -289,17 +289,19 @@ export default function ScrapeMetadataModal({ movie, onClose, onSuccess }: Scrap
                         <div className="result-body">
                           <div className="result-header">
                             <div className="result-title">{displayMovieTitle(r.title)}</div>
-                            <div className="result-meta">{r.release_date?.slice(0, 4) || "—"}</div>
+                            <div className="result-header-meta">
+                              <span className="result-check">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              </span>
+                              <div className="result-meta">{r.release_date?.slice(0, 4) || "—"}</div>
+                            </div>
                           </div>
                           <div className="result-tmdb-id">TMDB ID: {r.tmdb_id}</div>
                           {r.overview && (
                             <div className="result-overview">{r.overview}</div>
                           )}
-                        </div>
-                        <div className="result-check">
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
                         </div>
                       </button>
                     ))}
