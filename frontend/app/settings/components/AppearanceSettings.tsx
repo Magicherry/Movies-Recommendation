@@ -50,6 +50,7 @@ const APPEARANCE_DEFAULTS: Record<string, string> = {
   "streamx-carousel-interval-seconds": "30",
   "streamx-show-card-scores": "true",
   "streamx-show-brand-algorithm": "true",
+  "streamx-show-movie-logos": "true",
 };
 
 function parseStoredNumber(key: string, fallback: number, min: number, max: number): number {
@@ -759,6 +760,24 @@ export default function AppearanceSettings() {
                 onChange={(e) => {
                   const enabled = e.target.checked;
                   localStorage.setItem("streamx-show-brand-algorithm", enabled.toString());
+                  window.dispatchEvent(new CustomEvent("streamx-settings-changed"));
+                }}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+          <div className="setting-row">
+            <div className="setting-row-info">
+              <h3>Show movie logo images</h3>
+              <p>Display the movie logo image on banners and detail pages. When disabled, the movie title text is shown instead.</p>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                defaultChecked={typeof window !== "undefined" ? localStorage.getItem("streamx-show-movie-logos") !== "false" : true}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  localStorage.setItem("streamx-show-movie-logos", enabled.toString());
                   window.dispatchEvent(new CustomEvent("streamx-settings-changed"));
                 }}
               />

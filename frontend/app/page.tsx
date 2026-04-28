@@ -243,7 +243,6 @@ export default function HomePage() {
               detailContext="recommended"
               detailUserId={userId}
               highlightedItemId={heroFeaturedItemId}
-              autoScrollToHighlightedItem={true}
               onMovieHoverStart={setHoverPreviewMovie}
               onMovieHoverEnd={(movie) => {
                 setHoverPreviewMovie((current) => (current?.item_id === movie.item_id ? null : current));

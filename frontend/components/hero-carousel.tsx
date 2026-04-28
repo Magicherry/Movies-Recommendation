@@ -1,6 +1,19 @@
 "use client";
 
 import { useState, useEffect, useCallback, type CSSProperties } from "react";
+
+function useShowMovieLogos(): boolean {
+  const [show, setShow] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("streamx-show-movie-logos") !== "false";
+  });
+  useEffect(() => {
+    const handler = () => setShow(localStorage.getItem("streamx-show-movie-logos") !== "false");
+    window.addEventListener("streamx-settings-changed", handler);
+    return () => window.removeEventListener("streamx-settings-changed", handler);
+  }, []);
+  return show;
+}
 import Link from "next/link";
 import { Movie, displayMovieName } from "../lib/api";
 import { buildMovieDetailHref } from "../lib/movie-detail-context";
@@ -40,6 +53,7 @@ export default function HeroCarousel({
 }: HeroCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const showLogos = useShowMovieLogos();
   const intervalMs = Math.min(120000, Math.max(5000, autoAdvanceMs));
   const isPreviewActive = Boolean(previewMovie);
 
@@ -164,8 +178,8 @@ export default function HeroCarousel({
           </span>
           {sourceNote ? <span className="hero-source-note">{sourceNote}</span> : null}
         </div>
-        <div className={`hero-title-block${featured.logo_url ? " hero-title-block--carousel" : ""}`}>
-          {featured.logo_url ? (
+        <div className={`hero-title-block${showLogos && featured.logo_url ? " hero-title-block--carousel" : ""}`}>
+          {showLogos && featured.logo_url ? (
             <img className="hero-movie-logo" src={featured.logo_url} alt={`${featuredName} logo`} />
           ) : (
             <h1 className="hero-title">{featuredName}</h1>

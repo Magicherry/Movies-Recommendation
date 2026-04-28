@@ -1,4 +1,5 @@
 import { getMovieDetail, displayMovieName } from "../../../lib/api";
+import MovieHeroTitle from "../../../components/movie-hero-title";
 import CollectionLimitGrid from "../../../components/collection-limit-grid";
 import PredictionDisplay from "../../../components/prediction-display";
 import RefreshOnEngineChange from "../../../components/refresh-on-engine-change";
@@ -78,11 +79,7 @@ export default async function MovieDetailPage({ params, searchParams }: MovieDet
         
         <div className="hero-content">
           <div className="hero-title-block">
-            {data.movie.logo_url ? (
-              <img className="hero-movie-logo" src={data.movie.logo_url} alt={`${movieName} logo`} />
-            ) : (
-              <h1 className="hero-title" style={{ margin: 0 }}>{movieName}</h1>
-            )}
+            <MovieHeroTitle logoUrl={data.movie.logo_url} movieName={movieName} />
           </div>
           <div className="hero-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px' }}>
             <span style={{ fontWeight: 'bold', color: 'white' }}>{data.movie.title.match(/\((\d{4})\)$/)?.[1] || "Movie"}</span>
