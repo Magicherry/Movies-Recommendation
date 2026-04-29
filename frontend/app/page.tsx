@@ -239,7 +239,7 @@ export default function HomePage() {
               items={recommendations} 
               scoreLabel="Match" 
               rowMode={true}
-              rowResetKey={userId}
+              rowResetKey={`${userId}-${metadataVersion}`}
               detailContext="recommended"
               detailUserId={userId}
               highlightedItemId={heroFeaturedItemId}

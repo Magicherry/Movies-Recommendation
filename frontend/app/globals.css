@@ -430,6 +430,18 @@ body {
   background-size: cover;
   background-position: center;
 }
+
+/* Hero carousel: stacked layers cross-fade (opacity); never animate background-image URLs. */
+.hero-banner-bg-stack {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+.hero-banner-bg-fade {
+  position: absolute;
+  inset: 0;
+  transition: opacity 0.65s ease;
+}
 .hero-banner-gradient {
   position: absolute;
   inset: 0;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, type CSSProperties } from "react";
+import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
 
 function useShowMovieLogos(): boolean {
   const [show, setShow] = useState<boolean>(() => {
@@ -21,6 +21,84 @@ import { buildMovieDetailHref } from "../lib/movie-detail-context";
 export type HeroCarouselSource = "personalized" | "trending";
 
 const HERO_INDICATOR_VISIBLE_SLOTS = 7;
+
+function heroBackdropGradient(itemId: number): string {
+  const hue1 = (itemId * 137) % 360;
+  const hue2 = (itemId * 97) % 360;
+  return `linear-gradient(135deg, hsl(${hue1}, 40%, 25%), hsl(${hue2}, 60%, 10%))`;
+}
+
+function heroBackdropStyle(movie: Movie): CSSProperties {
+  return {
+    backgroundImage: movie.backdrop_url ? `url('${movie.backdrop_url}')` : heroBackdropGradient(movie.item_id),
+    backgroundSize: "cover",
+    backgroundPosition: "top center",
+    backgroundRepeat: "no-repeat",
+  };
+}
+
+/** Opacity cross-fade only — do not transition `background-image` (it causes warped frames with `cover`). */
+function HeroBackdropCrossfade({ movie }: { movie: Movie }) {
+  const featuredKey = `${movie.item_id}:${movie.backdrop_url ?? ""}`;
+  const [bgLayer0, setBgLayer0] = useState<Movie>(() => movie);
+  const [bgLayer1, setBgLayer1] = useState<Movie>(() => movie);
+  const [activeBgLayer, setActiveBgLayer] = useState<0 | 1>(0);
+  const activeBgLayerRef = useRef<0 | 1>(0);
+  const heroBgFeaturedKeyRef = useRef<string | null>(null);
+  const heroBgLoadIdRef = useRef(0);
+
+  useEffect(() => {
+    if (heroBgFeaturedKeyRef.current === null) {
+      heroBgFeaturedKeyRef.current = featuredKey;
+      setBgLayer0(movie);
+      setBgLayer1(movie);
+      return;
+    }
+    if (heroBgFeaturedKeyRef.current === featuredKey) return;
+    heroBgFeaturedKeyRef.current = featuredKey;
+
+    const inactive = (1 - activeBgLayerRef.current) as 0 | 1;
+    const loadId = ++heroBgLoadIdRef.current;
+
+    const apply = () => {
+      if (loadId !== heroBgLoadIdRef.current) return;
+      if (inactive === 0) setBgLayer0(movie);
+      else setBgLayer1(movie);
+      activeBgLayerRef.current = inactive;
+      setActiveBgLayer(inactive);
+    };
+
+    if (movie.backdrop_url) {
+      const img = new Image();
+      img.onload = apply;
+      img.onerror = apply;
+      img.src = movie.backdrop_url;
+    } else {
+      apply();
+    }
+  }, [featuredKey, movie]);
+
+  return (
+    <div className="hero-banner-bg-stack" aria-hidden>
+      <div
+        className="hero-banner-bg-fade"
+        style={{
+          ...heroBackdropStyle(bgLayer0),
+          opacity: activeBgLayer === 0 ? 1 : 0,
+          zIndex: activeBgLayer === 0 ? 1 : 0,
+        }}
+      />
+      <div
+        className="hero-banner-bg-fade"
+        style={{
+          ...heroBackdropStyle(bgLayer1),
+          opacity: activeBgLayer === 1 ? 1 : 0,
+          zIndex: activeBgLayer === 1 ? 1 : 0,
+        }}
+      />
+    </div>
+  );
+}
 
 function getIndicatorTrackOffset(total: number, activeIndex: number, visibleSlots: number): number {
   const safeActiveIndex = Math.max(0, Math.min(activeIndex, total - 1));
@@ -119,26 +197,9 @@ export default function HeroCarousel({
     userId: source === "personalized" ? detailUserId : undefined,
   });
 
-  // We can use a deterministic gradient for background based on item_id to make each slide look unique
-  const getGradient = (id: number) => {
-    const hue1 = (id * 137) % 360;
-    const hue2 = (id * 97) % 360;
-    return `linear-gradient(135deg, hsl(${hue1}, 40%, 25%), hsl(${hue2}, 60%, 10%))`;
-  };
-
   return (
     <div className="hero-banner">
-      {/* Background */}
-      <div
-        className="hero-banner-bg"
-        style={{
-          backgroundImage: featured.backdrop_url ? `url('${featured.backdrop_url}')` : getGradient(featured.item_id),
-          backgroundSize: 'cover',
-          backgroundPosition: 'top',
-          backgroundRepeat: 'no-repeat',
-          transition: "background-image 0.8s ease"
-        }}
-      />
+      <HeroBackdropCrossfade movie={featured} />
       <div className="hero-banner-gradient" />
 
       {/* Navigation Arrows */}
